@@ -1,0 +1,22 @@
+services:
+  - type: web
+    name: maintenance-cmms-web
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
+    healthCheckPath: /health
+    envVars:
+      - key: DATABASE_URL
+        sync: false
+      - key: JWT_SECRET
+        generateValue: true
+      - key: ALLOW_DEMO_SEED
+        value: "false"
+      - key: BOOTSTRAP_USERNAME
+        sync: false
+      - key: BOOTSTRAP_PASSWORD
+        sync: false
+      - key: BOOTSTRAP_FULL_NAME
+        value: "System Programmer"
+      - key: BOOTSTRAP_RESET_PASSWORD
+        value: "false"

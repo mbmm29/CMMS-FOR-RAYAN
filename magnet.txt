@@ -1,0 +1,25 @@
+Material: Soybean Meal, Corn, Sunflower Meal , lime stone 
+Particle Size: 1mm-12mm
+Conditions (Dry/Wet): dry
+Bulk Density: 0.4-0.9t/m³
+Condition of material:Powder, granules, lumps
+
+Size of Ferrous metals to be separated:5cm-30cm (wight:1kg-5kg)
+Reasons for separation: [recover metals or 
+clean end product?): clean the product
+Throughput (TPH): 150 t/h-200 t/h
+Magnetic separation already installed?:NO
+Speed of material flow: [m/s]
+Size of pipework? Round or Square? :: It is a belt conveyor
+
+Would they like a plant survey? No, but i can send you the flow chart of the plant.
+Other information:The magnet we need should be flat on the belt conveyor at a height of 200mm from the conveyor.
+
+
+
+
+
+
+
+
+

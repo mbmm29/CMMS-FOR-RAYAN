@@ -1,0 +1,6 @@
+backend/.env
+__pycache__/
+*.py[cod]
+.idea/
+.dart_tool/
+build/
