@@ -1,0 +1,1010 @@
+/* =========================================================
+   RAYAN CMMS
+   Main Stylesheet
+========================================================= */
+
+* {
+    box-sizing: border-box;
+}
+
+html,
+body {
+    margin: 0;
+    padding: 0;
+    width: 100%;
+    min-height: 100%;
+}
+
+body {
+    font-family: Arial, Helvetica, sans-serif;
+    font-size: 14px;
+    color: #26343d;
+    background: #f4f7f9;
+}
+
+.hidden {
+    display: none !important;
+}
+
+
+/* =========================================================
+   GLOBAL BUTTONS
+========================================================= */
+
+button {
+    cursor: pointer;
+    border: 0;
+    border-radius: 6px;
+    padding: 10px 15px;
+    font-weight: bold;
+    background: #1e7fa8;
+    color: #ffffff;
+}
+
+button:hover {
+    opacity: 0.92;
+}
+
+
+/* =========================================================
+   GLOBAL INPUTS
+========================================================= */
+
+input,
+textarea,
+select {
+    font: inherit;
+    padding: 8px;
+    border: 1px solid #d5dde2;
+    border-radius: 5px;
+    background: #ffffff;
+    outline: none;
+}
+
+input:focus,
+textarea:focus,
+select:focus {
+    border-color: #1e7fa8;
+}
+
+
+/* =========================================================
+   LOGIN PAGE
+========================================================= */
+
+.login-page {
+    min-height: 100vh;
+
+    display: flex;
+    align-items: center;
+    justify-content: center;
+
+    padding: 30px;
+
+    position: relative;
+
+    /*
+       إذا الصورة موجودة في نفس مجلد index.html
+       استخدم:
+       url("../background.jpg")  <-- لا، هذا خطأ هنا
+
+       لأن CSS موجود داخل css/
+       لذلك نرجع مجلد واحد:
+    */
+
+    background-image:url("../background.jpeg");    
+         
+
+    background-size: cover;
+    background-position: center;
+    background-repeat: no-repeat;
+}
+
+
+/* =========================================================
+   LOGIN CARD
+========================================================= */
+
+.login-card {
+    width: 100%;
+    max-width:500px;
+
+    background: rgba(255, 255, 255, 0.96);
+
+    border-radius: 18px;
+
+    padding: 42px 40px 30px;
+
+    box-shadow:
+        0 20px 55px rgba(0, 0, 0, 0.28);
+
+    border:
+        1px solid rgba(255, 255, 255, 0.7);
+
+    position: relative;
+    z-index: 2;
+}
+
+
+/* =========================================================
+   BRAND
+========================================================= */
+
+.brand {
+    text-align: center;
+    margin-bottom: 28px;
+}
+
+.brand-name {
+    font-size: 42px;
+    line-height: 1;
+
+    font-weight: 900;
+    letter-spacing: 1px;
+
+    color: #173b57;
+}
+
+.brand-subtitle {
+    margin-top: 5px;
+
+    font-size: 10px;
+    font-weight: 700;
+
+    letter-spacing: 0.7px;
+
+    color: #173b57;
+}
+
+
+/* =========================================================
+   LOGIN TITLE
+========================================================= */
+
+.login-title {
+    text-align: center;
+    margin-bottom: 30px;
+}
+
+.login-title h1 {
+    margin: 0;
+
+    font-size: 22px;
+    font-weight: 700;
+
+    color: #173b57;
+}
+
+.login-title p {
+    margin: 8px 0 0;
+
+    font-size: 14px;
+    color: #7b8991;
+}
+
+
+/* =========================================================
+   LOGIN FORM
+========================================================= */
+
+.field {
+    margin-bottom: 20px;
+}
+
+.field label {
+    display: block;
+
+    margin-bottom: 8px;
+
+    font-size: 13px;
+    font-weight: 700;
+
+    color: #344650;
+}
+
+
+/* =========================================================
+   INPUT WRAPPER
+========================================================= */
+
+.input-wrapper {
+    position: relative;
+
+    display: flex;
+    align-items: center;
+}
+
+.input-wrapper input {
+    width: 100%;
+    height: 52px;
+
+    border: 1px solid #d7e0e5;
+
+    border-radius: 10px;
+
+    padding: 0 48px 0 45px;
+
+    outline: none;
+
+    background: #fafcfd;
+
+    font-size: 14px;
+    color: #26343d;
+
+    transition:
+        border-color 0.2s,
+        box-shadow 0.2s,
+        background 0.2s;
+}
+
+.input-wrapper input::placeholder {
+    color: #a0adb4;
+}
+
+.input-wrapper input:focus {
+    border-color: #1e7fa8;
+
+    background: #ffffff;
+
+    box-shadow:
+        0 0 0 3px rgba(30, 127, 168, 0.10);
+}
+
+
+/* =========================================================
+   INPUT ICON
+========================================================= */
+
+.input-icon {
+    position: absolute;
+
+    left: 15px;
+
+    z-index: 2;
+
+    font-size: 16px;
+
+    opacity: 0.65;
+}
+
+
+/* =========================================================
+   PASSWORD TOGGLE
+========================================================= */
+
+.password-toggle {
+    position: absolute;
+
+    right: 10px;
+
+    width: 34px;
+    height: 34px;
+
+    padding: 0;
+
+    border: none;
+
+    background: transparent;
+
+    cursor: pointer;
+
+    font-size: 15px;
+
+    opacity: 0.65;
+
+    border-radius: 7px;
+}
+
+.password-toggle:hover {
+    background: #eef4f7;
+    opacity: 1;
+}
+
+
+/* =========================================================
+   LOGIN ERROR
+========================================================= */
+
+.login-error {
+    min-height: 20px;
+
+    margin: -4px 0 8px;
+
+    font-size: 13px;
+
+    color: #c62828;
+}
+
+
+/* =========================================================
+   LOGIN BUTTON
+========================================================= */
+
+.login-button {
+    width: 100%;
+    height: 52px;
+
+    border: none;
+
+    border-radius: 10px;
+
+    background: #173b57;
+    color: #ffffff;
+
+    font-size: 14px;
+    font-weight: 700;
+
+    letter-spacing: 0.7px;
+
+    cursor: pointer;
+
+    transition:
+        background 0.2s,
+        transform 0.15s,
+        box-shadow 0.2s;
+}
+
+.login-button:hover {
+    background: #1e7fa8;
+
+    box-shadow:
+        0 7px 18px rgba(30, 127, 168, 0.22);
+}
+
+.login-button:active {
+    transform: translateY(1px);
+}
+
+
+/* =========================================================
+   LOGIN FOOTER
+========================================================= */
+
+.login-footer {
+    text-align: center;
+
+    margin-top: 28px;
+    padding-top: 20px;
+
+    border-top: 1px solid #edf1f3;
+
+    color: #89969d;
+}
+
+.login-footer span {
+    display: block;
+
+    font-size: 11px;
+
+    margin-bottom: 5px;
+}
+
+.login-footer small {
+    font-size: 9px;
+
+    font-weight: 700;
+
+    letter-spacing: 1px;
+
+    color: #1e7fa8;
+}
+
+
+/* =========================================================
+   APPLICATION
+========================================================= */
+
+.app {
+    min-height: 100vh;
+    display: flex;
+}
+
+
+/* =========================================================
+   SIDEBAR
+========================================================= */
+
+aside {
+    position: fixed;
+
+    inset: 0 auto 0 0;
+
+    width: 235px;
+
+    background: #173b57;
+
+    color: #ffffff;
+
+    padding: 20px 12px;
+
+    display: flex;
+    flex-direction: column;
+
+    z-index: 100;
+}
+
+
+/* =========================================================
+   SIDEBAR LOGO
+========================================================= */
+
+.sideLogo {
+    font-size: 34px;
+
+    font-weight: 800;
+
+    color: #ffffff;
+
+    padding: 8px 12px 25px;
+
+    border-bottom: 1px solid #ffffff22;
+
+    margin-bottom: 15px;
+}
+
+.sideLogo small {
+    display: block;
+
+    font-size: 8px;
+
+    color: #ffffff;
+}
+
+
+/* =========================================================
+   NAVIGATION
+========================================================= */
+
+aside nav {
+    display: flex;
+    flex-direction: column;
+
+    gap: 3px;
+}
+
+aside nav button {
+    width: 100%;
+
+    background: transparent;
+
+    color: #ffffff;
+
+    text-align: left;
+
+    border-radius: 6px;
+}
+
+aside nav button:hover,
+aside nav button.active {
+    background: #ffffff1c;
+}
+
+
+/* =========================================================
+   LOGOUT
+========================================================= */
+
+#logout {
+    margin-top: auto;
+
+    background: #ffffff18;
+}
+
+
+/* =========================================================
+   MAIN CONTENT
+========================================================= */
+
+main {
+    margin-left: 235px;
+
+    width: calc(100% - 235px);
+
+    padding: 0 24px 30px;
+}
+
+
+/* =========================================================
+   HEADER
+========================================================= */
+
+header {
+    height: 85px;
+
+    border-bottom: 1px solid #d9e0e5;
+
+    display: flex;
+
+    justify-content: space-between;
+    align-items: center;
+
+    margin-bottom: 22px;
+}
+
+header h2 {
+    margin: 0;
+
+    color: #173b57;
+}
+
+
+/* =========================================================
+   DASHBOARD CARDS
+========================================================= */
+
+.cards {
+    display: grid;
+
+    grid-template-columns:
+        repeat(4, 1fr);
+
+    gap: 15px;
+}
+
+.cards > div {
+    background: #ffffff;
+
+    border: 1px solid #d9e0e5;
+
+    border-radius: 8px;
+
+    padding: 20px;
+
+    color: #6f7d86;
+}
+
+.cards strong {
+    display: block;
+
+    color: #173b57;
+
+    font-size: 28px;
+
+    margin-top: 8px;
+}
+
+
+/* =========================================================
+   PANEL
+========================================================= */
+
+.panel {
+    background: #ffffff;
+
+    border: 1px solid #d9e0e5;
+
+    border-radius: 8px;
+
+    padding: 20px;
+
+    margin-top: 20px;
+}
+
+.panel h3,
+.head h3 {
+    color: #173b57;
+}
+
+
+/* =========================================================
+   PANEL HEADER
+========================================================= */
+
+.head {
+    display: flex;
+
+    justify-content: space-between;
+    align-items: center;
+}
+
+
+/* =========================================================
+   DATA TABLE
+========================================================= */
+
+.data {
+    width: 100%;
+
+    border-collapse: collapse;
+}
+
+.data th,
+.data td {
+    padding: 10px;
+
+    border-bottom: 1px solid #ddd;
+
+    text-align: left;
+}
+
+.data th {
+    background: #f7f9fa;
+}
+
+
+/* =========================================================
+   DAILY REPORT MODAL
+========================================================= */
+
+.modal {
+    position: fixed;
+
+    inset: 0;
+
+    background: #0008;
+
+    overflow: auto;
+
+    padding: 25px;
+
+    z-index: 1000;
+}
+
+
+/* =========================================================
+   REPORT PAPER
+========================================================= */
+
+.paper {
+    max-width: 1500px;
+
+    margin: auto;
+
+    background: #ffffff;
+
+    padding: 20px;
+
+    border-radius: 8px;
+}
+
+
+/* =========================================================
+   MODAL HEADER
+========================================================= */
+
+.modalHead {
+    display: flex;
+
+    justify-content: space-between;
+    align-items: center;
+}
+
+.modalHead button {
+    background: transparent;
+
+    color: #333;
+
+    font-size: 20px;
+}
+
+
+/* =========================================================
+   REPORT HEADER
+========================================================= */
+
+.reportHeader {
+    display: grid;
+
+    grid-template-columns:
+        210px
+        1fr
+        190px;
+
+    border: 1px solid #111;
+}
+
+.reportHeader > div {
+    padding: 12px;
+
+    border-right: 1px solid #111;
+}
+
+.reportHeader > div:last-child {
+    border-right: 0;
+}
+
+
+/* =========================================================
+   RAYAN REPORT LOGO
+========================================================= */
+
+.rayan {
+    font-size: 30px;
+
+    font-weight: bold;
+
+    color: #173b57;
+}
+
+.rayan small {
+    display: block;
+
+    font-size: 7px;
+
+    color: #111;
+}
+
+
+/* =========================================================
+   REPORT TITLE
+========================================================= */
+
+.reportHeader h1 {
+    text-align: center;
+
+    margin: 8px;
+
+    font-size: 24px;
+}
+
+.reportHeader b {
+    display: block;
+
+    text-align: center;
+}
+
+.reportHeader label {
+    font-size: 11px;
+}
+
+.reportHeader input {
+    border: 0;
+
+    border-bottom: 1px solid #aaa;
+
+    padding: 4px;
+}
+
+
+/* =========================================================
+   REPORT INFORMATION
+========================================================= */
+
+.info {
+    display: grid;
+
+    grid-template-columns:
+        2fr
+        1fr
+        1fr
+        1fr
+        2fr;
+
+    border: 1px solid #111;
+
+    border-top: 0;
+}
+
+.info label {
+    padding: 7px;
+
+    border-right: 1px solid #111;
+}
+
+.info label:last-child {
+    border-right: 0;
+}
+
+.info input {
+    border: 0;
+
+    border-bottom: 1px solid #aaa;
+}
+
+
+/* =========================================================
+   REPORT SCROLL
+========================================================= */
+
+.scroll {
+    overflow-x: auto;
+
+    margin-top: 12px;
+}
+
+
+/* =========================================================
+   REPORT TABLE
+========================================================= */
+
+.report {
+    border-collapse: collapse;
+
+    width: 100%;
+
+    min-width: 1350px;
+
+    font-size: 10px;
+}
+
+.report th,
+.report td {
+    border: 1px solid #111;
+
+    padding: 4px;
+
+    text-align: center;
+}
+
+.report th {
+    height: 45px;
+}
+
+.report td {
+    height: 70px;
+}
+
+.report input,
+.report textarea,
+.report select {
+    width: 100%;
+
+    border: 0;
+
+    padding: 3px;
+
+    font-size: 10px;
+
+    background: transparent;
+}
+
+.report textarea {
+    height: 58px;
+
+    resize: none;
+}
+
+
+/* =========================================================
+   SIGNATURES
+========================================================= */
+
+.sign {
+    display: grid;
+
+    grid-template-columns:
+        1fr
+        1fr;
+
+    margin-top: 12px;
+}
+
+.sign > div {
+    height: 105px;
+
+    border: 1px solid #111;
+
+    padding: 12px;
+
+    text-align: center;
+}
+
+.sign p {
+    margin: 18px;
+}
+
+
+/* =========================================================
+   ACTIONS
+========================================================= */
+
+.actions {
+    display: flex;
+
+    justify-content: flex-end;
+
+    gap: 8px;
+
+    margin-top: 15px;
+}
+
+.secondary {
+    background: #e8edf0;
+
+    color: #26343d;
+}
+
+#msg {
+    font-weight: bold;
+}
+
+
+/* =========================================================
+   RESPONSIVE
+========================================================= */
+
+@media (max-width: 900px) {
+
+    aside {
+        width: 70px;
+    }
+
+    .sideLogo {
+        font-size: 0;
+    }
+
+    main {
+        margin-left: 70px;
+
+        width: calc(100% - 70px);
+    }
+
+    .cards {
+        grid-template-columns:
+            1fr
+            1fr;
+    }
+
+    .info {
+        grid-template-columns:
+            1fr
+            1fr;
+    }
+}
+
+
+/* =========================================================
+   MOBILE LOGIN
+========================================================= */
+
+@media (max-width: 520px) {
+
+    .login-page {
+        padding: 18px;
+    }
+
+    .login-card {
+        padding:
+            34px
+            24px
+            25px;
+
+        border-radius: 15px;
+    }
+
+    .brand-name {
+        font-size: 36px;
+    }
+
+    .login-title h1 {
+        font-size: 20px;
+    }
+}
+
+
+/* =========================================================
+   PRINT
+========================================================= */
+
+@media print {
+
+    aside,
+    header,
+    .actions,
+    .modalHead,
+    #msg {
+        display: none !important;
+    }
+
+    .modal {
+        position: static;
+
+        background: #ffffff;
+
+        padding: 0;
+    }
+
+    .paper {
+        box-shadow: none;
+
+        padding: 0;
+    }
+
+    main {
+        margin: 0;
+
+        width: 100%;
+
+        padding: 0;
+    }
+}

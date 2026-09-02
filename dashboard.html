@@ -1,0 +1,939 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+
+    <meta charset="UTF-8">
+
+    <meta
+        name="viewport"
+        content="width=device-width, initial-scale=1.0"
+    >
+    <meta name="theme-color" content="#062857">
+    <meta name="mobile-web-app-capable" content="yes">
+    <link rel="manifest" href="manifest.webmanifest">
+
+    <title>RAYAN CMMS - Dashboard</title>
+
+    <!-- The unified static prototype lives in index.html. -->
+    <meta http-equiv="refresh" content="0; url=index.html#dashboard">
+
+    <link rel="stylesheet" href="css/dashboard.css">
+    <link rel="stylesheet" href="css/mobile-web-app.css?v=1">
+
+</head>
+
+<body>
+
+<section class="app">
+
+    <!-- SIDEBAR -->
+    <aside class="sidebar">
+
+        <div class="sidebar-brand">
+
+            <div class="brand-mark">
+                ⚙
+            </div>
+
+            <div>
+                <div class="brand-title">
+                    CMMS
+                </div>
+
+                <div class="brand-subtitle">
+                    Mechanical Maintenance
+                </div>
+            </div>
+
+        </div>
+
+
+        <nav class="sidebar-nav">
+
+            <button
+                class="nav-item active"
+                type="button"
+            >
+                <span class="nav-icon">◔</span>
+                <span>Dashboard</span>
+            </button>
+
+
+            <button
+                class="nav-item"
+                type="button"
+            >
+                <span class="nav-icon">☷</span>
+                <span>Work Orders</span>
+            </button>
+
+
+            <!-- DAILY REPORTS -->
+
+            <button
+                class="nav-item"
+                type="button"
+                onclick="window.location.href='daily-report.html'"
+            >
+
+                <span class="nav-icon">
+                    ✓
+                </span>
+
+                <span>
+                    Daily Reports
+                </span>
+
+            </button>
+
+
+            <button
+                class="nav-item"
+                type="button"
+            >
+                <span class="nav-icon">▣</span>
+                <span>PM Schedule</span>
+            </button>
+
+
+            <button
+                class="nav-item"
+                type="button"
+            >
+                <span class="nav-icon">⚙</span>
+                <span>Equipment</span>
+            </button>
+
+
+            <button
+                class="nav-item"
+                type="button"
+            >
+                <span class="nav-icon">+</span>
+                <span>Components</span>
+            </button>
+
+
+            <button
+                class="nav-item"
+                type="button"
+            >
+                <span class="nav-icon">♙</span>
+                <span>Technicians</span>
+            </button>
+
+
+            <button
+                class="nav-item"
+                type="button"
+            >
+                <span class="nav-icon">▥</span>
+                <span>KPI</span>
+            </button>
+
+
+            <button
+                class="nav-item"
+                type="button"
+            >
+                <span class="nav-icon">▤</span>
+                <span>Reports</span>
+            </button>
+
+
+            <button
+                class="nav-item"
+                type="button"
+            >
+                <span class="nav-icon">▧</span>
+                <span>SOP</span>
+            </button>
+
+
+            <button
+                class="nav-item"
+                type="button"
+            >
+                <span class="nav-icon">▤</span>
+                <span>Machine Records</span>
+            </button>
+
+
+            <button
+                class="nav-item"
+                type="button"
+            >
+                <span class="nav-icon">⚙</span>
+                <span>Settings</span>
+            </button>
+
+        </nav>
+
+
+        <div class="sidebar-user">
+
+            <div class="user-avatar">
+                T
+            </div>
+
+            <div class="user-info">
+
+                <strong>
+                    TECH-001
+                </strong>
+
+                <span>
+                    <i></i>
+                    Technician
+                </span>
+
+            </div>
+
+        </div>
+
+
+        <button
+            class="logout-button"
+            type="button"
+        >
+            ⇥ Logout
+        </button>
+
+    </aside>
+
+
+    <!-- MAIN -->
+
+    <main class="main-content">
+
+        <header class="topbar">
+
+            <div>
+
+                <h1>
+                    Dashboard
+                </h1>
+
+                <p>
+                    Overview of maintenance activities and equipment status
+                </p>
+
+            </div>
+
+
+            <div class="topbar-actions">
+
+                <div class="search-box">
+
+                    <span>⌕</span>
+
+                    <input
+                        type="text"
+                        placeholder="Search..."
+                    >
+
+                </div>
+
+
+                <button
+                    class="icon-button"
+                    type="button"
+                >
+                    🔔
+
+                    <span
+                        class="notification-dot"
+                    ></span>
+
+                </button>
+
+
+                <div class="profile">
+
+                    <div class="profile-avatar">
+                        T
+                    </div>
+
+                    <div>
+
+                        <strong>
+                            TECH-001
+                        </strong>
+
+                        <span>
+                            Technician
+                        </span>
+
+                    </div>
+
+                </div>
+
+            </div>
+
+        </header>
+
+
+        <!-- KPI CARDS -->
+
+        <section class="kpi-grid">
+
+            <div class="kpi-card">
+
+                <div>
+
+                    <span class="kpi-label">
+                        Total Equipment
+                    </span>
+
+                    <strong class="kpi-number">
+                        128
+                    </strong>
+
+                    <span class="kpi-change positive">
+                        ↑ 8%
+                        <small>
+                            vs Last Period
+                        </small>
+                    </span>
+
+                </div>
+
+                <div class="kpi-icon blue">
+                    ⚙
+                </div>
+
+            </div>
+
+
+            <div class="kpi-card">
+
+                <div>
+
+                    <span class="kpi-label">
+                        Open Work Orders
+                    </span>
+
+                    <strong class="kpi-number">
+                        12
+                    </strong>
+
+                    <span class="kpi-change warning">
+                        ↑ 3%
+                        <small>
+                            vs Last Period
+                        </small>
+                    </span>
+
+                </div>
+
+                <div class="kpi-icon orange">
+                    ☷
+                </div>
+
+            </div>
+
+
+            <div class="kpi-card">
+
+                <div>
+
+                    <span class="kpi-label">
+                        PM Due
+                    </span>
+
+                    <strong class="kpi-number">
+                        8
+                    </strong>
+
+                    <span class="kpi-change danger">
+                        ↑ 2%
+                        <small>
+                            vs Last Period
+                        </small>
+                    </span>
+
+                </div>
+
+                <div class="kpi-icon red">
+                    ◷
+                </div>
+
+            </div>
+
+
+            <div class="kpi-card">
+
+                <div>
+
+                    <span class="kpi-label">
+                        Total Downtime
+                    </span>
+
+                    <strong class="kpi-number">
+                        18.6
+                    </strong>
+
+                    <span class="kpi-change positive">
+                        ↓ 7%
+                        <small>
+                            vs Last Period
+                        </small>
+                    </span>
+
+                </div>
+
+                <div class="kpi-icon green">
+                    ◴
+                </div>
+
+            </div>
+
+        </section>
+
+
+        <!-- OVERVIEW -->
+
+        <section class="dashboard-grid">
+
+            <div class="panel">
+
+                <div class="panel-header">
+
+                    <div>
+
+                        <h2>
+                            Maintenance Overview
+                        </h2>
+
+                        <p>
+                            Maintenance activity over the selected period
+                        </p>
+
+                    </div>
+
+
+                    <select class="period-select">
+
+                        <option>
+                            Last 30 Days
+                        </option>
+
+                        <option>
+                            Last 7 Days
+                        </option>
+
+                        <option>
+                            Last 90 Days
+                        </option>
+
+                    </select>
+
+                </div>
+
+
+                <div class="chart">
+
+                    <div class="chart-y">
+
+                        <span>100</span>
+                        <span>80</span>
+                        <span>60</span>
+                        <span>40</span>
+                        <span>20</span>
+                        <span>0</span>
+
+                    </div>
+
+
+                    <div class="chart-area">
+
+                        <div class="grid-line line-1"></div>
+                        <div class="grid-line line-2"></div>
+                        <div class="grid-line line-3"></div>
+                        <div class="grid-line line-4"></div>
+                        <div class="grid-line line-5"></div>
+
+
+                        <svg
+                            class="chart-svg"
+                            viewBox="0 0 700 260"
+                            preserveAspectRatio="none"
+                        >
+
+                            <polyline
+                                points="
+                                0,210
+                                70,180
+                                140,195
+                                210,140
+                                280,155
+                                350,110
+                                420,130
+                                490,85
+                                560,105
+                                630,60
+                                700,80
+                                "
+                                fill="none"
+                                stroke="#1264f4"
+                                stroke-width="4"
+                            />
+
+
+                            <polyline
+                                points="
+                                0,225
+                                70,210
+                                140,215
+                                210,190
+                                280,200
+                                350,175
+                                420,185
+                                490,155
+                                560,165
+                                630,140
+                                700,150
+                                "
+                                fill="none"
+                                stroke="#23b26d"
+                                stroke-width="3"
+                            />
+
+                        </svg>
+
+
+                        <div class="chart-labels">
+
+                            <span>01 May</span>
+                            <span>05 May</span>
+                            <span>10 May</span>
+                            <span>15 May</span>
+                            <span>20 May</span>
+                            <span>25 May</span>
+                            <span>31 May</span>
+
+                        </div>
+
+                    </div>
+
+                </div>
+
+
+                <div class="chart-legend">
+
+                    <span>
+
+                        <i class="legend-blue"></i>
+
+                        Maintenance
+
+                    </span>
+
+
+                    <span>
+
+                        <i class="legend-green"></i>
+
+                        Completed
+
+                    </span>
+
+                </div>
+
+            </div>
+
+
+            <!-- EQUIPMENT STATUS -->
+
+            <div class="panel">
+
+                <div class="panel-header">
+
+                    <div>
+
+                        <h2>
+                            Equipment Status
+                        </h2>
+
+                        <p>
+                            Current equipment condition
+                        </p>
+
+                    </div>
+
+
+                    <button
+                        class="view-button"
+                        type="button"
+                    >
+                        View All →
+                    </button>
+
+                </div>
+
+
+                <div class="status-list">
+
+
+                    <div class="status-row">
+
+                        <div class="status-name">
+
+                            <div class="status-icon green">
+                                ✓
+                            </div>
+
+                            <div>
+
+                                <strong>
+                                    Operational
+                                </strong>
+
+                                <span>
+                                    Equipment running normally
+                                </span>
+
+                            </div>
+
+                        </div>
+
+
+                        <strong class="status-value">
+                            108
+                        </strong>
+
+                    </div>
+
+
+                    <div class="status-row">
+
+                        <div class="status-name">
+
+                            <div class="status-icon orange">
+                                !
+                            </div>
+
+                            <div>
+
+                                <strong>
+                                    Under Maintenance
+                                </strong>
+
+                                <span>
+                                    Currently under maintenance
+                                </span>
+
+                            </div>
+
+                        </div>
+
+
+                        <strong class="status-value">
+                            12
+                        </strong>
+
+                    </div>
+
+
+                    <div class="status-row">
+
+                        <div class="status-name">
+
+                            <div class="status-icon red">
+                                ×
+                            </div>
+
+                            <div>
+
+                                <strong>
+                                    Breakdown
+                                </strong>
+
+                                <span>
+                                    Requires immediate attention
+                                </span>
+
+                            </div>
+
+                        </div>
+
+
+                        <strong class="status-value">
+                            5
+                        </strong>
+
+                    </div>
+
+
+                    <div class="status-row">
+
+                        <div class="status-name">
+
+                            <div class="status-icon purple">
+                                ◷
+                            </div>
+
+                            <div>
+
+                                <strong>
+                                    Standby
+                                </strong>
+
+                                <span>
+                                    Available but not operating
+                                </span>
+
+                            </div>
+
+                        </div>
+
+
+                        <strong class="status-value">
+                            3
+                        </strong>
+
+                    </div>
+
+                </div>
+
+            </div>
+
+        </section>
+
+
+        <!-- RECENT WORK ORDERS -->
+
+        <section class="panel work-orders-panel">
+
+            <div class="panel-header">
+
+                <div>
+
+                    <h2>
+                        Recent Work Orders
+                    </h2>
+
+                    <p>
+                        Latest maintenance activities
+                    </p>
+
+                </div>
+
+
+                <button
+                    class="view-button"
+                    type="button"
+                >
+                    View All →
+                </button>
+
+            </div>
+
+
+            <div class="table-wrapper">
+
+                <table class="data-table">
+
+                    <thead>
+
+                        <tr>
+
+                            <th>WO No.</th>
+                            <th>Equipment</th>
+                            <th>Type</th>
+                            <th>Priority</th>
+                            <th>Assigned To</th>
+                            <th>Date</th>
+                            <th>Status</th>
+                            <th>Action</th>
+
+                        </tr>
+
+                    </thead>
+
+
+                    <tbody>
+
+                        <tr>
+
+                            <td>
+                                <strong>
+                                    WO-2025-0128
+                                </strong>
+                            </td>
+
+                            <td>
+                                HM-001 - Hammer Mill 01
+                            </td>
+
+                            <td>
+                                Maintenance
+                            </td>
+
+                            <td>
+
+                                <span class="badge high">
+                                    High
+                                </span>
+
+                            </td>
+
+                            <td>
+                                Ali Hassan
+                            </td>
+
+                            <td>
+                                31/05/2025
+                            </td>
+
+                            <td>
+
+                                <span class="badge progress">
+                                    In Progress
+                                </span>
+
+                            </td>
+
+                            <td>
+
+                                <button
+                                    class="action-button"
+                                    type="button"
+                                >
+                                    View
+                                </button>
+
+                            </td>
+
+                        </tr>
+
+
+                        <tr>
+
+                            <td>
+                                <strong>
+                                    WO-2025-0127
+                                </strong>
+                            </td>
+
+                            <td>
+                                PP-001 - Pellet Press 01
+                            </td>
+
+                            <td>
+                                Inspection
+                            </td>
+
+                            <td>
+
+                                <span class="badge medium">
+                                    Medium
+                                </span>
+
+                            </td>
+
+                            <td>
+                                Hassan M.
+                            </td>
+
+                            <td>
+                                31/05/2025
+                            </td>
+
+                            <td>
+
+                                <span class="badge pending">
+                                    Pending
+                                </span>
+
+                            </td>
+
+                            <td>
+
+                                <button
+                                    class="action-button"
+                                    type="button"
+                                >
+                                    View
+                                </button>
+
+                            </td>
+
+                        </tr>
+
+
+                        <tr>
+
+                            <td>
+                                <strong>
+                                    WO-2025-0126
+                                </strong>
+                            </td>
+
+                            <td>
+                                MX-001 - Mixer 01
+                            </td>
+
+                            <td>
+                                Repair
+                            </td>
+
+                            <td>
+
+                                <span class="badge critical">
+                                    Critical
+                                </span>
+
+                            </td>
+
+                            <td>
+                                Ahmed R.
+                            </td>
+
+                            <td>
+                                30/05/2025
+                            </td>
+
+                            <td>
+
+                                <span class="badge completed">
+                                    Completed
+                                </span>
+
+                            </td>
+
+                            <td>
+
+                                <button
+                                    class="action-button"
+                                    type="button"
+                                >
+                                    View
+                                </button>
+
+                            </td>
+
+                        </tr>
+
+                    </tbody>
+
+                </table>
+
+            </div>
+
+        </section>
+
+    </main>
+
+</section>
+
+
+<!-- API -->
+
+<script src="js/api.js?v=4"></script>
+<script src="js/mobile-shell.js?v=1"></script>
+
+</body>
+
+</html>

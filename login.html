@@ -1,0 +1,161 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+
+    <meta
+        name="viewport"
+        content="width=device-width, initial-scale=1.0"
+    >
+    <meta name="theme-color" content="#062857">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <link rel="manifest" href="manifest.webmanifest">
+
+    <title>RAYAN CMMS</title>
+
+    <link rel="stylesheet" href="css/login.css">
+    <link rel="stylesheet" href="css/mobile-web-app.css?v=1">
+</head>
+
+<body>
+
+<!-- =====================================================
+     LOGIN
+====================================================== -->
+
+<section id="loginPage" class="login-page">
+
+    <div class="login-overlay"></div>
+
+    <div class="login-card">
+
+        <div class="brand">
+
+            <div class="brand-name">
+                RAYAN
+            </div>
+
+            <div class="brand-subtitle">
+                FOR OIL EXTRACTION & FEED MILL
+            </div>
+
+        </div>
+
+
+        <div class="login-title">
+
+            <h1>
+                Mechanical Maintenance
+            </h1>
+
+            <p>
+                Sign in to your account
+            </p>
+
+        </div>
+
+
+        <form id="loginForm">
+
+            <div class="field">
+
+                <label for="username">
+                    Username
+                </label>
+
+                <div class="input-wrapper">
+
+                    <span class="input-icon">
+                        👤
+                    </span>
+
+                    <input
+                        id="username"
+                        type="text"
+                        placeholder="Enter username"
+                        autocomplete="username"
+                        required
+                    >
+
+                </div>
+
+            </div>
+
+
+            <div class="field">
+
+                <label for="password">
+                    Password
+                </label>
+
+                <div class="input-wrapper">
+
+                    <span class="input-icon">
+                        🔒
+                    </span>
+
+                    <input
+                        id="password"
+                        type="password"
+                        placeholder="Enter password"
+                        autocomplete="current-password"
+                        required
+                    >
+
+                    <button
+                        type="button"
+                        id="togglePassword"
+                        class="password-toggle"
+                    >
+                        👁
+                    </button>
+
+                </div>
+
+            </div>
+
+
+            <div
+                id="loginError"
+                class="login-error"
+            ></div>
+
+
+            <button
+                type="submit"
+                id="loginButton"
+                class="login-button"
+            >
+                SIGN IN
+            </button>
+
+        </form>
+
+
+        <div class="login-footer">
+
+            <span>
+                Mechanical Maintenance Department
+            </span>
+
+            <small>
+                RAYAN CMMS
+            </small>
+
+        </div>
+
+    </div>
+
+</section>
+
+
+<!-- =====================================================
+     APPLICATION
+====================================================== -->
+
+<script src="js/api.js?v=4"></script>
+<script src="js/login.js"></script>
+
+</body>
+</html>
