@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#062857">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <link rel="manifest" href="manifest.webmanifest">
+  <title>CMMS | Mechanical Maintenance</title>
+  <link rel="stylesheet" href="css/cmms-app.css">
+  <link rel="stylesheet" href="css/accounts.css">
+  <link rel="stylesheet" href="css/mobile-web-app.css?v=1">
+  <style>.logout-button{border:1px solid #ffffff38;background:#ffffff13;color:#fff;border-radius:5px;padding:7px 8px;font:11px Arial,sans-serif;cursor:pointer;white-space:nowrap}.profile .logout-button{margin-left:auto}.logout-button:hover{background:#ffffff25}</style>
+</head>
+<body>
+  <div class="shell">
+    <aside class="sidebar">
+      <a class="brand" href="#dashboard"><span class="brand-mark">⚙</span><span><b>CMMS</b><small>Mechanical Maintenance</small></span></a>
+      <nav class="nav" aria-label="Main navigation">
+        <button class="nav-link active" data-page="dashboard"><i>◔</i>Dashboard</button>
+        <button class="nav-link" data-page="work-orders"><i>☷</i>Work Orders</button>
+        <button class="nav-link" data-page="daily-reports"><i>▣</i>Daily Reports</button>
+        <button class="nav-link" data-page="pm-schedule"><i>▧</i>PM Schedule</button>
+        <button class="nav-link" data-page="equipment"><i>⚙</i>Equipment</button>
+        <button class="nav-link" data-page="spare-parts"><i>⊕</i>Spare Parts</button>
+        <button class="nav-link" data-page="technicians"><i>♙</i>Technicians</button>
+        <button class="nav-link" data-page="kpi"><i>▥</i>KPI</button>
+        <button class="nav-link" data-page="reports"><i>▤</i>Reports</button>
+        <button class="nav-link" data-page="sop"><i>▤</i>SOP</button>
+        <button class="nav-link" data-page="machine-records"><i>▧</i>Machine Records</button>
+        <button class="nav-link developer-only" data-page="users"><i>♙</i>Users</button>
+        <button class="nav-link" data-page="settings"><i>⚙</i>Settings</button>
+        <button class="nav-link" data-page="notifications"><i>♧</i>Notifications <em>8</em></button>
+      </nav>
+      <button class="logout-button" id="logout-button" type="button" title="Sign out">Sign out</button>
+      <div class="profile"><span class="avatar">SE</span><span><b>Shift Engineer</b><small><mark></mark> Engineer</small></span><strong>›</strong></div>
+    </aside>
+    <main class="content">
+      <header class="page-header">
+        <div><h1 id="page-title">KPI Dashboard</h1><p id="page-subtitle">Overview of Maintenance Performance</p></div>
+        <div class="header-actions">
+          <label class="search"><span>⌕</span><input id="global-search" placeholder="Search..." autocomplete="off"></label>
+          <button class="filter-button">☷ <span>Filters</span></button>
+          <button class="date-button">▣ <span>01/05/2025 - 31/05/2025</span>⌄</button>
+          <button class="primary" id="primary-action">+ New Work Order</button>
+        </div>
+      </header>
+      <section id="metric-grid" class="metric-grid"></section>
+      <section id="workspace" class="workspace"></section>
+    </main>
+  </div>
+  <div class="toast" id="toast" role="status"></div>
+  <script src="js/api.js?v=4"></script>
+  <script src="js/cmms-app.js"></script>
+  <script src="js/technician-ui.js?v=1"></script>
+  <script src="js/mobile-shell.js?v=1"></script>
+</body>
+</html>

@@ -1,0 +1,9 @@
+{
+  "name": "RAYAN CMMS",
+  "short_name": "CMMS",
+  "start_url": "/login.html",
+  "display": "standalone",
+  "background_color": "#f5f7fb",
+  "theme_color": "#062857",
+  "description": "Mechanical maintenance management system for Rayan."
+}

@@ -1,0 +1,776 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+
+    <meta charset="UTF-8">
+
+    <meta
+        name="viewport"
+        content="width=device-width, initial-scale=1.0"
+    >
+    <meta name="theme-color" content="#062857">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <link rel="manifest" href="manifest.webmanifest">
+
+    <title>RAYAN CMMS - Daily Reports</title>
+
+    <link
+        rel="stylesheet"
+        href="css/daily-reports.css?v=3"
+    >
+    <link rel="stylesheet" href="css/mobile-web-app.css?v=1">
+    <style>
+        .status.pending{background:#f0eaff;color:#7146e8}.report-link{border:0;background:transparent;color:#1264f4;font-weight:700;padding:0;cursor:pointer;text-align:left}.view-button{font-size:11px;border:1px solid #cbd9ef;border-radius:5px;padding:6px 8px;background:#fff;color:#075cf5;font-weight:700}.details-content{padding:18px}.activity-preview{border-top:1px solid #e1e7f0;margin-top:18px;padding-top:16px;font-size:12px}.activity-preview table{margin-top:8px;min-width:0}.activity-preview th,.activity-preview td{font-size:10px;padding:8px 5px}.report-actions{display:flex;flex-direction:column;gap:7px;margin-top:16px}.decision{border-radius:6px;padding:10px;border:1px solid #cbd9ef;background:#fff;font-weight:700;cursor:pointer}.decision.approve,.decision.print{background:#1264f4;color:#fff;border-color:#1264f4}.decision.return{color:#d92d3a;border-color:#fecbd0}.notice{padding:16px;border-radius:6px;background:#eaf2ff;color:#075cf5}.notice.error{background:#ffe7e9;color:#d92d3a}.signout-button{margin-left:auto;border:1px solid #ffffff42;background:#ffffff15;color:#fff;border-radius:5px;font-size:10px;padding:6px 8px;cursor:pointer}.signout-button:hover{background:#ffffff28}
+    </style>
+
+</head>
+
+
+<body>
+
+<div class="app">
+
+    <!-- =====================================================
+         SIDEBAR
+    ====================================================== -->
+
+    <aside class="sidebar">
+
+        <div class="brand">
+
+            <div class="brand-logo">
+                ⚙
+            </div>
+
+            <div>
+
+                <div class="brand-title">
+                    CMMS
+                </div>
+
+                <div class="brand-subtitle">
+                    Mechanical Maintenance
+                </div>
+
+            </div>
+
+        </div>
+
+
+        <nav class="sidebar-nav">
+
+            <a
+                class="nav-item"
+                href="dashboard.html"
+            >
+                <span class="nav-icon">◔</span>
+                <span>Dashboard</span>
+            </a>
+
+
+            <a
+                class="nav-item"
+                href="#"
+            >
+                <span class="nav-icon">☷</span>
+                <span>Work Orders</span>
+            </a>
+
+
+            <a
+                class="nav-item active"
+                href="daily-reports.html"
+            >
+                <span class="nav-icon">✓</span>
+                <span>Daily Reports</span>
+            </a>
+
+
+            <a
+                class="nav-item"
+                href="#"
+            >
+                <span class="nav-icon">▣</span>
+                <span>PM Schedule</span>
+            </a>
+
+
+            <a
+                class="nav-item"
+                href="#"
+            >
+                <span class="nav-icon">⚙</span>
+                <span>Equipment</span>
+            </a>
+
+
+            <a
+                class="nav-item"
+                href="#"
+            >
+                <span class="nav-icon">+</span>
+                <span>Spare Parts</span>
+            </a>
+
+
+            <a
+                class="nav-item"
+                href="#"
+            >
+                <span class="nav-icon">♙</span>
+                <span>Technicians</span>
+            </a>
+
+
+            <a
+                class="nav-item"
+                href="#"
+            >
+                <span class="nav-icon">▥</span>
+                <span>KPI</span>
+            </a>
+
+
+            <a
+                class="nav-item"
+                href="#"
+            >
+                <span class="nav-icon">▤</span>
+                <span>Reports</span>
+            </a>
+
+
+            <a
+                class="nav-item"
+                href="#"
+            >
+                <span class="nav-icon">▧</span>
+                <span>SOP</span>
+            </a>
+
+
+            <a
+                class="nav-item"
+                href="#"
+            >
+                <span class="nav-icon">♧</span>
+                <span>Machine Records</span>
+            </a>
+
+
+            <a
+                class="nav-item"
+                href="#"
+            >
+                <span class="nav-icon">⚙</span>
+                <span>Settings</span>
+            </a>
+
+        </nav>
+
+
+        <div class="sidebar-bottom">
+
+            <div class="user-card">
+
+                <div class="user-avatar">
+                    U
+                </div>
+
+                <div class="user-details">
+
+                    <strong id="sidebarUsername">
+                        User
+                    </strong>
+
+                    <span>
+
+                        <i></i>
+
+                        <span id="sidebarRole">
+                            Engineer
+                        </span>
+
+                    </span>
+
+                </div>
+
+                <span class="user-arrow">
+                    ›
+                </span>
+
+            </div>
+
+        </div>
+
+    </aside>
+
+
+    <!-- =====================================================
+         MAIN
+    ====================================================== -->
+
+    <main class="main-content">
+
+
+        <!-- TOP HEADER -->
+
+        <header class="topbar">
+
+            <div class="page-title">
+
+                <h1>
+                    Daily Reports
+                </h1>
+
+                <p>
+                    Track technician daily activities and maintenance work
+                </p>
+
+            </div>
+
+
+            <div class="topbar-actions">
+
+                <div class="top-search">
+
+                    <span>
+                        ⌕
+                    </span>
+
+                    <input
+                        type="text"
+                        id="globalSearch"
+                        placeholder="Search Daily Reports..."
+                    >
+
+                </div>
+
+
+                <button
+                    class="filter-button"
+                    id="filterButton"
+                    type="button"
+                >
+
+                    <span>
+                        ☷
+                    </span>
+
+                    Filters
+
+                </button>
+
+
+                <div class="date-filter">
+
+                    <span>
+                        ▣
+                    </span>
+
+                    <input
+                        type="date"
+                        id="dateFrom"
+                    >
+
+                    <span>
+                        -
+                    </span>
+
+                    <input
+                        type="date"
+                        id="dateTo"
+                    >
+
+                </div>
+
+
+                <!-- =================================================
+                     NEW REPORT
+                     THIS OPENS THE TECHNICIAN FORM
+                ================================================== -->
+
+                <button
+                    class="new-report-button"
+                    id="newReportButton"
+                    type="button"
+                >
+
+                    <span>
+                        +
+                    </span>
+
+                    New Daily Report
+
+                </button>
+
+            </div>
+
+        </header>
+
+
+        <!-- =====================================================
+             KPI CARDS
+        ====================================================== -->
+
+        <section class="stats-grid">
+
+
+            <div class="stat-card">
+
+                <div>
+
+                    <span class="stat-title">
+                        Total Reports
+                    </span>
+
+                    <strong
+                        class="stat-value"
+                        id="totalReports"
+                    >
+                        0
+                    </strong>
+
+                    <span class="stat-change positive">
+                        ↑
+                        <small>
+                            Current Period
+                        </small>
+                    </span>
+
+                </div>
+
+
+                <div class="stat-icon blue">
+                    ▤
+                </div>
+
+            </div>
+
+
+            <div class="stat-card">
+
+                <div>
+
+                    <span class="stat-title">
+                        Reports Completed
+                    </span>
+
+                    <strong
+                        class="stat-value"
+                        id="completedReports"
+                    >
+                        0
+                    </strong>
+
+                    <span class="stat-change positive">
+                        ✓
+                        <small>
+                            Approved
+                        </small>
+                    </span>
+
+                </div>
+
+
+                <div class="stat-icon green">
+                    ✓
+                </div>
+
+            </div>
+
+
+            <div class="stat-card">
+
+                <div>
+
+                    <span class="stat-title">
+                        In Progress
+                    </span>
+
+                    <strong
+                        class="stat-value orange-text"
+                        id="inProgressReports"
+                    >
+                        0
+                    </strong>
+
+                    <span class="stat-change orange">
+                        ●
+                        <small>
+                            Active
+                        </small>
+                    </span>
+
+                </div>
+
+
+                <div class="stat-icon orange">
+                    ◷
+                </div>
+
+            </div>
+
+
+            <div class="stat-card">
+
+                <div>
+
+                    <span class="stat-title">
+                        Pending Approval
+                    </span>
+
+                    <strong
+                        class="stat-value blue-text"
+                        id="pendingReports"
+                    >
+                        0
+                    </strong>
+
+                    <span class="stat-change blue-text">
+                        ↓
+                        <small>
+                            Awaiting Review
+                        </small>
+                    </span>
+
+                </div>
+
+
+                <div class="stat-icon purple">
+                    ⌛
+                </div>
+
+            </div>
+
+
+            <div class="stat-card">
+
+                <div>
+
+                    <span class="stat-title">
+                        Rejected
+                    </span>
+
+                    <strong
+                        class="stat-value red-text"
+                        id="rejectedReports"
+                    >
+                        0
+                    </strong>
+
+                    <span class="stat-change red">
+                        !
+                        <small>
+                            Returned
+                        </small>
+                    </span>
+
+                </div>
+
+
+                <div class="stat-icon red">
+                    ×
+                </div>
+
+            </div>
+
+
+            <div class="stat-card">
+
+                <div>
+
+                    <span class="stat-title">
+                        Avg. Downtime (hrs)
+                    </span>
+
+                    <strong
+                        class="stat-value"
+                        id="averageDowntime"
+                    >
+                        0.00
+                    </strong>
+
+                    <span class="stat-change positive">
+                        ↓
+                        <small>
+                            Average
+                        </small>
+                    </span>
+
+                </div>
+
+
+                <div class="stat-icon teal">
+                    ◴
+                </div>
+
+            </div>
+
+        </section>
+
+
+        <!-- =====================================================
+             REPORT AREA
+        ====================================================== -->
+
+        <section class="reports-layout">
+
+
+            <!-- REPORT TABLE -->
+
+            <div class="reports-panel">
+
+
+                <!-- TABS -->
+
+                <div class="report-tabs">
+
+                    <button
+                        class="report-tab active"
+                        data-status="all"
+                        type="button"
+                    >
+                        All Reports
+                    </button>
+
+
+                    <button
+                        class="report-tab"
+                        data-status="mine"
+                        type="button"
+                    >
+                        My Reports
+                    </button>
+
+
+                    <button
+                        class="report-tab"
+                        data-status="Submitted"
+                        type="button"
+                    >
+                        Pending Approval
+                    </button>
+
+
+                    <button
+                        class="report-tab"
+                        data-status="Approved"
+                        type="button"
+                    >
+                        Approved
+                    </button>
+
+
+                    <button
+                        class="report-tab"
+                        data-status="Returned"
+                        type="button"
+                    >
+                        Rejected
+                    </button>
+
+                </div>
+
+
+                <!-- TABLE -->
+
+                <div class="table-container">
+
+                    <table>
+
+                        <thead>
+
+                            <tr>
+
+                                <th class="checkbox-column">
+                                    <input
+                                        type="checkbox"
+                                        id="selectAll"
+                                    >
+                                </th>
+
+                                <th>
+                                    Report No.
+                                </th>
+
+                                <th>
+                                    Date
+                                </th>
+
+                                <th>
+                                    Shift
+                                </th>
+
+                                <th>
+                                    Technician
+                                </th>
+
+                                <th>
+                                    Plant / Line
+                                </th>
+
+                                <th>
+                                    Work Orders
+                                </th>
+
+                                <th>
+                                    Status
+                                </th>
+
+                                <th>
+                                    Downtime (hrs)
+                                </th>
+
+                                <th>
+                                    Submitted On
+                                </th>
+
+                                <th>
+                                    Actions
+                                </th>
+
+                            </tr>
+
+                        </thead>
+
+
+                        <tbody
+                            id="reportsTableBody"
+                        >
+
+                            <tr>
+
+                                <td
+                                    colspan="11"
+                                    class="loading-cell"
+                                >
+                                    Loading reports...
+                                </td>
+
+                            </tr>
+
+                        </tbody>
+
+                    </table>
+
+                </div>
+
+
+                <!-- PAGINATION -->
+
+                <div class="pagination">
+
+                    <div
+                        id="paginationInfo"
+                        class="pagination-info"
+                    >
+                        Showing 0 to 0 of 0 entries
+                    </div>
+
+
+                    <div
+                        id="paginationControls"
+                        class="pagination-controls"
+                    >
+
+                    </div>
+
+
+                    <div class="rows-per-page">
+
+                        <span>
+                            Rows per page:
+                        </span>
+
+                        <select id="rowsPerPage">
+
+                            <option value="10">
+                                10
+                            </option>
+
+                            <option value="20">
+                                20
+                            </option>
+
+                            <option value="50">
+                                50
+                            </option>
+
+                        </select>
+
+                    </div>
+
+                </div>
+
+            </div>
+
+
+            <!-- =================================================
+                 REPORT DETAILS
+            ================================================== -->
+
+            <aside
+                class="details-panel"
+                id="detailsPanel"
+            >
+
+                <div class="details-header">
+
+                    <h2>
+                        Report Details
+                    </h2>
+
+                    <button
+                        id="closeDetails"
+                        type="button"
+                    >
+                        ×
+                    </button>
+
+                </div>
+
+
+                <div
+                    class="details-content"
+                    id="detailsContent"
+                >
+
+                    <div class="empty-details">
+
+                        <div>
+                            ▤
+                        </div>
+
+                        <p>
+                            Select a report to view its details.
+                        </p>
+
+                    </div>
+
+                </div>
+
+            </aside>
+
+        </section>
+
+    </main>
+
+</div>
+
+
+<!-- =====================================================
+     API + PAGE JS
+====================================================== -->
+
+<script src="js/api.js?v=4"></script>
+
+<script src="js/daily-reports.js?v=6"></script>
+<script src="js/mobile-shell.js?v=1"></script>
+
+
+</body>
+
+</html>

@@ -1,0 +1,16 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1"><meta name="theme-color" content="#062857"><meta name="mobile-web-app-capable" content="yes"><link rel="manifest" href="manifest.webmanifest">
+  <title>Daily Report Approvals | RAYAN CMMS</title>
+  <link rel="stylesheet" href="css/approvals.css">
+  <link rel="stylesheet" href="css/mobile-web-app.css?v=1">
+</head>
+<body>
+  <header><a href="index.html#daily-reports">← CMMS Dashboard</a><h1>Daily Report Approval Inbox</h1><span id="account-name"></span></header>
+  <main><section class="panel"><h2>Submitted reports awaiting review</h2><table><thead><tr><th>Report No.</th><th>Date</th><th>Technician</th><th>Shift</th><th>Equipment</th><th>Actions</th></tr></thead><tbody id="approval-rows"><tr><td colspan="6">Loading reports…</td></tr></tbody></table></section><aside class="panel details"><h2>Approval details</h2><div id="approval-detail">Choose a submitted report to view its activity summary.</div></aside></main>
+  <script src="js/api.js?v=4"></script>
+  <script src="js/daily-report-approvals.js"></script>
+</body>
+</html>

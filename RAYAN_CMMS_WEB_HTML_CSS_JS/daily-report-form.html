@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#062857">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <link rel="manifest" href="manifest.webmanifest">
+  <title>Daily Maintenance Report | RAYAN CMMS</title>
+  <link rel="stylesheet" href="css/daily-report-form.css?v=5">
+  <link rel="stylesheet" href="css/mobile-web-app.css?v=1">
+  <style>.downtime-help{margin:0 0 6px;font-size:12px;color:#66738b}.activity-table .downtime{background:#f0f6ff;text-align:center;font-weight:bold}</style>
+</head>
+<body>
+  <header class="tool-bar no-print">
+    <a href="index.html#daily-reports">← CMMS Dashboard</a>
+    <span id="report-state">Draft report</span>
+    <a href="daily-reports.html">Daily reports</a>
+  </header>
+  <main class="report-paper">
+    <header class="report-head">
+      <div class="company-logo"><img src="logo-rayan.png" alt="Rayan"><span>FOR OIL EXTRACTION &amp; FEED MILL</span></div>
+      <div class="report-title"><h1>DAILY MAINTENANCE REPORT</h1><h2>Mechanical Maintenance Department</h2></div>
+      <dl class="form-meta"><div><dt>Form No.:</dt><dd id="report-number">New</dd></div><div><dt>Date:</dt><dd id="meta-date">—</dd></div><div><dt>Pages:</dt><dd id="page-count">1 of 1</dd></div></dl>
+    </header>
+    <form id="daily-report-form">
+      <section class="report-info">
+        <div class="info-column">
+          <label>Technician's name:<input id="technician-name" readonly></label>
+          <label>Date:<input id="report-date" type="date" required></label>
+          <label>Shift:<select id="shift"><option value="Morning (07:00 - 15:00)">Morning (07:00 - 15:00)</option><option value="Evening (15:00 - 23:00)">Evening (15:00 - 23:00)</option><option value="Night (23:00 - 07:00)">Night (23:00 - 07:00)</option></select></label>
+        </div>
+        <div class="info-column">
+          <label>Plant:<input id="plant-summary" placeholder="Filled from registered equipment" readonly></label>
+          <label>Maintenance Engineer:<input id="shift-engineer" placeholder="Engineer name / ID"></label>
+          <label>Engineer Signature:<span class="signature-line"></span></label>
+        </div>
+      </section>
+      <section class="activity-section">
+        <div class="activity-tools no-print">
+          <div><strong>MAINTENANCE ACTIVITIES</strong><span>Downtime is calculated automatically from Start and End time.</span></div>
+          <button type="button" id="add-activity-page" class="add-page-button">+ Add another activity page</button>
+        </div>
+        <p class="downtime-help no-print">Enter Start and End time in hours and minutes. The result is calculated automatically; correct the two times if the actual machine downtime is different.</p>
+        <div id="activity-pages"></div>
+      </section>
+      <section class="report-bottom">
+        <table class="parts-table"><thead><tr><th colspan="5">SPARE PARTS USED</th></tr><tr><th>No.</th><th>Part Name / Description</th><th>Part No.</th><th>Qty</th><th>Remarks</th></tr></thead><tbody id="parts-rows"></tbody></table>
+        <section class="notes-box"><div class="notes-heading"><b>GENERAL NOTES</b><span>TOTAL DOWNTIME: <output id="total-downtime">0.0</output> HRS</span></div><textarea id="general-notes" aria-label="General notes"></textarea></section>
+      </section>
+      <footer class="form-actions no-print"><p id="form-message" role="status"></p><button type="button" id="save-draft">Save Draft</button><button type="button" id="submit-report" class="submit">Send for Engineer Approval</button><button type="button" id="print-report" disabled>Print Approved Report</button></footer>
+    </form>
+  </main>
+  <script src="js/api.js?v=4"></script>
+  <script src="js/daily-report-form.js?v=5"></script>
+</body>
+</html>

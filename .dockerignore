@@ -1,0 +1,14 @@
+.git
+.gitignore
+**/.env
+**/*.env
+**/__pycache__
+**/*.py[cod]
+.idea
+.dart_tool
+build
+node_modules
+*.xlsx
+*.png
+*.jpg
+*.jpeg
