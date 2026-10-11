@@ -15,12 +15,20 @@
     <link rel="manifest" href="manifest.webmanifest">
 
     <title>RAYAN CMMS - Daily Reports</title>
+    <script>
+      try {
+        const savedUser = JSON.parse(localStorage.getItem('user') || 'null');
+        if (savedUser && savedUser.role === 'TECHNICIAN') location.replace('index.html#daily-reports');
+      } catch (error) {}
+    </script>
 
     <link
         rel="stylesheet"
-        href="css/daily-reports.css?v=3"
+        href="css/daily-reports.css?v=5"
     >
+    <link rel="stylesheet" href="css/i18n.css?v=2">
     <link rel="stylesheet" href="css/mobile-web-app.css?v=1">
+    <link rel="stylesheet" href="css/theme.css?v=28">
     <style>
         .status.pending{background:#f0eaff;color:#7146e8}.report-link{border:0;background:transparent;color:#1264f4;font-weight:700;padding:0;cursor:pointer;text-align:left}.view-button{font-size:11px;border:1px solid #cbd9ef;border-radius:5px;padding:6px 8px;background:#fff;color:#075cf5;font-weight:700}.details-content{padding:18px}.activity-preview{border-top:1px solid #e1e7f0;margin-top:18px;padding-top:16px;font-size:12px}.activity-preview table{margin-top:8px;min-width:0}.activity-preview th,.activity-preview td{font-size:10px;padding:8px 5px}.report-actions{display:flex;flex-direction:column;gap:7px;margin-top:16px}.decision{border-radius:6px;padding:10px;border:1px solid #cbd9ef;background:#fff;font-weight:700;cursor:pointer}.decision.approve,.decision.print{background:#1264f4;color:#fff;border-color:#1264f4}.decision.return{color:#d92d3a;border-color:#fecbd0}.notice{padding:16px;border-radius:6px;background:#eaf2ff;color:#075cf5}.notice.error{background:#ffe7e9;color:#d92d3a}.signout-button{margin-left:auto;border:1px solid #ffffff42;background:#ffffff15;color:#fff;border-radius:5px;font-size:10px;padding:6px 8px;cursor:pointer}.signout-button:hover{background:#ffffff28}
     </style>
@@ -51,7 +59,7 @@
                 </div>
 
                 <div class="brand-subtitle">
-                    Mechanical Maintenance
+                    <span data-i18n="Mechanical Maintenance">Mechanical Maintenance</span>
                 </div>
 
             </div>
@@ -61,112 +69,16 @@
 
         <nav class="sidebar-nav">
 
-            <a
-                class="nav-item"
-                href="dashboard.html"
-            >
-                <span class="nav-icon">◔</span>
-                <span>Dashboard</span>
-            </a>
-
-
-            <a
-                class="nav-item"
-                href="#"
-            >
-                <span class="nav-icon">☷</span>
-                <span>Work Orders</span>
-            </a>
-
-
-            <a
-                class="nav-item active"
-                href="daily-reports.html"
-            >
-                <span class="nav-icon">✓</span>
-                <span>Daily Reports</span>
-            </a>
-
-
-            <a
-                class="nav-item"
-                href="#"
-            >
-                <span class="nav-icon">▣</span>
-                <span>PM Schedule</span>
-            </a>
-
-
-            <a
-                class="nav-item"
-                href="#"
-            >
-                <span class="nav-icon">⚙</span>
-                <span>Equipment</span>
-            </a>
-
-
-            <a
-                class="nav-item"
-                href="#"
-            >
-                <span class="nav-icon">+</span>
-                <span>Spare Parts</span>
-            </a>
-
-
-            <a
-                class="nav-item"
-                href="#"
-            >
-                <span class="nav-icon">♙</span>
-                <span>Technicians</span>
-            </a>
-
-
-            <a
-                class="nav-item"
-                href="#"
-            >
-                <span class="nav-icon">▥</span>
-                <span>KPI</span>
-            </a>
-
-
-            <a
-                class="nav-item"
-                href="#"
-            >
-                <span class="nav-icon">▤</span>
-                <span>Reports</span>
-            </a>
-
-
-            <a
-                class="nav-item"
-                href="#"
-            >
-                <span class="nav-icon">▧</span>
-                <span>SOP</span>
-            </a>
-
-
-            <a
-                class="nav-item"
-                href="#"
-            >
-                <span class="nav-icon">♧</span>
-                <span>Machine Records</span>
-            </a>
-
-
-            <a
-                class="nav-item"
-                href="#"
-            >
-                <span class="nav-icon">⚙</span>
-                <span>Settings</span>
-            </a>
+            <a class="nav-item" href="index.html#dashboard"><span class="nav-icon">◔</span><span data-i18n="KPI">KPI</span></a>
+            <a class="nav-item" href="index.html#work-orders"><span class="nav-icon">☷</span><span data-i18n="Work Orders">Work Orders</span></a>
+            <a class="nav-item active" href="daily-reports.html"><span class="nav-icon">✓</span><span data-i18n="Daily Reports">Daily Reports</span></a>
+            <a class="nav-item" href="index.html#pm-schedule"><span class="nav-icon">▣</span><span data-i18n="PM Schedule">PM Schedule</span></a>
+            <a class="nav-item" href="index.html#plants"><span class="nav-icon">▣</span><span data-i18n="Plants">Plants</span></a>
+            <a class="nav-item engineer-only" href="index.html#new-equipment"><span class="nav-icon">＋</span><span data-i18n="New equipment">New equipment</span></a>
+            <a class="nav-item" href="index.html#equipment"><span class="nav-icon">⚙</span><span data-i18n="Equipment">Equipment</span></a>
+            <a class="nav-item" href="index.html#sop"><span class="nav-icon">▧</span><span data-i18n="SOP">SOP</span></a>
+            <a class="nav-item" href="index.html#machine-records"><span class="nav-icon">♧</span><span data-i18n="Machine Records">Machine Records</span></a>
+            <a class="nav-item developer-only" href="index.html#users"><span class="nav-icon">♙</span><span data-i18n="Users">Users</span></a>
 
         </nav>
 
@@ -197,9 +109,7 @@
 
                 </div>
 
-                <span class="user-arrow">
-                    ›
-                </span>
+                <div class="lang-switch" role="group" aria-label="Language"><button type="button" data-set-lang="en">EN</button><button type="button" data-set-lang="ar">عربي</button></div>
 
             </div>
 
@@ -221,11 +131,11 @@
 
             <div class="page-title">
 
-                <h1>
+                <h1 data-i18n="Daily Reports">
                     Daily Reports
                 </h1>
 
-                <p>
+                <p data-i18n="Track technician daily activities and maintenance work">
                     Track technician daily activities and maintenance work
                 </p>
 
@@ -243,6 +153,7 @@
                     <input
                         type="text"
                         id="globalSearch"
+                        data-i18n-placeholder="Search Daily Reports..."
                         placeholder="Search Daily Reports..."
                     >
 
@@ -287,24 +198,13 @@
                 </div>
 
 
-                <!-- =================================================
-                     NEW REPORT
-                     THIS OPENS THE TECHNICIAN FORM
-                ================================================== -->
-
-                <button
-                    class="new-report-button"
-                    id="newReportButton"
-                    type="button"
-                >
-
-                    <span>
-                        +
-                    </span>
-
-                    New Daily Report
-
-                </button>
+                <div class="tech-filter">
+                    <select id="technicianFilter" aria-hidden="true" tabindex="-1">
+                        <option value="" data-i18n-option="All technicians">All technicians</option>
+                    </select>
+                    <button type="button" class="tech-filter-button" id="technicianFilterButton" aria-haspopup="listbox" aria-expanded="false">All technicians</button>
+                    <ul class="tech-filter-menu" id="technicianFilterMenu" hidden role="listbox"></ul>
+                </div>
 
             </div>
 
@@ -509,6 +409,70 @@
 
             </div>
 
+
+            <div class="stat-card">
+
+                <div>
+
+                    <span class="stat-title" data-i18n="Total downtime (hrs)">
+                        Total downtime (hrs)
+                    </span>
+
+                    <strong
+                        class="stat-value"
+                        id="totalDowntime"
+                    >
+                        0.00
+                    </strong>
+
+                    <span class="stat-change positive">
+                        ◷
+                        <small data-i18n="Hours">
+                            Hours
+                        </small>
+                    </span>
+
+                </div>
+
+
+                <div class="stat-icon orange">
+                    ◷
+                </div>
+
+            </div>
+
+
+            <div class="stat-card">
+
+                <div>
+
+                    <span class="stat-title" data-i18n="Spare parts used">
+                        Spare parts used
+                    </span>
+
+                    <strong
+                        class="stat-value"
+                        id="sparePartsUsed"
+                    >
+                        0
+                    </strong>
+
+                    <span class="stat-change positive">
+                        ▣
+                        <small data-i18n="Parts">
+                            Parts
+                        </small>
+                    </span>
+
+                </div>
+
+
+                <div class="stat-icon purple">
+                    ▣
+                </div>
+
+            </div>
+
         </section>
 
 
@@ -533,7 +497,7 @@
                         data-status="all"
                         type="button"
                     >
-                        All Reports
+                        <span data-i18n="All Reports">All Reports</span>
                     </button>
 
 
@@ -542,7 +506,7 @@
                         data-status="mine"
                         type="button"
                     >
-                        My Reports
+                        <span data-i18n="My Reports">My Reports</span>
                     </button>
 
 
@@ -551,7 +515,7 @@
                         data-status="Submitted"
                         type="button"
                     >
-                        Pending Approval
+                        <span data-i18n="Pending Approval">Pending Approval</span>
                     </button>
 
 
@@ -560,7 +524,7 @@
                         data-status="Approved"
                         type="button"
                     >
-                        Approved
+                        <span data-i18n="Approved">Approved</span>
                     </button>
 
 
@@ -569,7 +533,7 @@
                         data-status="Returned"
                         type="button"
                     >
-                        Rejected
+                        <span data-i18n="Rejected">Rejected</span>
                     </button>
 
                 </div>
@@ -765,9 +729,10 @@
      API + PAGE JS
 ====================================================== -->
 
-<script src="js/api.js?v=4"></script>
+<script src="js/api.js?v=5"></script>
 
-<script src="js/daily-reports.js?v=6"></script>
+<script src="js/i18n.js?v=29"></script>
+<script src="js/daily-reports.js?v=21"></script>
 <script src="js/mobile-shell.js?v=1"></script>
 
 

@@ -55,9 +55,10 @@ class PlantCreate(BaseModel):
 
 
 class LineCreate(BaseModel):
-    line_id: str
+    line_id: str | None = None
     plant_id: str
-    name: str
+    line_number: int
+    name: str | None = None
     active: bool = True
 
 
@@ -153,6 +154,65 @@ class PMOut(PMCreate):
     model_config = ConfigDict(from_attributes=True)
 
 
+class AnnualPMItemIn(BaseModel):
+    machine_code: str = ""
+    machine_name: str = ""
+    task: str = ""
+    frequency_time: str = ""
+    frequency_hours: str = ""
+    maintenance_type: str = "Preventive"
+    line_key: str = ""
+    weeks: str = ""
+    days: str = ""
+
+
+class AnnualPMSave(BaseModel):
+    plant_id: str
+    year: int
+    items: list[AnnualPMItemIn]
+
+
+class AnnualPMItemOut(AnnualPMItemIn):
+    id: int
+    sort_order: int
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class AnnualPMOut(BaseModel):
+    plant_id: str
+    year: int
+    items: list[AnnualPMItemOut]
+    new_equipment: list[str] = []
+
+
+class AnnualDayTaskIn(BaseModel):
+    id: int | None = None
+    work_date: date
+    machine_code: str = ""
+    machine_name: str = ""
+    task: str = ""
+    maintenance_type: str = "Preventive"
+    technician_id: str | None = None
+
+
+class AnnualDaySave(BaseModel):
+    plant_id: str
+    year: int
+    date_from: date
+    date_to: date
+    items: list[AnnualDayTaskIn]
+
+
+class AnnualDayTaskOut(AnnualDayTaskIn):
+    id: int
+    sort_order: int
+    work_order_id: str | None = None
+    released_at: datetime | None = None
+
+    model_config = ConfigDict(from_attributes=True)
+
+
 class WOCreate(BaseModel):
     work_order_id: str | None = None
     work_order_type: str
@@ -169,12 +229,19 @@ class WOCreate(BaseModel):
     work_description: str | None = None
     planned_date: date | None = None
     assigned_technician_id: str | None = None
+    assigned_technician_ids: list[str] = []
+    corrective_action: str | None = None
+    parts_used: str | None = None
+    verification: str | None = None
+    crew_type: str | None = None
+    closing_date: datetime | None = None
 
 
 class WOUpdate(BaseModel):
     status: str | None = None
     priority: str | None = None
     assigned_technician_id: str | None = None
+    assigned_technician_ids: list[str] | None = None
     start_time: datetime | None = None
     end_time: datetime | None = None
     downtime_h: float | None = None
@@ -185,6 +252,35 @@ class WOUpdate(BaseModel):
     result: str | None = None
     verification: str | None = None
     parts_used: str | None = None
+    closing_date: datetime | None = None
+
+
+class AssignmentState(BaseModel):
+    technician_id: str
+    response: str = "Pending"
+    assigned_at: datetime | None = None
+
+
+class WORespond(BaseModel):
+    decision: str
+
+
+class KpiTargetIn(BaseModel):
+    metric: str
+    target_value: float
+    plant_id: str | None = None
+    line_id: str | None = None
+    equipment_id: str | None = None
+
+
+class ActivityWorkOrderCreate(BaseModel):
+    equipment_code: str
+    equipment_name: str | None = None
+    plant_id: str | None = None
+    line_id: str | None = None
+    maintenance_type: str
+    failure_reason: str | None = None
+    action_taken: str | None = None
 
 
 class WOOut(WOCreate):
@@ -203,6 +299,7 @@ class WOOut(WOCreate):
     closed_by: str | None = None
     closing_date: datetime | None = None
     created_by: str
+    assignment_states: list[AssignmentState] = []
     model_config = ConfigDict(from_attributes=True)
 
 
@@ -224,6 +321,7 @@ class ReportItemCreate(BaseModel):
     equipment_name: str | None = None
     plant_id: str | None = None
     line_id: str | None = None
+    entered_line_number: str | None = None
     is_manual_entry: bool = False
     component_id: str | None = None
 
@@ -253,6 +351,7 @@ class ReportItemCreate(BaseModel):
 
 class DailyReportCreate(BaseModel):
     report_date: date
+    plant_id: str | None = None
     shift: str | None = None
     shift_engineer: str | None = None
     general_notes: str | None = None
@@ -264,6 +363,7 @@ class DailyReportCreate(BaseModel):
 
 class DailyReportUpdate(BaseModel):
     report_date: date | None = None
+    plant_id: str | None = None
     shift: str | None = None
     shift_engineer: str | None = None
     general_notes: str | None = None
@@ -337,6 +437,23 @@ class SOPCreate(BaseModel):
     status: str = "Draft"
     document_path: str | None = None
     notes: str | None = None
+
+
+class LubricationLineIn(BaseModel):
+    equipment_code: str = ''
+    equipment_name: str = ''
+    component: str = ''
+    quantity: str = ''
+    lubricant_name: str = ''
+    notes: str = ''
+    work_type: str = ''
+
+
+class LubricationSave(BaseModel):
+    report_date: date
+    shift: str
+    technician_id: str | None = None
+    lines: list[LubricationLineIn] = Field(default_factory=list)
 
 
 class ISOCreate(BaseModel):

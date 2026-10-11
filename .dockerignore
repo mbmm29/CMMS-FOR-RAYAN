@@ -9,6 +9,3 @@
 build
 node_modules
 *.xlsx
-*.png
-*.jpg
-*.jpeg

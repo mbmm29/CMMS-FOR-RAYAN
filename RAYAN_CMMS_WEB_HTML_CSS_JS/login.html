@@ -15,7 +15,9 @@
     <title>RAYAN CMMS</title>
 
     <link rel="stylesheet" href="css/login.css">
+    <link rel="stylesheet" href="css/i18n.css?v=1">
     <link rel="stylesheet" href="css/mobile-web-app.css?v=1">
+    <link rel="stylesheet" href="css/theme.css?v=1">
 </head>
 
 <body>
@@ -36,7 +38,7 @@
                 RAYAN
             </div>
 
-            <div class="brand-subtitle">
+            <div class="brand-subtitle" data-i18n="FOR OIL EXTRACTION & FEED MILL">
                 FOR OIL EXTRACTION & FEED MILL
             </div>
 
@@ -45,11 +47,11 @@
 
         <div class="login-title">
 
-            <h1>
+            <h1 data-i18n="Mechanical Maintenance">
                 Mechanical Maintenance
             </h1>
 
-            <p>
+            <p data-i18n="Sign in to your account">
                 Sign in to your account
             </p>
 
@@ -60,7 +62,7 @@
 
             <div class="field">
 
-                <label for="username">
+                <label for="username" data-i18n="Username">
                     Username
                 </label>
 
@@ -73,6 +75,7 @@
                     <input
                         id="username"
                         type="text"
+                        data-i18n-placeholder="Enter username"
                         placeholder="Enter username"
                         autocomplete="username"
                         required
@@ -85,7 +88,7 @@
 
             <div class="field">
 
-                <label for="password">
+                <label for="password" data-i18n="Password">
                     Password
                 </label>
 
@@ -98,6 +101,7 @@
                     <input
                         id="password"
                         type="password"
+                        data-i18n-placeholder="Enter password"
                         placeholder="Enter password"
                         autocomplete="current-password"
                         required
@@ -127,7 +131,7 @@
                 id="loginButton"
                 class="login-button"
             >
-                SIGN IN
+                <span data-i18n="SIGN IN">SIGN IN</span>
             </button>
 
         </form>
@@ -135,7 +139,7 @@
 
         <div class="login-footer">
 
-            <span>
+            <span data-i18n="Mechanical Maintenance Department">
                 Mechanical Maintenance Department
             </span>
 
@@ -154,7 +158,8 @@
      APPLICATION
 ====================================================== -->
 
-<script src="js/api.js?v=4"></script>
+<script src="js/i18n.js?v=1"></script>
+<script src="js/api.js?v=5"></script>
 <script src="js/login.js"></script>
 
 </body>

@@ -1,0 +1,24 @@
+.lang-switch{display:flex;height:44px;border:1px solid #e7ebf3;border-radius:7px;overflow:hidden;background:#fff;flex:0 0 auto}
+.lang-switch button{border:0;background:#fff;color:#0b2558;min-width:52px;padding:0 12px;cursor:pointer;font:13px Arial,sans-serif}
+.lang-switch button.active{background:#075cf5;color:#fff}
+.login-card .lang-switch{margin:0 auto 16px}
+.profile{flex-wrap:wrap}
+.profile-id{min-width:0;flex:1}
+.profile-id b,.profile-id small{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.profile .lang-switch,.user-card .lang-switch{height:28px;margin-inline-start:auto;border-color:#ffffff38;background:transparent}
+.profile .lang-switch button,.user-card .lang-switch button{min-width:34px;padding:0 7px;background:transparent;color:#fff;font-size:11px}
+.profile .lang-switch button.active,.user-card .lang-switch button.active{background:#075cf5;color:#fff}
+.profile .logout-button,.user-card .signout-button{flex:1 0 100%;margin:8px 0 0}
+.user-card{flex-wrap:wrap}
+html[dir="rtl"] body{font-family:Tahoma,Arial,sans-serif}
+html[dir="rtl"] .sidebar{left:auto;right:0}
+html[dir="rtl"] .content{margin-left:0;margin-right:238px}
+html[dir="rtl"] .main-content{margin-left:0;margin-right:237px}
+html[dir="rtl"] .nav-link,html[dir="rtl"] .nav-item{text-align:right}
+html[dir="rtl"] .data-table th,html[dir="rtl"] .data-table td{text-align:right}
+html[dir="rtl"] .profile .logout-button,html[dir="rtl"] .signout-button{margin-left:0;margin-right:auto}
+html[dir="rtl"] .report-link{text-align:right}
+@media(max-width:760px){
+  html[dir="rtl"] .content{margin-right:62px}
+  html[dir="rtl"] .main-content{margin-right:0}
+}

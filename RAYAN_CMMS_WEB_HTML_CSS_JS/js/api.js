@@ -5,10 +5,14 @@
 // error when changing between the two local URLs.
 const API_BASE_URL = (() => {
     const { protocol, hostname, port, origin } = window.location;
-    const isLocalHost = hostname === "localhost" || hostname === "127.0.0.1";
+    const isLocalHost = hostname === "localhost"
+        || hostname === "127.0.0.1"
+        || hostname === "[::1]"
+        || hostname === "::1";
 
     if (protocol === "file:" || (isLocalHost && port !== "8000")) {
-        return `http://${hostname || "localhost"}:8000`;
+        const host = !hostname || hostname === "::1" ? "localhost" : hostname;
+        return `http://${host}:8000`;
     }
 
     return origin;

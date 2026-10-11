@@ -1,0 +1,2063 @@
+const LIVE_PAGES = new Set(['dashboard', 'work-orders', 'pm-schedule', 'plants', 'new-equipment', 'equipment', 'sop', 'machine-records', 'lubrication', 'daily-reports']);
+const DEFAULT_TAB = {
+  dashboard: 'All',
+  'work-orders': 'All Work Orders',
+  'pm-schedule': 'Annual plan',
+  plants: 'All Plants',
+  'new-equipment': 'Pending',
+  equipment: 'All Equipment',
+  sop: 'All SOPs',
+  'machine-records': 'All',
+  lubrication: 'Report',
+  'daily-reports': 'My Reports',
+};
+const shellRender = render;
+const ui = { page: 'dashboard', tab: 'All', rowKey: '', mode: 'view', plantId: '', lineId: '', equipmentId: '', technicianId: '', dateFrom: '', dateTo: '', annualPlant: '', annualYear: new Date().getFullYear(), annualItems: [], annualWeek: '', weekTasks: [], lubeId: '', dailyId: '', dailyFilter: '' };
+const ANNUAL_MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+const WEEKDAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+const DAY_MAINTENANCE_TYPES = ['Preventive', 'Corrective', 'Emergency', 'Routine', 'Inspection', 'Lubrication'];
+let store = null;
+let paintToken = 0;
+
+function esc(value) {
+  return String(value ?? '').replace(/[&<>"']/g, (ch) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch]));
+}
+
+function liveBadge(text) {
+  const value = text == null || text === '' ? '—' : String(text);
+  let tone = 'blue';
+  if (/Completed|Operational|Published|Good|Running|Closed|Active|Approved/i.test(value)) tone = 'green';
+  else if (/Overdue|Out of|High|Rejected|Cancelled/i.test(value)) tone = 'red';
+  else if (/Progress|Maintenance|Due|Medium|Upcoming|Returned|Submitted/i.test(value)) tone = 'orange';
+  else if (/Draft|Approval|Hold|Inactive|Low/i.test(value)) tone = 'purple';
+  return `<span class="badge ${tone}">${esc(t(value))}</span>`;
+}
+
+function fmtDate(value) {
+  if (!value) return '—';
+  const [year, month, day] = String(value).slice(0, 10).split('-');
+  return day ? `${day}/${month}/${year}` : esc(value);
+}
+
+function todayStamp() {
+  const now = new Date();
+  now.setHours(0, 0, 0, 0);
+  return now;
+}
+
+function dayDiff(value) {
+  if (!value) return null;
+  const due = new Date(`${String(value).slice(0, 10)}T00:00:00`);
+  return Math.round((due - todayStamp()) / 86400000);
+}
+
+function matchEquipment(text) {
+  const raw = String(text || '').trim().toLowerCase();
+  if (!raw || !store?.equipment) return null;
+  const byId = store.equipment.find((item) => String(item.equipment_id).toLowerCase() === raw);
+  if (byId) return byId;
+  const labeled = store.equipment.find((item) => `${item.equipment_id} — ${item.name}`.toLowerCase() === raw || `${item.equipment_id} - ${item.name}`.toLowerCase() === raw);
+  if (labeled) return labeled;
+  const byName = store.equipment.filter((item) => String(item.name || '').trim().toLowerCase() === raw);
+  return byName.length === 1 ? byName[0] : null;
+}
+
+function equipmentLineNumber(found) {
+  if (!found?.line_id || !store?.lines) return '';
+  const line = store.lines.find((row) => row.line_id === found.line_id);
+  return line?.line_number != null && line.line_number !== '' ? String(line.line_number) : '';
+}
+
+function equipmentByCode(code) {
+  const needle = String(code || '').trim().toLowerCase();
+  if (!needle) return null;
+  const rows = store.equipment.filter((item) => String(item.equipment_id).toLowerCase() === needle);
+  return rows.find((item) => item.plant_id === ui.annualPlant) || rows[0] || null;
+}
+
+function bindEquipmentCode(codeInput, nameInput) {
+  let timer = 0;
+  const applyKnown = (found) => {
+    if (!found) return false;
+    nameInput.value = found.name || found.equipment_name || '';
+    if (found.equipment_id) codeInput.value = found.equipment_id;
+    const row = codeInput.closest('tr');
+    const lineInput = row?.querySelector('[data-field="line"]');
+    const lineNumber = equipmentLineNumber(found);
+    if (lineInput && lineNumber) lineInput.value = lineNumber;
+    const plant = document.getElementById('daily-plant');
+    if (plant && !plant.value && found.plant_id) plant.value = found.plant_id;
+    return true;
+  };
+  const run = async () => {
+    const code = codeInput.value.trim();
+    if (!code) return;
+    if (applyKnown(equipmentByCode(code))) return;
+    try {
+      const data = await apiRequest(`/equipment/lookup?code=${encodeURIComponent(code)}${ui.annualPlant ? `&plant_id=${encodeURIComponent(ui.annualPlant)}` : ''}`);
+      if (codeInput.value.trim().toLowerCase() !== code.toLowerCase()) return;
+      const match = (data.matches || [])[0];
+      if (!match) return;
+      applyKnown(match);
+      if (!equipmentByCode(match.equipment_id)) store.equipment.push({ equipment_id: match.equipment_id, name: match.equipment_name, plant_id: match.plant_id });
+    } catch (exception) {
+      /* an unknown number keeps the name typed on the task */
+    }
+  };
+  codeInput.addEventListener('input', () => {
+    window.clearTimeout(timer);
+    timer = window.setTimeout(run, 250);
+  });
+  codeInput.addEventListener('change', run);
+}
+
+function toast(message) {
+  const node = document.getElementById('toast');
+  node.textContent = message;
+  node.classList.add('show');
+  setTimeout(() => node.classList.remove('show'), 2800);
+}
+
+function canMaintain() {
+  const user = getSavedUser();
+  return Boolean(user && (user.role === 'SYSTEM_DEVELOPER' || user.role === 'MAINTENANCE_ENGINEER'));
+}
+
+function isTechnician() {
+  return getSavedUser()?.role === 'TECHNICIAN';
+}
+
+function equipmentOf(code) {
+  return store.equipment.find((item) => item.equipment_id === code) || null;
+}
+
+function technicianName(code) {
+  return store.technicians.find((item) => item.technician_id === code)?.name || code || '—';
+}
+
+function assigneeIds(order) {
+  const listed = Array.isArray(order?.assigned_technician_ids) ? order.assigned_technician_ids.filter(Boolean) : [];
+  if (listed.length) return listed;
+  return order?.assigned_technician_id ? [order.assigned_technician_id] : [];
+}
+
+function assigneeNames(order) {
+  const states = new Map((order?.assignment_states || []).map((row) => [row.technician_id, row.response]));
+  const names = assigneeIds(order).map((id) => {
+    const name = technicianName(id);
+    const response = states.get(id);
+    return response && name !== '—' ? `${name} (${response})` : name;
+  }).filter((name) => name && name !== '—');
+  return names.length ? names.join(', ') : '—';
+}
+
+function myResponse(order) {
+  const me = getSavedUser()?.technician_id;
+  if (!me || !order || !assigneeIds(order).includes(me)) return '';
+  return (order.assignment_states || []).find((row) => row.technician_id === me)?.response || 'Pending';
+}
+
+function technicianChecks(selectedIds) {
+  const chosen = new Set(selectedIds || []);
+  const boxes = store.technicians.map((item) => `<label><input type="checkbox" name="assigned_technician_ids" value="${esc(item.technician_id)}"${chosen.has(item.technician_id) ? ' checked' : ''}> ${esc(item.name)}</label>`).join('');
+  return `<div class="assignee-list">${boxes || `<span>${esc(t('No technicians'))}</span>`}</div>`;
+}
+
+function lineText(line) {
+  if (!line) return '';
+  if (line.line_number != null && line.line_number !== '') return `Line ${line.line_number}`;
+  return line.name || line.line_id || '';
+}
+
+function placeOf(item) {
+  if (!item) return '—';
+  const plant = store.plants.find((row) => row.plant_id === item.plant_id)?.name || item.plant_id;
+  const line = lineText(store.lines.find((row) => row.line_id === item.line_id));
+  return [plant, line].filter(Boolean).join(' / ') || '—';
+}
+
+function equipmentText(row) {
+  const code = row.equipment_id || row.manual_equipment_code;
+  const known = equipmentOf(code);
+  const name = known?.name || row.manual_equipment_name || row.equipment_name;
+  if (!code && !name) return '—';
+  return name ? `${name} (${code || 'manual'})` : code;
+}
+
+function visibleEquipment() {
+  return store.equipment.filter((item) => {
+    if (ui.plantId && item.plant_id !== ui.plantId) return false;
+    if (ui.lineId && item.line_id !== ui.lineId) return false;
+    if (ui.equipmentId && item.equipment_id !== ui.equipmentId) return false;
+    return true;
+  });
+}
+
+function scoped(rows) {
+  if (!ui.plantId && !ui.lineId && !ui.equipmentId) return rows;
+  const ids = new Set(visibleEquipment().map((item) => item.equipment_id));
+  return rows.filter((row) => ids.has(row.equipment_id || row.manual_equipment_code));
+}
+
+function closed(order) {
+  return order.status === 'Closed' || order.status === 'Completed';
+}
+
+function overdue(order) {
+  if (order.status === 'Overdue') return true;
+  const diff = dayDiff(order.planned_date);
+  return diff !== null && diff < 0 && !closed(order) && order.status !== 'Cancelled';
+}
+
+function pmStatus(plan) {
+  if (!plan.active) return 'Inactive';
+  const diff = dayDiff(plan.next_due_date);
+  if (diff === null) return 'Unscheduled';
+  if (diff < 0) return 'Overdue';
+  if (diff === 0) return 'Due Today';
+  if (diff <= 7) return 'Due This Week';
+  if (diff <= 31) return 'Due This Month';
+  return 'Upcoming';
+}
+
+function numberText(value, digits = 0) {
+  const amount = Number(value) || 0;
+  return digits ? amount.toFixed(digits) : String(Math.round(amount));
+}
+
+function sum(rows, field) {
+  return rows.reduce((total, row) => total + (Number(row[field]) || 0), 0);
+}
+
+async function loadStore() {
+  const [plants, lines, equipment, orders, plans, sops, records, technicians, pending] = await Promise.all([
+    apiRequest('/plants'),
+    apiRequest('/lines'),
+    apiRequest('/equipment'),
+    apiRequest('/work-orders'),
+    apiRequest('/pm'),
+    apiRequest('/sops'),
+    apiRequest('/machine-records'),
+    apiRequest('/technicians'),
+    canMaintain() ? apiRequest('/pending-equipment') : Promise.resolve([]),
+  ]);
+  store = { plants, lines, equipment, orders, plans, sops, records, technicians, pending };
+}
+
+function setHeader(page) {
+  const spec = pages[page] || pages.dashboard;
+  document.getElementById('page-title').textContent = t(spec.title);
+  document.getElementById('page-subtitle').textContent = t(spec.sub);
+  const action = document.getElementById('primary-action');
+  const draft = document.getElementById('draft-action');
+  if (draft) {
+    draft.hidden = !(page === 'daily-reports' && isTechnician());
+    draft.textContent = t('Save draft');
+  }
+  if (page === 'daily-reports' && isTechnician()) {
+    action.hidden = false;
+    action.textContent = t('Send report');
+  } else if (page === 'lubrication') {
+    action.hidden = getSavedUser()?.role === 'ADMINISTRATOR_VIEWER';
+    action.textContent = t('Save report');
+  } else if (isTechnician()) {
+    action.hidden = page !== 'equipment';
+    action.textContent = t('+ Add Equipment');
+  } else if (page === 'new-equipment') {
+    action.hidden = true;
+  } else {
+    action.hidden = false;
+    action.textContent = t(page === 'machine-records' ? 'Export' : spec.action);
+  }
+  document.querySelectorAll('.engineer-only').forEach((link) => { link.hidden = !canMaintain(); });
+  document.querySelectorAll('.nav-link').forEach((link) => link.classList.toggle('active', link.dataset.page === page));
+  if (location.hash !== `#${page}`) location.hash = page;
+}
+
+function dateLabel(dates) {
+  const button = document.querySelector('.date-button span');
+  if (!button) return;
+  const valid = dates.filter(Boolean).map((value) => String(value).slice(0, 10)).sort();
+  button.textContent = valid.length ? `${fmtDate(valid[0])} - ${fmtDate(valid[valid.length - 1])}` : t('No dated records');
+}
+
+function filtersHtml() {
+  const lines = store.lines.filter((line) => !ui.plantId || line.plant_id === ui.plantId);
+  const equipment = store.equipment.filter((item) => (!ui.plantId || item.plant_id === ui.plantId) && (!ui.lineId || item.line_id === ui.lineId));
+  const option = (value, label, selected) => `<option value="${esc(value)}"${selected === value ? ' selected' : ''}>${esc(label)}</option>`;
+  return `<div class="live-filters">
+    <label>${t('Plant')}<select data-filter="plant">${option('', t('All plants'), ui.plantId)}${store.plants.map((plant) => option(plant.plant_id, plant.name, ui.plantId)).join('')}</select></label>
+    <label>${t('Line')}<select data-filter="line">${option('', t('All lines'), ui.lineId)}${lines.map((line) => option(line.line_id, line.name, ui.lineId)).join('')}</select></label>
+    <label>${t('Equipment')}<select data-filter="equipment">${option('', t('All equipment'), ui.equipmentId)}${equipment.map((item) => option(item.equipment_id, `${item.equipment_id} — ${item.name}`, ui.equipmentId)).join('')}</select></label>
+  </div>`;
+}
+
+function tableShell(columns, rows, footer) {
+  const body = rows.length ? rows.join('') : `<tr><td class="live-note" colspan="${columns.length}">${esc(t('No records yet'))}</td></tr>`;
+  return `<div class="table-wrap"><table class="data-table"><thead><tr>${columns.map((column) => `<th>${esc(t(column))}</th>`).join('')}</tr></thead><tbody>${body}</tbody></table></div><footer class="pagination"><span>${footer}</span></footer>`;
+}
+
+function cell(value, code = false) {
+  return `<td${code ? ' class="code"' : ''}>${value}</td>`;
+}
+
+function detailRows(pairs) {
+  return pairs.map(([label, value]) => `<div><b>${esc(t(label))}</b><span>${esc(value == null || value === '' ? '—' : t(value))}</span></div>`).join('');
+}
+
+function detailPanel(title, badgeText, heading, sub, pairs) {
+  return `<aside class="panel detail"><h2>${esc(t(title))}</h2><div class="detail-top"><div class="machine">⚙</div>${liveBadge(badgeText)}<h3>${esc(heading || '—')}</h3><p>${esc(sub || '')}</p></div><div class="detail-list">${detailRows(pairs)}</div></aside>`;
+}
+
+function formPanel(title, fields) {
+  return `<aside class="panel detail"><h2>${esc(t(title))}</h2><form class="live-form" id="live-form">${fields}<p id="live-form-error" class="form-error"></p><button class="detail-button primary" type="submit">${esc(t('Save'))}</button></form></aside>`;
+}
+
+function field(label, html) {
+  return `<label>${esc(label)}${html}</label>`;
+}
+
+function selectField(name, options, required = true) {
+  return `<select name="${name}"${required ? ' required' : ''}><option value="">Select</option>${options}</select>`;
+}
+
+function equipmentOptions() {
+  return store.equipment.map((item) => `<option value="${esc(item.equipment_id)}">${esc(item.equipment_id)} — ${esc(item.name)}</option>`).join('');
+}
+
+function areaChart(series) {
+  const palette = ['#075cf5', '#009c63', '#ff710d', '#7439f5', '#fa3038', '#17adae', '#0b2558', '#d4a017', '#0ea5e9', '#c026d3'];
+  const rows = (series || []).filter((row) => row.points?.length);
+  if (!rows.length) return '';
+  const width = 320;
+  const height = 168;
+  const pad = { left: 28, right: 8, top: 12, bottom: 28 };
+  const innerW = width - pad.left - pad.right;
+  const innerH = height - pad.top - pad.bottom;
+  const dates = rows[0].points.map((point) => point.date);
+  const count = dates.length;
+  const max = Math.max(...rows.flatMap((row) => row.points.map((point) => Number(point.hours) || 0)), 1);
+  const xAt = (index) => pad.left + (count === 1 ? innerW / 2 : (index / (count - 1)) * innerW);
+  const yAt = (value) => pad.top + innerH - ((Number(value) || 0) / max) * innerH;
+  const base = (pad.top + innerH).toFixed(1);
+  const grid = [0, 0.5, 1].map((step) => {
+    const value = max * (1 - step);
+    const y = yAt(value);
+    return `<line x1="${pad.left}" y1="${y.toFixed(1)}" x2="${width - pad.right}" y2="${y.toFixed(1)}"></line><text x="${pad.left - 4}" y="${(y + 3).toFixed(1)}" text-anchor="end">${numberText(value, max >= 10 ? 0 : 1)}</text>`;
+  }).join('');
+  const labels = dates.map((day, index) => {
+    if (count > 6 && index !== 0 && index !== count - 1 && index !== Math.floor((count - 1) / 2)) return '';
+    return `<text x="${xAt(index).toFixed(1)}" y="${height - 6}" text-anchor="middle">${esc(fmtDate(day).slice(0, 5))}</text>`;
+  }).join('');
+  const shapes = rows.map((row, seriesIndex) => {
+    const color = palette[seriesIndex % palette.length];
+    const coords = row.points.map((point, index) => [xAt(index), yAt(point.hours)]);
+    const line = coords.map((coord, index) => `${index ? 'L' : 'M'}${coord[0].toFixed(1)},${coord[1].toFixed(1)}`).join(' ');
+    const area = `${line} L${coords[count - 1][0].toFixed(1)},${base} L${coords[0][0].toFixed(1)},${base} Z`;
+    const dots = coords.map((coord, index) => {
+      const hours = Number(row.points[index].hours) || 0;
+      if (!hours) return '';
+      return `<circle cx="${coord[0].toFixed(1)}" cy="${coord[1].toFixed(1)}" r="3.2" fill="#fff" stroke="${color}"><title>${esc(row.name)} · ${esc(fmtDate(row.points[index].date))}: ${numberText(hours, 1)} h</title></circle>`;
+    }).join('');
+    return `<path class="area-fill" d="${area}" style="fill:url(#downArea${seriesIndex})"></path><path class="area-line" d="${line}" style="stroke:${color}"></path>${dots}`;
+  }).join('');
+  const gradients = rows.map((row, seriesIndex) => {
+    const color = palette[seriesIndex % palette.length];
+    return `<linearGradient id="downArea${seriesIndex}" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="${color}" stop-opacity="0.34"></stop><stop offset="100%" stop-color="${color}" stop-opacity="0.03"></stop></linearGradient>`;
+  }).join('');
+  const legend = rows.map((row, seriesIndex) => `<li><i style="background:${palette[seriesIndex % palette.length]}"></i><span>${esc(t(row.name))}</span></li>`).join('');
+  return `<svg class="area-chart" viewBox="0 0 ${width} ${height}" role="img" aria-label="Downtime trend"><defs>${gradients}</defs><g class="area-grid">${grid}</g>${shapes}${labels}</svg><ul class="area-legend">${legend}</ul>`;
+}
+
+function donut(parts, total) {
+  const active = parts.filter((part) => part.value > 0);
+  let cursor = 0;
+  const stops = active.map((part) => {
+    const start = cursor;
+    cursor += (part.value / total) * 100;
+    return `${part.color} ${start}% ${cursor}%`;
+  });
+  const style = total ? `background:conic-gradient(${stops.join(',')})` : 'background:#e7ebf3';
+  const legend = active.map((part) => `<li><i style="background:${part.color}"></i><span>${esc(t(part.name))}</span></li>`).join('');
+  return `<div class="donut live" data-label="${esc(numberText(total, 1))}&#10;${esc(t('Total'))}" style="${style}"></div><ul class="area-legend">${legend}</ul>`;
+}
+
+function kpiText(value, digits = 1, suffix = '') {
+  if (value == null || value === '') return '—';
+  return `${numberText(value, digits)}${suffix}`;
+}
+
+function kpiMove(actual, previous, higher) {
+  if (actual == null || previous == null) return '';
+  const delta = Number(actual) - Number(previous);
+  if (!delta) return t('Same as the previous period');
+  return `${delta > 0 ? '▲' : '▼'} ${numberText(Math.abs(delta), 1)} ${t('vs previous period')}`;
+}
+
+function kpiTargetText(actual, target, higher) {
+  if (target == null) return t('Target not set for this level');
+  if (actual == null) return `${t('Target')} ${numberText(target, 1)}`;
+  const variance = higher ? Number(actual) - Number(target) : Number(target) - Number(actual);
+  return `${t('Target')} ${numberText(target, 1)} · ${t('variance')} ${variance > 0 ? '+' : ''}${numberText(variance, 1)}`;
+}
+
+function shown(count, total, noun) {
+  return `${t('Showing')} ${count} ${t('of')} ${total} ${t(noun)}`;
+}
+
+async function drawDashboard() {
+  const params = new URLSearchParams();
+  if (ui.plantId) params.set('plant_id', ui.plantId);
+  if (ui.lineId) params.set('line_id', ui.lineId);
+  if (ui.equipmentId) params.set('equipment_id', ui.equipmentId);
+  if (ui.technicianId) params.set('technician_id', ui.technicianId);
+  if (ui.dateFrom) params.set('date_from', ui.dateFrom);
+  if (ui.dateTo) params.set('date_to', ui.dateTo);
+  const kpi = await apiRequest(`/kpi${params.toString() ? `?${params}` : ''}`);
+  const previous = kpi.previous || {};
+  const targets = kpi.targets || {};
+  const hours = kpi.hours || {};
+  document.getElementById('metric-grid').innerHTML = metrics([
+    ['Availability', kpiText(kpi.availability, 1, '%'), '✓', 'green', kpiMove(kpi.availability, previous.availability, true)],
+    ['MTBF (Hours)', kpiText(kpi.mtbf, 1), '▥', 'blue', kpiMove(kpi.mtbf, previous.mtbf, true)],
+    ['MTTR (Hours)', kpiText(kpi.mttr, 2), '⚒', 'orange', kpiMove(kpi.mttr, previous.mttr, false)],
+    ['PM Compliance', kpiText(kpi.pm_compliance, 1, '%'), '◷', 'blue', kpiMove(kpi.pm_compliance, previous.pm_compliance, true)],
+    ['Downtime (Hours)', kpiText(kpi.downtime_h, 1), '◉', 'red', kpiMove(kpi.downtime_h, previous.downtime_h, false)],
+    ['WO Completion', kpiText(kpi.wo_completion, 1, '%'), '▣', 'purple', kpiMove(kpi.wo_completion, previous.wo_completion, true)],
+  ]);
+  dateLabel([kpi.period?.from, kpi.period?.to]);
+  const hourParts = [
+    { name: 'Preventive', value: hours.Preventive || 0, color: '#1269f3' },
+    { name: 'Corrective', value: hours.Corrective || 0, color: '#ff710d' },
+    { name: 'Emergency', value: hours.Emergency || 0, color: '#fa3038' },
+    { name: 'Routine', value: hours.Routine || 0, color: '#7439f5' },
+    { name: 'Inspection', value: hours.Inspection || 0, color: '#009c63' },
+  ];
+  const technicianOptions = store.technicians.map((row) => `<option value="${esc(row.technician_id)}"${ui.technicianId === row.technician_id ? ' selected' : ''}>${esc(row.name)}</option>`).join('');
+  const extraFilters = `<label>${t('Technician')}<select data-filter="technician"><option value="">${esc(t('All technicians'))}</option>${technicianOptions}</select></label><label>${t('From')}<input data-filter="from" type="date" value="${esc(ui.dateFrom)}"></label><label>${t('To')}<input data-filter="to" type="date" value="${esc(ui.dateTo)}"></label>`;
+  const card = (title, value, detail, note) => `<article class="kpi-card"><h3>${esc(t(title))}</h3><b>${value}</b><small>${esc(detail)}</small><small>${esc(note)}</small></article>`;
+  const metricOption = (value, label) => `<option value="${value}">${esc(t(label))}</option>`;
+  const targetForm = canMaintain() ? `<form id="kpi-target" class="live-form kpi-target"><b>${esc(t('KPI target for this plant / line / equipment'))}</b><label>${t('Metric')}<select name="metric">${metricOption('availability', 'Availability %')}${metricOption('mtbf', 'MTBF hours')}${metricOption('mttr', 'MTTR hours')}${metricOption('pm_compliance', 'PM compliance %')}${metricOption('downtime_h', 'Downtime hours')}${metricOption('planned_pm_pct', 'Planned PM %')}${metricOption('preventive_pct', 'Preventive %')}${metricOption('corrective_pct', 'Corrective %')}${metricOption('wo_schedule', 'Schedule compliance %')}${metricOption('wo_completion', 'WO completion %')}${metricOption('failure_rate_1000h', 'Failures / 1,000 h')}</select></label><label>${t('Target')}<input name="target_value" type="number" min="0" step="0.1" required></label><button class="detail-button primary" type="submit">${esc(t('Save target'))}</button><p id="kpi-target-error" class="form-error"></p></form>` : '';
+  const components = (kpi.components || []).map((row) => `<div class="summary-row"><span>${esc(row.component_id)} · ${esc(row.name)}</span><b>${row.life_days} ${t('days')}${row.in_service ? '' : ` ${t('removed')}`}</b></div>`).join('') || `<p class="chart-empty">${esc(t('No component installation dates yet'))}</p>`;
+  const workspace = document.getElementById('workspace');
+  workspace.className = 'workspace kpi-layout';
+  workspace.innerHTML = `${filtersHtml().replace('</div>', `${extraFilters}</div>`)}
+    <p class="kpi-period">${esc(t('Period'))} ${esc(fmtDate(kpi.period?.from))} – ${esc(fmtDate(kpi.period?.to))} · ${kpi.period?.days || 0} ${esc(t('days'))} · ${kpi.equipment_count || 0} ${esc(t('equipment'))} · ${esc(t('idle time is 0 because it is not recorded'))}</p>
+    <section class="kpi-board">
+      ${card('PM overdue', String(kpi.pm_overdue ?? 0), kpiTargetText(kpi.pm_overdue_pct, null, false), `${kpiText(kpi.pm_overdue_pct, 1, '%')} ${t('of')} ${kpi.pm_due || 0} ${t('due PM plans')}`)}
+      ${card('Planned PM', kpiText(kpi.planned_pm_pct, 1, '%'), kpiTargetText(kpi.planned_pm_pct, targets.planned_pm_pct, true), `${kpi.planned_pm || 0} ${t('planned of')} ${kpi.pm_total || 0}`)}
+      ${card('Unplanned PM', kpiText(kpi.unplanned_pm_pct, 1, '%'), t('Added from an identified need'), `${kpi.unplanned_pm || 0} ${t('unplanned of')} ${kpi.pm_total || 0}`)}
+      ${card('Corrective maintenance', kpiText(kpi.corrective_pct, 1, '%'), kpiTargetText(kpi.corrective_pct, targets.corrective_pct, false), `${kpiText(hours.Corrective, 1)} ${t('h of')} ${kpiText(kpi.total_hours, 1)}`)}
+      ${card('Preventive maintenance', kpiText(kpi.preventive_pct, 1, '%'), kpiTargetText(kpi.preventive_pct, targets.preventive_pct, true), `${kpiText(hours.Preventive, 1)} ${t('h of')} ${kpiText(kpi.total_hours, 1)}`)}
+      ${card('Schedule compliance', kpiText(kpi.wo_schedule, 1, '%'), kpiTargetText(kpi.wo_schedule, targets.wo_schedule, true), `${kpi.wo_scheduled_done || 0} ${t('completed of')} ${kpi.wo_scheduled || 0} ${t('scheduled')} · ${t('emergency excluded')}`)}
+      ${card('Overdue work orders', String(kpi.wo_overdue ?? 0), `${kpiText(kpi.wo_overdue_pct, 1, '%')} ${t('of issued orders')}`, `${t('Aging')} 1–7: ${kpi.wo_aging?.['1-7'] || 0} · 8–30: ${kpi.wo_aging?.['8-30'] || 0} · 31+: ${kpi.wo_aging?.['31+'] || 0}`)}
+      ${card('Failure count', String(kpi.failures ?? 0), t('Corrective and emergency events only'), t('PM, inspection and lubrication are not counted'))}
+      ${card('Failure rate', kpiText(kpi.failure_rate_1000h, 2), kpiTargetText(kpi.failure_rate_1000h, targets.failure_rate_1000h, false), t('Failures per 1,000 operating hours'))}
+    </section>
+    <section class="panel chart-panel"><h2>${esc(t('Maintenance hours'))}</h2><p class="kpi-note">${esc(t('Total'))} ${kpiText(kpi.total_hours, 1)} ${esc(t('from daily reports and work orders.'))}</p>${kpi.total_hours ? donut(hourParts, kpi.total_hours) : `<p class="chart-empty">${esc(t('No maintenance hours yet'))}</p>`}</section>
+    <section class="panel chart-panel chart-wide"><h2>${esc(t('Downtime trend'))}</h2><p class="kpi-note">${esc(t(kpi.trend_by === 'line' ? 'Each line' : kpi.trend_by === 'equipment' ? 'Selected equipment' : 'Each plant'))} · ${esc(t('scheduled'))} ${kpiText(kpi.scheduled_downtime_h, 1)} · ${esc(t('unscheduled'))} ${kpiText(kpi.unscheduled_downtime_h, 1)}</p>${kpi.trend_series?.length ? areaChart(kpi.trend_series) : `<p class="chart-empty">${esc(t('No downtime in this period'))}</p>`}</section>
+    <section class="panel chart-panel"><h2>${esc(t('Availability basis'))}</h2><div class="summary-row"><span>${esc(t('Uptime'))}</span><b>${kpiText(kpi.uptime_h, 1)} ${esc(t('h'))}</b></div><div class="summary-row"><span>${esc(t('Available time'))}</span><b>${kpiText(kpi.available_h, 1)} ${esc(t('h'))}</b></div><div class="summary-row"><span>${esc(t('Idle time'))}</span><b>${kpiText(kpi.idle_h, 1)} ${esc(t('h'))}</b></div><div class="summary-row"><span>${esc(t('Operating time'))}</span><b>${kpiText(kpi.operating_h, 1)} ${esc(t('h'))}</b></div><small class="kpi-note">${esc(t('Availability = uptime ÷ (available − idle). MTBF = operating time ÷ failures. MTTR = corrective hours ÷ corrective events.'))}</small></section>
+    <section class="panel chart-panel"><h2>${esc(t('Work orders and PM'))}</h2><div class="summary-row"><span>${esc(t('Issued / completed'))}</span><b>${kpi.wo_issued || 0} / ${kpi.wo_completed || 0}</b></div><div class="summary-row"><span>${esc(t('PM due / on time'))}</span><b>${kpi.pm_due || 0} / ${kpi.pm_on_time || 0}</b></div><div class="summary-row"><span>${esc(t('Corrective events'))}</span><b>${kpi.corrective_events || 0}</b></div><div class="summary-row"><span>${esc(kpiTargetText(kpi.availability, targets.availability, true))}</span><b>${esc(t('Availability'))}</b></div><div class="summary-row"><span>${esc(kpiTargetText(kpi.mtbf, targets.mtbf, true))}</span><b>${esc(t('MTBF'))}</b></div><div class="summary-row"><span>${esc(kpiTargetText(kpi.mttr, targets.mttr, false))}</span><b>${esc(t('MTTR'))}</b></div>${targetForm}</section>
+    <section class="panel chart-panel"><h2>${esc(t('Component life'))}</h2><p class="kpi-note">${esc(t('Removal date − installation date. In-service components use today.'))}</p>${components}<div class="summary-row"><span>${esc(t('Average life'))}</span><b>${kpi.component_life_avg == null ? '—' : `${kpi.component_life_avg} ${t('days')}`}</b></div></section>`;
+  bindFilters();
+  document.getElementById('kpi-target')?.addEventListener('submit', async (event) => {
+    event.preventDefault();
+    const error = document.getElementById('kpi-target-error');
+    const data = Object.fromEntries(new FormData(event.currentTarget).entries());
+    try {
+      await apiRequest('/kpi/targets', { method: 'PUT', body: JSON.stringify({ metric: data.metric, target_value: Number(data.target_value), plant_id: ui.plantId || null, line_id: ui.lineId || null, equipment_id: ui.equipmentId || null }) });
+      toast(t('KPI target saved.'));
+      await drawDashboard();
+    } catch (err) {
+      if (error) error.textContent = err.message || t('Could not save the target.');
+    }
+  });
+}
+
+function tabsHtml(labels) {
+  return `<div class="tabs">${labels.map((label) => `<button class="tab${ui.tab === label ? ' active' : ''}" data-tab="${esc(label)}" type="button">${esc(t(label))}</button>`).join('')}</div>`;
+}
+
+function assetList(selectedCode) {
+  const items = visibleEquipment();
+  return `<aside class="equipment-list"><h3>${esc(t('Select Equipment'))}</h3><label class="mini-search">⌕ <input id="asset-search" placeholder="${esc(t('Search equipment...'))}"></label>${items.map((item) => `<div class="asset${item.equipment_id === selectedCode ? ' selected' : ''}" data-asset="${esc(item.equipment_id)}"><span class="asset-icon">⚙</span><span><b>${esc(item.equipment_id)}</b><small>${esc(item.name)}</small></span></div>`).join('') || `<p class="live-note">${esc(t('No equipment'))}</p>`}</aside>`;
+}
+
+function drawWorkOrders() {
+  const rows = scoped(store.orders).filter((order) => {
+    if (ui.tab === 'Overdue') return overdue(order);
+    if (ui.tab === 'Completed') return closed(order);
+    if (ui.tab === 'On Hold') return order.status === 'On Hold';
+    if (ui.tab === 'In Progress') return order.status === 'In Progress';
+    return true;
+  });
+  const selected = rows.find((order) => order.work_order_id === ui.rowKey) || rows[0];
+  document.getElementById('metric-grid').innerHTML = metrics([
+    ['Total Work Orders', String(scoped(store.orders).length), '▤', 'blue', ''],
+    ['Completed', String(scoped(store.orders).filter(closed).length), '✓', 'green', ''],
+    ['In Progress', String(scoped(store.orders).filter((order) => order.status === 'In Progress').length), '◷', 'orange', ''],
+    ['On Hold', String(scoped(store.orders).filter((order) => order.status === 'On Hold').length), 'Ⅱ', 'blue', ''],
+    ['Overdue', String(scoped(store.orders).filter(overdue).length), '◉', 'red', ''],
+    ['Avg. Labor (hrs)', numberText(scoped(store.orders).length ? sum(scoped(store.orders), 'labor_hours') / scoped(store.orders).length : 0, 1), '◷', 'green', ''],
+  ]);
+  dateLabel(store.orders.map((order) => order.request_date));
+  if (ui.mode === 'create' && canMaintain()) {
+    document.getElementById('workspace').className = 'workspace';
+    document.getElementById('workspace').innerHTML = workOrderForm();
+    bindForm();
+    const fillJobMachine = () => {
+      const item = matchEquipment(document.getElementById('job-equipment')?.value);
+      const plant = store.plants.find((row) => row.plant_id === item?.plant_id);
+      const department = document.getElementById('job-department');
+      if (department) department.value = plant?.name || '';
+    };
+    document.getElementById('job-equipment')?.addEventListener('input', fillJobMachine);
+    document.getElementById('job-equipment')?.addEventListener('change', fillJobMachine);
+    document.getElementById('job-back')?.addEventListener('click', () => {
+      ui.mode = 'view';
+      drawWorkOrders();
+    });
+    return;
+  }
+  if (ui.mode === 'job' && isTechnician()) {
+    const order = store.orders.find((row) => row.work_order_id === ui.rowKey);
+    if (order) {
+      document.getElementById('workspace').className = 'workspace';
+      document.getElementById('workspace').innerHTML = workOrderForm(order);
+      bindForm();
+      document.getElementById('job-back')?.addEventListener('click', () => {
+        ui.mode = 'view';
+        drawWorkOrders();
+      });
+      return;
+    }
+    ui.mode = 'view';
+  }
+  const body = rows.map((order) => `<tr data-row="${esc(order.work_order_id)}" class="${selected && selected.work_order_id === order.work_order_id ? 'selected' : ''}">${cell(esc(order.work_order_id), true)}${cell(liveBadge(order.work_order_type))}${cell(esc(equipmentText(order)))}${cell(esc(order.problem_description || order.work_description || '—'))}${cell(liveBadge(order.priority))}${cell(isTechnician() ? `<button type="button" class="badge blue job-open" data-open="${esc(order.work_order_id)}">${esc(t(order.status || 'Open'))}</button>` : liveBadge(order.status))}${cell(esc(assigneeNames(order)))}${cell(fmtDate(order.planned_date))}${cell(fmtDate(order.request_date))}</tr>`);
+  const detail = ui.mode === 'create' ? workOrderForm() : detailPanel('Work Order Details', selected?.status || '—', selected?.work_order_id || '—', equipmentText(selected || {}), [
+    ['Type', selected?.work_order_type], ['Priority', selected?.priority], ['Equipment', equipmentText(selected || {})],
+    ['Problem', selected?.problem_description], ['Work', selected?.work_description], ['Technicians', assigneeNames(selected)],
+    ['Planned', fmtDate(selected?.planned_date)], ['Downtime (h)', selected?.downtime_h ?? '—'], ['Parts', selected?.parts_used],
+  ]);
+  document.getElementById('workspace').className = 'workspace';
+  document.getElementById('workspace').innerHTML = `<section class="panel">${tabsHtml(['All Work Orders', 'In Progress', 'Overdue', 'Completed', 'On Hold'])}${tableShell(['WO No.', 'Type', 'Equipment', 'Problem / Description', 'Priority', 'Status', 'Assigned To', 'Due Date', 'Created On'], body, shown(rows.length, scoped(store.orders).length, 'work orders'))}</section>${detail}`;
+  bindRows();
+  document.querySelectorAll('[data-open]').forEach((button) => button.addEventListener('click', (event) => {
+    event.stopPropagation();
+    ui.rowKey = button.dataset.open;
+    ui.mode = 'job';
+    drawWorkOrders();
+  }));
+  bindForm();
+  if (ui.mode !== 'create' && selected && canMaintain()) {
+    document.querySelector('.detail')?.insertAdjacentHTML('beforeend', `<form id="assign-form" class="live-form"><div class="assign-block"><b>${esc(t('Send to technicians'))}</b>${technicianChecks(assigneeIds(selected))}</div><button class="detail-button primary" type="submit">${esc(t('Send to selected technicians'))}</button><p id="assign-error" class="form-error"></p></form>`);
+    document.getElementById('assign-form')?.addEventListener('submit', async (event) => {
+      event.preventDefault();
+      const technicians = [...new FormData(event.currentTarget).getAll('assigned_technician_ids')];
+      const error = document.getElementById('assign-error');
+      if (!technicians.length) {
+        error.textContent = 'Select at least one technician.';
+        return;
+      }
+      try {
+        await apiRequest(`/work-orders/${encodeURIComponent(selected.work_order_id)}`, { method: 'PUT', body: JSON.stringify({ assigned_technician_ids: technicians }) });
+        store = null;
+        ui.rowKey = selected.work_order_id;
+        toast('Work order sent only to the selected technicians.');
+        await paint('work-orders');
+      } catch (exception) {
+        error.textContent = exception.message;
+      }
+    });
+  }
+  if (ui.mode !== 'create' && selected && isTechnician()) {
+    const response = myResponse(selected);
+    const panel = document.querySelector('.detail');
+    if (response === 'Pending') {
+      panel?.insertAdjacentHTML('beforeend', `<div class="response-actions"><button class="detail-button primary" id="accept-order" type="button">Accept</button><button class="detail-button danger" id="reject-order" type="button">Reject</button><p id="response-error" class="form-error"></p></div>`);
+      const send = async (decision) => {
+        try {
+          await apiRequest(`/work-orders/${encodeURIComponent(selected.work_order_id)}/respond`, { method: 'POST', body: JSON.stringify({ decision }) });
+          store = null;
+          ui.rowKey = selected.work_order_id;
+          toast(decision === 'Accepted' ? 'Work order accepted and recorded.' : 'Work order rejected.');
+          await paint('work-orders');
+        } catch (error) {
+          document.getElementById('response-error').textContent = error.message;
+        }
+      };
+      document.getElementById('accept-order')?.addEventListener('click', () => send('Accepted'));
+      document.getElementById('reject-order')?.addEventListener('click', () => send('Rejected'));
+    } else if (response) {
+      panel?.insertAdjacentHTML('beforeend', `<p class="live-note">Your response: ${esc(response)}</p>`);
+    }
+  }
+}
+
+function annualMarks(weeks) {
+  return new Set(String(weeks || '').split(',').map((part) => part.trim()).filter(Boolean));
+}
+
+function isoDate(value) {
+  const month = String(value.getMonth() + 1).padStart(2, '0');
+  const day = String(value.getDate()).padStart(2, '0');
+  return `${value.getFullYear()}-${month}-${day}`;
+}
+
+function weekDates(year, month, week) {
+  const last = new Date(year, month, 0).getDate();
+  const start = (week - 1) * 7 + 1;
+  const end = week === 4 ? last : Math.min(start + 6, last);
+  const dates = [];
+  for (let day = start; day <= end; day += 1) dates.push(new Date(year, month - 1, day));
+  return dates;
+}
+
+function repeatDates(year, every) {
+  const step = Number(String(every || '').trim());
+  if (!Number.isInteger(step) || step < 1 || step > 366) return [];
+  const dates = [];
+  const cursor = new Date(year, 0, 1);
+  const end = new Date(year, 11, 31);
+  while (cursor <= end) {
+    dates.push(new Date(cursor));
+    cursor.setDate(cursor.getDate() + step);
+  }
+  return dates;
+}
+
+function weekKeyFor(value) {
+  const day = value.getDate();
+  const week = day <= 7 ? 1 : day <= 14 ? 2 : day <= 21 ? 3 : 4;
+  return `${value.getMonth() + 1}-${week}`;
+}
+
+function annualLineKey(item) {
+  if (item.line_key) return item.line_key;
+  item.line_key = `L${Date.now().toString(36)}${Math.random().toString(36).slice(2, 7)}`;
+  return item.line_key;
+}
+
+function applyRowRepeat(row) {
+  const every = row.querySelector('[data-field="frequency_time"]')?.value;
+  const dates = repeatDates(ui.annualYear, every);
+  const driven = dates.length > 0;
+  const weeks = new Set(dates.map(weekKeyFor));
+  if (driven) {
+    row.dataset.driven = '1';
+    row.dataset.days = dates.map(isoDate).join(',');
+  } else if (row.dataset.driven === '1') {
+    row.dataset.driven = '';
+    row.dataset.days = '';
+  }
+  row.querySelectorAll('[data-week]').forEach((box) => {
+    if (driven) {
+      box.checked = weeks.has(box.dataset.week);
+      box.disabled = true;
+      return;
+    }
+    if (row.dataset.driven !== '1' && box.disabled && canMaintain() && !row.dataset.wasDriven) box.disabled = false;
+    if (!driven && row.dataset.wasDriven === '1') {
+      box.checked = false;
+      if (canMaintain()) box.disabled = false;
+    }
+  });
+  row.dataset.wasDriven = driven ? '1' : '';
+}
+
+function annualRowHtml(item = {}, locked = false) {
+  const marks = annualMarks(item.weeks);
+  const lock = locked ? ' disabled' : '';
+  const kind = DAY_MAINTENANCE_TYPES.includes(item.maintenance_type) ? item.maintenance_type : 'Preventive';
+  const typeOptions = DAY_MAINTENANCE_TYPES.map((value) => `<option value="${value}"${kind === value ? ' selected' : ''}>${esc(t(value))}</option>`).join('');
+  const weeks = ANNUAL_MONTHS.map((_, monthIndex) => [1, 2, 3, 4].map((week) => {
+    const key = `${monthIndex + 1}-${week}`;
+    return `<td><input type="checkbox" data-week="${key}"${marks.has(key) ? ' checked' : ''}${lock}></td>`;
+  }).join('')).join('');
+  const field = (name, value, placeholder) => `<input data-field="${name}" value="${esc(value || '')}" placeholder="${esc(placeholder)}"${lock}>`;
+  return `<tr data-line="${esc(annualLineKey(item))}" data-days="${esc(item.days || '')}">
+    <td class="annual-machine">${field('machine_code', item.machine_code, 'B-1001')}${field('machine_name', item.machine_name, t('Machine name'))}</td>
+    <td>${field('task', item.task, t('Task description'))}</td>
+    <td><select data-field="maintenance_type"${lock}>${typeOptions}</select></td>
+    <td>${field('frequency_time', item.frequency_time, '7')}</td>
+    <td>${field('frequency_hours', item.frequency_hours, '500 h')}</td>
+    ${weeks}
+    <td>${locked ? '' : `<button type="button" class="annual-remove" data-i18n="Remove">${esc(t('Remove'))}</button>`}</td>
+  </tr>`;
+}
+
+function readAnnualRows() {
+  return [...document.querySelectorAll('#annual-rows tr')].map((row) => {
+    const value = (name) => row.querySelector(`[data-field="${name}"]`)?.value.trim() || '';
+    const weeks = [...row.querySelectorAll('[data-week]:checked')].map((box) => box.dataset.week).join(',');
+    return { line_key: row.dataset.line || '', machine_code: value('machine_code'), machine_name: value('machine_name'), task: value('task'), frequency_time: value('frequency_time'), frequency_hours: value('frequency_hours'), maintenance_type: value('maintenance_type') || 'Preventive', weeks, days: row.dataset.days || '' };
+  });
+}
+
+function readWeekTasks() {
+  const items = [];
+  document.querySelectorAll('.week-day').forEach((day) => {
+    const workDate = day.dataset.date;
+    day.querySelectorAll('.day-task').forEach((row) => {
+      const value = (name) => row.querySelector(`[data-field="${name}"]`)?.value.trim() || '';
+      items.push({
+        id: Number(row.dataset.id) || null,
+        work_order_id: row.dataset.workOrder || '',
+        released_at: row.dataset.released || '',
+        work_date: workDate,
+        machine_code: value('machine_code'),
+        machine_name: value('machine_name'),
+        task: value('task'),
+        maintenance_type: value('maintenance_type') || 'Preventive',
+      });
+    });
+  });
+  return items;
+}
+
+function captureAnnual() {
+  if (document.querySelector('.week-day')) ui.weekTasks = readWeekTasks();
+  else if (document.getElementById('annual-rows')) ui.annualItems = readAnnualRows();
+}
+
+async function loadAnnualPlan() {
+  if (!ui.annualPlant) { ui.annualItems = []; return; }
+  const data = await apiRequest(`/annual-pm?plant_id=${encodeURIComponent(ui.annualPlant)}&year=${ui.annualYear}`);
+  ui.annualItems = data.items || [];
+  ui.annualYear = data.year || ui.annualYear;
+}
+
+async function saveAnnualPlan() {
+  const error = document.getElementById('annual-error');
+  if (!ui.annualPlant) {
+    if (error) error.textContent = t('Choose a plant, then set the plan.');
+    return;
+  }
+  captureAnnual();
+  const items = ui.annualItems;
+  try {
+    const saved = await apiRequest('/annual-pm', { method: 'PUT', body: JSON.stringify({ plant_id: ui.annualPlant, year: Number(ui.annualYear), items }) });
+    ui.annualItems = saved.items || [];
+    store.equipment = await apiRequest('/equipment');
+    toast(t(saved.new_equipment?.length ? 'The plan was saved. New equipment was added and the engineer was notified.' : 'Annual plan saved.'));
+    await drawAnnualPlan();
+  } catch (exception) {
+    if (error) error.textContent = t(exception.message);
+  }
+}
+
+function dayTaskHtml(task = {}, locked = false) {
+  const sent = Boolean(task.released_at);
+  const lock = locked ? ' disabled' : '';
+  const sentLock = locked || sent ? ' disabled' : '';
+  const kind = DAY_MAINTENANCE_TYPES.includes(task.maintenance_type) ? task.maintenance_type : 'Preventive';
+  const equipment = store.equipment.filter((item) => item.plant_id === ui.annualPlant);
+  const options = equipment.map((item) => `<option value="${esc(item.equipment_id)}">${esc(item.equipment_id)} — ${esc(item.name)}</option>`).join('');
+  const field = (name, value, placeholder) => `<input data-field="${name}" value="${esc(value || '')}" placeholder="${esc(placeholder)}"${lock}>`;
+  const typeOptions = DAY_MAINTENANCE_TYPES.map((value) => `<option value="${value}"${kind === value ? ' selected' : ''}>${esc(t(value))}</option>`).join('');
+  return `<div class="day-task" data-id="${esc(task.id || '')}" data-work-order="${esc(task.work_order_id || '')}" data-released="${esc(task.released_at || '')}">
+    ${locked ? '' : `<label>${esc(t('Registered equipment'))}<select class="equip-pick"><option value="">${esc(t('Choose registered equipment'))}</option>${options}</select></label>`}
+    <label>${esc(t('Equipment number'))}${field('machine_code', task.machine_code, 'B-1001')}</label>
+    <label>${esc(t('Equipment name'))}${field('machine_name', task.machine_name, t('Equipment name'))}</label>
+    <label>${esc(t('Maintenance type'))}<select data-field="maintenance_type"${sentLock}>${typeOptions}</select></label>
+    <label class="day-work">${esc(t('Work to be done'))}<textarea data-field="task" rows="2" placeholder="${esc(t('Work to be done'))}"${lock}>${esc(task.task || '')}</textarea></label>
+    <p class="day-release" hidden></p>
+    ${locked ? '' : `<button type="button" class="annual-remove day-remove">${esc(t('Remove'))}</button>`}
+  </div>`;
+}
+
+function bindDayTask(row) {
+  const codeInput = row.querySelector('[data-field="machine_code"]');
+  const nameInput = row.querySelector('[data-field="machine_name"]');
+  if (codeInput && nameInput) bindEquipmentCode(codeInput, nameInput);
+  row.querySelector('.equip-pick')?.addEventListener('change', (event) => {
+    const found = store.equipment.find((item) => item.equipment_id === event.target.value);
+    if (!found) return;
+    row.querySelector('[data-field="machine_code"]').value = found.equipment_id;
+    row.querySelector('[data-field="machine_name"]').value = found.name;
+  });
+  row.querySelector('[data-field="maintenance_type"]')?.addEventListener('change', () => refreshDayNote(row));
+  refreshDayNote(row);
+  row.querySelector('.day-remove')?.addEventListener('click', () => {
+    const list = row.parentElement;
+    row.remove();
+    if (!list.querySelector('.day-task')) {
+      list.insertAdjacentHTML('beforeend', dayTaskHtml());
+      bindDayTask(list.lastElementChild);
+    }
+  });
+}
+
+async function loadWeekTasks() {
+  const [month, week] = String(ui.annualWeek || '').split('-').map(Number);
+  const dates = weekDates(ui.annualYear, month, week);
+  if (!ui.annualPlant || !dates.length) { ui.weekTasks = []; return; }
+  const from = isoDate(dates[0]);
+  const to = isoDate(dates[dates.length - 1]);
+  ui.weekTasks = await apiRequest(`/annual-pm/days?plant_id=${encodeURIComponent(ui.annualPlant)}&year=${ui.annualYear}&date_from=${from}&date_to=${to}`);
+}
+
+async function saveWeekTasks() {
+  const error = document.getElementById('annual-error');
+  const [month, week] = String(ui.annualWeek || '').split('-').map(Number);
+  const dates = weekDates(ui.annualYear, month, week);
+  if (!ui.annualPlant || !dates.length) return;
+  const items = readWeekTasks();
+  const unknown = items.filter((item) => (item.maintenance_type || 'Preventive') === 'Preventive' && item.machine_code && item.machine_name && !equipmentByCode(item.machine_code));
+  try {
+    ui.weekTasks = await apiRequest('/annual-pm/days', { method: 'PUT', body: JSON.stringify({ plant_id: ui.annualPlant, year: Number(ui.annualYear), date_from: isoDate(dates[0]), date_to: isoDate(dates[dates.length - 1]), items }) });
+    store.equipment = await apiRequest('/equipment');
+    toast(t(unknown.length ? 'The plan was saved. New equipment was added and the engineer was notified.' : 'Week tasks saved.'));
+    drawWeekForm();
+  } catch (exception) {
+    if (error) error.textContent = t(exception.message);
+  }
+}
+
+function dayBefore(iso) {
+  const [year, month, day] = String(iso).slice(0, 10).split('-').map(Number);
+  const value = new Date(year, month - 1, day);
+  value.setDate(value.getDate() - 1);
+  return isoDate(value);
+}
+
+function refreshDayNote(row) {
+  const note = row.querySelector('.day-release');
+  const type = row.querySelector('[data-field="maintenance_type"]')?.value || 'Preventive';
+  if (!note) return;
+  if (type !== 'Corrective') {
+    note.hidden = true;
+    return;
+  }
+  note.hidden = false;
+  if (row.dataset.released) {
+    note.textContent = `${row.dataset.workOrder} · ${t('Sent to all technicians')}`;
+    return;
+  }
+  if (row.dataset.workOrder) {
+    const day = row.closest('.week-day')?.dataset.date;
+    note.textContent = `${row.dataset.workOrder} · ${t('Sends to all technicians on')} ${fmtDate(dayBefore(day))}`;
+    return;
+  }
+  note.textContent = t('Saving creates the work order and sends it to all technicians one day before this date.');
+}
+
+function drawWeekForm() {
+  const locked = !canMaintain();
+  const [month, week] = String(ui.annualWeek).split('-').map(Number);
+  const dates = weekDates(ui.annualYear, month, week);
+  const plant = store.plants.find((item) => item.plant_id === ui.annualPlant);
+  const first = dates[0];
+  const last = dates[dates.length - 1];
+  const taskCount = ui.weekTasks.filter((item) => item.task).length;
+  document.getElementById('page-subtitle').textContent = t('Add one or more tasks for each day: equipment number, equipment name, maintenance type, and the work to be done.');
+  const action = document.getElementById('primary-action');
+  action.hidden = locked;
+  action.textContent = t('Save plan');
+  document.getElementById('metric-grid').innerHTML = metrics([
+    ['Week', String(week), '◷', 'blue', ''],
+    [ANNUAL_MONTHS[month - 1], String(dates.length), '▧', 'orange', ''],
+    ['Year', String(ui.annualYear), '▣', 'purple', ''],
+    ['Plant', plant?.name || '—', '▣', 'blue', ''],
+    ['Day tasks', String(taskCount), '⚙', 'green', ''],
+    ['From', first ? fmtDate(isoDate(first)) : '—', '◷', 'orange', ''],
+  ]);
+  const days = dates.map((value) => {
+    const key = isoDate(value);
+    const tasks = ui.weekTasks.filter((item) => String(item.work_date).slice(0, 10) === key);
+    const rows = (tasks.length ? tasks : [{}]).map((task) => dayTaskHtml(task, locked)).join('');
+    return `<section class="week-day" data-date="${key}">
+      <header><div><b>${esc(t(WEEKDAYS[value.getDay()]))}</b><small>${esc(fmtDate(key))}</small></div>${locked ? '' : `<button type="button" class="detail-button day-add">${esc(t('Add another task'))}</button>`}</header>
+      <div class="day-tasks">${rows}</div>
+    </section>`;
+  }).join('');
+  document.getElementById('workspace').className = 'workspace';
+  document.getElementById('workspace').innerHTML = `<section class="panel annual-plan">
+    <div class="annual-bar">
+      <button type="button" id="week-back" class="detail-button">${esc(t('Back to annual plan'))}</button>
+      <b class="annual-title">${esc(t('Week'))} ${week} · ${esc(t(ANNUAL_MONTHS[month - 1]))} ${esc(ui.annualYear)}</b>
+    </div>
+    <p class="kpi-note">${esc(fmtDate(isoDate(first)))} – ${esc(fmtDate(isoDate(last)))} · ${dates.length} ${esc(t('days'))}</p>
+    <div class="week-days">${days}</div>
+    <p id="annual-error" class="form-error"></p>
+  </section>`;
+  document.querySelectorAll('.day-task').forEach(bindDayTask);
+  document.querySelectorAll('.day-add').forEach((button) => button.addEventListener('click', () => {
+    const list = button.closest('.week-day').querySelector('.day-tasks');
+    list.insertAdjacentHTML('beforeend', dayTaskHtml());
+    bindDayTask(list.lastElementChild);
+  }));
+  document.getElementById('week-back')?.addEventListener('click', () => {
+    ui.annualWeek = '';
+    ui.weekTasks = [];
+    drawAnnualPlan();
+  });
+}
+
+const PLAN_COLORS = ['#3b82f6', '#22c55e', '#f59e0b', '#a78bfa', '#fb7185', '#2dd4bf', '#f97316', '#60a5fa'];
+
+function horizonTasks(bucket, emptyText, showPlant = false) {
+  const rows = bucket?.items || [];
+  if (!rows.length) return `<p class="empty">${esc(t(emptyText))}</p>`;
+  const list = rows.map((item) => `<li><b>${esc(item.machine_code || '—')} — ${esc(item.machine_name || '—')}</b><small>${esc(fmtDate(item.work_date))} · ${esc(t(item.maintenance_type || 'Preventive'))}${showPlant && item.plant_name ? ` · ${esc(item.plant_name)}` : ''}</small><span>${esc(item.task || '')}</span></li>`).join('');
+  const more = (bucket.count || rows.length) > rows.length ? `<p class="empty">${esc(t('Showing'))} ${rows.length} ${esc(t('of'))} ${bucket.count}</p>` : '';
+  return `<ol>${list}</ol>${more}`;
+}
+
+function annualHorizon(overview, viewOnly = false) {
+  const plants = overview?.plants || [];
+  const parts = plants.filter((item) => item.tasks > 0).map((item, index) => ({
+    name: `${item.name} · ${item.tasks}`,
+    value: item.tasks,
+    color: PLAN_COLORS[index % PLAN_COLORS.length],
+  }));
+  const total = parts.reduce((sum, item) => sum + item.value, 0);
+  const chart = total
+    ? donut(parts, total)
+    : `<p class="empty">${esc(t('No annual tasks for this year.'))}</p>`;
+  const quiet = plants.filter((item) => !item.tasks).map((item) => item.name).join(', ');
+  const outside = overview && overview.in_year === false
+    ? `<p class="empty">${esc(t('Today is outside the selected year.'))}</p>`
+    : '';
+  const needsPlant = !viewOnly && !ui.annualPlant
+    ? `<p class="empty">${esc(t('Choose a plant, then set the plan.'))}</p>`
+    : '';
+  const block = (title, detail, body) => `<section class="plan-panel"><h3>${esc(t(title))}</h3>${detail ? `<small>${detail}</small>` : ''}${needsPlant || outside || body}</section>`;
+  const weekDetail = overview?.week_from ? `${t('Week')} ${overview.week_number} · ${fmtDate(overview.week_from)} – ${fmtDate(overview.week_to)}` : '';
+  const monthName = ANNUAL_MONTHS[(overview?.month_number || 1) - 1] || '';
+  const yearLabel = viewOnly ? new Date().getFullYear() : ui.annualYear;
+  const cards = `
+    ${block("Today's task", fmtDate(overview?.on), horizonTasks(overview?.today, 'No task falls on this day.', viewOnly))}
+    ${block("This week's plan", weekDetail, horizonTasks(overview?.week, 'No tasks fall in this week.', viewOnly))}
+    ${block("This month's plan", `${t(monthName)} ${yearLabel}`, horizonTasks(overview?.month, 'No tasks fall in this month.', viewOnly))}`;
+  if (viewOnly) return `<div class="plan-horizon">${cards}</div>`;
+  return `<div class="plan-horizon">${cards}
+    <section class="plan-panel plan-donut"><h3>${esc(t('Annual plans by plant'))}</h3><p class="empty">${esc(t('Each slice is a plant. Its size is the number of maintenance tasks in that plant annual plan.'))}</p>${chart}${quiet ? `<p class="empty">${esc(quiet)} · 0</p>` : ''}</section>
+  </div>`;
+}
+
+async function drawTechnicianSchedule() {
+  ui.annualWeek = '';
+  document.getElementById('primary-action').hidden = true;
+  document.getElementById('page-subtitle').textContent = t('Tasks for today, this week, and this month.');
+  const year = new Date().getFullYear();
+  let overview = { today: { count: 0, items: [] }, week: { count: 0, items: [] }, month: { count: 0, items: [] }, in_year: true, on: isoDate(new Date()), month_number: new Date().getMonth() + 1 };
+  try {
+    overview = await apiRequest(`/annual-pm/overview?year=${year}`);
+  } catch (exception) {
+    document.getElementById('metric-grid').innerHTML = '';
+    const workspace = document.getElementById('workspace');
+    workspace.hidden = false;
+    workspace.className = 'workspace';
+    workspace.innerHTML = `<section class="panel"><p class="live-note">${esc(t(exception.message))}</p></section>`;
+    return;
+  }
+  document.getElementById('metric-grid').innerHTML = annualHorizon(overview, true);
+  const workspace = document.getElementById('workspace');
+  workspace.className = 'workspace';
+  workspace.innerHTML = '';
+  workspace.hidden = true;
+}
+
+async function drawAnnualPlan() {
+  if (isTechnician()) return drawTechnicianSchedule();
+  if (ui.annualWeek && ui.annualPlant) return drawWeekForm();
+  ui.annualWeek = '';
+  const locked = !canMaintain();
+  const items = ui.annualItems.length || !ui.annualPlant || locked ? ui.annualItems : [{}];
+  document.getElementById('page-subtitle').textContent = t('Choose a plant, then set the annual plan.');
+  const action = document.getElementById('primary-action');
+  action.hidden = locked;
+  action.textContent = t('Save plan');
+  let overview = { today: { count: 0, items: [] }, week: { count: 0, items: [] }, month: { count: 0, items: [] }, plants: [], in_year: true, on: isoDate(new Date()), month_number: new Date().getMonth() + 1 };
+  try {
+    const params = new URLSearchParams({ year: String(ui.annualYear) });
+    if (ui.annualPlant) params.set('plant_id', ui.annualPlant);
+    overview = await apiRequest(`/annual-pm/overview?${params}`);
+  } catch (exception) {
+    overview.error = exception.message;
+  }
+  document.getElementById('metric-grid').innerHTML = annualHorizon(overview);
+  const monthHead = ANNUAL_MONTHS.map((month) => `<th colspan="4">${esc(t(month))}</th>`).join('');
+  const weekHead = ANNUAL_MONTHS.map((_, monthIndex) => [1, 2, 3, 4].map((week) => `<th><button type="button" class="week-open" data-open-week="${monthIndex + 1}-${week}">${week}</button></th>`).join('')).join('');
+  const options = store.plants.map((item) => `<option value="${esc(item.plant_id)}"${item.plant_id === ui.annualPlant ? ' selected' : ''}>${esc(item.name)}</option>`).join('');
+  const rows = !ui.annualPlant
+    ? `<tr><td class="annual-empty" colspan="54">${esc(t('Choose a plant, then set the plan.'))}</td></tr>`
+    : (items.length ? items.map((item) => annualRowHtml(item, locked)).join('') : `<tr><td class="annual-empty" colspan="54">${esc(t('No records yet'))}</td></tr>`);
+  document.getElementById('workspace').className = 'workspace';
+  document.getElementById('workspace').innerHTML = `<section class="panel annual-plan">${tabsHtml(['Annual plan', 'Due tasks'])}
+    <div class="annual-bar">
+      <label>${esc(t('Plant'))}<select id="annual-plant"><option value="">${esc(t('Choose a plant'))}</option>${options}</select></label>
+      <label>${esc(t('Year'))}<input id="annual-year" type="number" min="2000" max="2100" value="${esc(ui.annualYear)}"${locked ? ' disabled' : ''}></label>
+      ${locked ? '' : `<button type="button" id="annual-add" class="detail-button">${esc(t('Add task'))}</button>`}
+    </div>
+    <h2 class="annual-title">${esc(t('Annual preventive maintenance plan'))}</h2>
+    <div class="annual-scroll"><table class="annual-sheet">
+      <thead><tr><th rowspan="2">${esc(t('Machine name'))}</th><th rowspan="2">${esc(t('Task description'))}</th><th rowspan="2">${esc(t('Maintenance type'))}</th><th colspan="2">${esc(t('Frequency'))}</th>${monthHead}<th rowspan="2"></th></tr>
+      <tr><th>${esc(t('Every (days)'))}</th><th>${esc(t('By running hours'))}</th>${weekHead}</tr></thead>
+      <tbody id="annual-rows">${rows}</tbody>
+    </table></div>
+    <p class="kpi-note">${esc(t('Enter how many days between each repeat. The task is placed on those dates with its maintenance type.'))}</p>
+    <p id="annual-error" class="form-error"></p>
+  </section>`;
+  document.querySelectorAll('[data-tab]').forEach((button) => button.addEventListener('click', () => {
+    captureAnnual();
+    ui.tab = button.dataset.tab;
+    ui.mode = 'view';
+    draw(ui.page);
+  }));
+  document.querySelectorAll('.week-open').forEach((button) => button.addEventListener('click', () => {
+    if (!ui.annualPlant) {
+      const error = document.getElementById('annual-error');
+      if (error) error.textContent = t('Choose a plant, then set the plan.');
+      return;
+    }
+    captureAnnual();
+    ui.annualWeek = button.dataset.openWeek;
+    loadWeekTasks().then(() => drawAnnualPlan()).catch((exception) => {
+      const error = document.getElementById('annual-error');
+      if (error) error.textContent = exception.message;
+    });
+  }));
+  document.getElementById('annual-plant')?.addEventListener('change', async (event) => {
+    ui.annualWeek = '';
+    ui.annualPlant = event.target.value;
+    try { await loadAnnualPlan(); await drawAnnualPlan(); }
+    catch (exception) { const error = document.getElementById('annual-error'); if (error) error.textContent = exception.message; }
+  });
+  document.getElementById('annual-year')?.addEventListener('change', async (event) => {
+    ui.annualWeek = '';
+    ui.annualYear = Number(event.target.value) || new Date().getFullYear();
+    try { await loadAnnualPlan(); await drawAnnualPlan(); }
+    catch (exception) { const error = document.getElementById('annual-error'); if (error) error.textContent = exception.message; }
+  });
+  document.getElementById('annual-add')?.addEventListener('click', () => {
+    ui.annualItems = readAnnualRows();
+    ui.annualItems.push({ machine_code: '', machine_name: '', task: '', frequency_time: '', frequency_hours: '', maintenance_type: 'Preventive', weeks: '' });
+    drawAnnualPlan();
+  });
+  document.querySelectorAll('#annual-rows tr[data-line]').forEach((row) => {
+    applyRowRepeat(row);
+    row.querySelector('[data-field="frequency_time"]')?.addEventListener('input', () => applyRowRepeat(row));
+    const codeInput = row.querySelector('[data-field="machine_code"]');
+    const nameInput = row.querySelector('[data-field="machine_name"]');
+    if (codeInput && nameInput) bindEquipmentCode(codeInput, nameInput);
+  });
+  document.querySelectorAll('.annual-remove').forEach((button) => button.addEventListener('click', () => {
+    const rows = readAnnualRows();
+    const index = [...document.querySelectorAll('.annual-remove')].indexOf(button);
+    rows.splice(index, 1);
+    ui.annualItems = rows;
+    drawAnnualPlan();
+  }));
+}
+
+async function drawPlans() {
+  if (isTechnician()) return drawTechnicianSchedule();
+  if (!['Due tasks', 'Due Today', 'Due This Week', 'Due This Month', 'Overdue', 'Completed', 'All PM Tasks'].includes(ui.tab)) return drawAnnualPlan();
+  const action = document.getElementById('primary-action');
+  action.hidden = true;
+  document.getElementById('page-subtitle').textContent = t('Scheduled tasks from the annual plan.');
+  const params = new URLSearchParams({ year: String(ui.annualYear || new Date().getFullYear()) });
+  if (ui.annualPlant) params.set('plant_id', ui.annualPlant);
+  const due = await apiRequest(`/annual-pm/due?${params}`);
+  const all = due.items || [];
+  const rows = all.filter((item) => {
+    if (ui.tab === 'Due Today') return item.status === 'Due Today';
+    if (ui.tab === 'Due This Week') return item.status === 'Due Today' || item.status === 'Due This Week';
+    if (ui.tab === 'Due This Month') return ['Due Today', 'Due This Week', 'Due This Month'].includes(item.status);
+    if (ui.tab === 'Overdue') return item.status === 'Overdue';
+    if (ui.tab === 'Completed') return item.status === 'Completed';
+    return true;
+  });
+  const compliance = due.compliance == null ? '—' : `${numberText(due.compliance, 1)}%`;
+  document.getElementById('metric-grid').innerHTML = metrics([
+    ['Total PM Tasks', String(due.total || 0), '▣', 'blue', ''],
+    ['Due This Month', String(due.due_month || 0), '▧', 'orange', ''],
+    ['Overdue', String(due.overdue || 0), '◷', 'red', ''],
+    ['Completed', String(due.completed || 0), '✓', 'green', ''],
+    ['Compliance (%)', compliance, '◈', 'purple', ''],
+  ]);
+  const body = rows.map((item) => `<tr data-row="${esc(item.id)}">${cell(esc(item.machine_code || '—'), true)}${cell(esc(item.machine_name || '—'))}${cell(esc(item.task || '—'))}${cell(liveBadge(item.maintenance_type))}${cell(fmtDate(item.work_date))}${cell(liveBadge(item.status))}${cell(esc(item.plant_name || '—'))}</tr>`);
+  document.getElementById('workspace').className = 'workspace due-board';
+  document.getElementById('workspace').innerHTML = `<section class="panel">${tabsHtml(['Annual plan', 'Due tasks', 'Due Today', 'Due This Week', 'Due This Month', 'Overdue', 'Completed'])}${tableShell(['Equipment number', 'Equipment name', 'Task description', 'Maintenance type', 'Date', 'Status', 'Plant'], body, shown(rows.length, all.length, 'PM tasks'))}</section>`;
+  document.querySelectorAll('[data-tab]').forEach((button) => button.addEventListener('click', () => {
+    ui.tab = button.dataset.tab;
+    ui.mode = 'view';
+    ui.rowKey = '';
+    draw(ui.page);
+  }));
+}
+
+function drawPlants() {
+  const rows = store.plants.filter((plant) => ui.tab === 'All Plants' || (ui.tab === 'Active' ? plant.active !== false : plant.active === false));
+  const selected = rows.find((plant) => plant.plant_id === ui.rowKey) || rows[0];
+  const plantLines = store.lines.filter((line) => line.plant_id === selected?.plant_id).sort((a, b) => Number(a.line_number) - Number(b.line_number));
+  document.getElementById('metric-grid').innerHTML = metrics([
+    ['Plants', String(store.plants.length), '▣', 'blue', ''],
+    ['Active Plants', String(store.plants.filter((plant) => plant.active !== false).length), '✓', 'green', ''],
+    ['Production Lines', String(store.lines.length), '☰', 'orange', ''],
+    ['Lines In View', String(selected ? plantLines.length : 0), '№', 'purple', ''],
+    ['Equipment', String(store.equipment.length), '⚙', 'blue', ''],
+    ['Plants Without Lines', String(store.plants.filter((plant) => !store.lines.some((line) => line.plant_id === plant.plant_id)).length), '!', 'red', ''],
+  ]);
+  const body = rows.map((plant) => {
+    const count = store.lines.filter((line) => line.plant_id === plant.plant_id).length;
+    return `<tr data-row="${esc(plant.plant_id)}" class="${selected && selected.plant_id === plant.plant_id ? 'selected' : ''}">${cell(esc(plant.plant_id), true)}${cell(esc(plant.name))}${cell(String(count))}${cell(liveBadge(plant.active === false ? 'Inactive' : 'Active'))}</tr>`;
+  });
+  const lineRows = plantLines.map((line) => `<div class="summary-row"><span>${esc(t('Line'))} ${esc(line.line_number ?? '—')}</span><b>${esc(line.name || '')}</b></div>`).join('') || `<p class="live-note">${esc(t('No records yet'))}</p>`;
+  const lineForm = selected && canMaintain() ? `<form id="line-form" class="live-form"><div class="assign-block"><b>Add production line</b></div><label>Line number<input name="line_number" type="number" min="1" step="1" required></label><label>Name<input name="name" placeholder="Optional"></label><button class="detail-button primary" type="submit">Add line</button><p id="line-error" class="form-error"></p></form>` : '';
+  const detail = ui.mode === 'create' ? plantForm() : `<aside class="panel detail"><h2>Plant Details</h2><div class="detail-top"><div class="machine">▣</div>${liveBadge(selected?.active === false ? 'Inactive' : 'Active')}<h3>${esc(selected?.plant_id || '—')}</h3><p>${esc(selected?.name || '')}</p></div><div class="detail-list">${lineRows}</div>${lineForm}</aside>`;
+  document.getElementById('workspace').className = 'workspace';
+  document.getElementById('workspace').innerHTML = `<section class="panel">${tabsHtml(['All Plants', 'Active', 'Inactive'])}${tableShell(['Plant Code', 'Plant Name', 'Production Lines', 'Status'], body, shown(rows.length, store.plants.length, 'plants'))}</section>${detail}`;
+  bindRows();
+  bindForm();
+  document.getElementById('line-form')?.addEventListener('submit', async (event) => {
+    event.preventDefault();
+    const error = document.getElementById('line-error');
+    const data = Object.fromEntries(new FormData(event.currentTarget).entries());
+    try {
+      await apiRequest('/lines', { method: 'POST', body: JSON.stringify({ plant_id: selected.plant_id, line_number: Number(data.line_number), name: data.name || null, active: true }) });
+      store = null;
+      ui.rowKey = selected.plant_id;
+      ui.mode = 'view';
+      toast('Production line added.');
+      await paint('plants');
+    } catch (exception) {
+      error.textContent = exception.message;
+    }
+  });
+}
+
+function plantForm() {
+  return formPanel('Add Plant', [
+    field('Plant code', '<input name="plant_id" required>'),
+    field('Plant name', '<input name="name" required>'),
+  ].join(''));
+}
+
+function drawEquipment() {
+  const rows = visibleEquipment().filter((item) => {
+    if (ui.tab === 'Critical Assets') return item.criticality === 'A';
+    if (ui.tab === 'Out of Service') return item.status === 'Out of Service';
+    if (ui.tab === 'Under Maintenance') return item.status === 'Under Maintenance';
+    return true;
+  });
+  const selected = rows.find((item) => item.equipment_id === ui.rowKey) || rows[0];
+  const all = visibleEquipment();
+  document.getElementById('metric-grid').innerHTML = metrics([
+    ['Total Equipment', String(all.length), '▣', 'blue', ''],
+    ['Operational', String(all.filter((item) => item.status === 'Running' || item.status === 'Operational').length), '✓', 'green', ''],
+    ['Under Maintenance', String(all.filter((item) => item.status === 'Under Maintenance').length), '⚒', 'orange', ''],
+    ['Out of Service', String(all.filter((item) => item.status === 'Out of Service').length), '×', 'red', ''],
+    ['Plants', String(new Set(all.map((item) => item.plant_id).filter(Boolean)).size), '▣', 'purple', ''],
+    ['Critical Assets', String(all.filter((item) => item.criticality === 'A').length), '◈', 'red', ''],
+  ]);
+  const body = rows.map((item) => `<tr data-row="${esc(item.equipment_id)}" class="${selected && selected.equipment_id === item.equipment_id ? 'selected' : ''}">${cell(esc(item.equipment_id), true)}${cell(esc(item.name))}${cell(esc(item.equipment_type))}${cell(esc(placeOf(item)))}${cell(liveBadge(item.status))}${cell(liveBadge(item.condition || '—'))}${cell(liveBadge(item.criticality))}</tr>`);
+  const detail = ui.mode === 'create' ? equipmentForm() : detailPanel('Equipment Details', selected?.status || '—', selected?.equipment_id || '—', selected?.name || '', [
+    ['Category', selected?.equipment_type], ['Location', placeOf(selected)], ['Manufacturer', selected?.manufacturer],
+    ['Model', selected?.model], ['Criticality', selected?.criticality], ['Condition', selected?.condition],
+    ['Operating hours', selected?.operating_hours ?? '—'],
+  ]);
+  document.getElementById('workspace').className = 'workspace';
+  document.getElementById('workspace').innerHTML = `<section class="panel">${filtersHtml()}${tabsHtml(['All Equipment', 'Critical Assets', 'Out of Service', 'Under Maintenance'])}${tableShell(['Equipment Code', 'Equipment Name', 'Category', 'Location (Plant / Line)', 'Status', 'Condition', 'Criticality'], body, shown(rows.length, all.length, 'equipment'))}</section>${detail}`;
+  bindFilters();
+  bindRows();
+  bindForm();
+}
+
+function drawSops() {
+  const chosen = ui.equipmentId;
+  const rows = scoped(store.sops).filter((sop) => {
+    if (ui.tab === 'Under Review') return /review/i.test(sop.status || '');
+    if (ui.tab === 'Draft') return sop.status === 'Draft';
+    if (ui.tab === 'Published') return /Published|Approved/i.test(sop.status || '');
+    return true;
+  });
+  const selected = rows.find((sop) => sop.sop_id === ui.rowKey) || rows[0];
+  const all = scoped(store.sops);
+  const published = all.filter((sop) => /Published|Approved/i.test(sop.status || '')).length;
+  document.getElementById('metric-grid').innerHTML = metrics([
+    ['Total SOPs', String(all.length), '▤', 'blue', ''],
+    ['Published', String(published), '✓', 'green', ''],
+    ['Under Review', String(all.filter((sop) => /review/i.test(sop.status || '')).length), '◷', 'orange', ''],
+    ['Draft', String(all.filter((sop) => sop.status === 'Draft').length), '✎', 'purple', ''],
+    ['Review due', String(all.filter((sop) => dayDiff(sop.review_date) !== null && dayDiff(sop.review_date) < 0).length), '!', 'red', ''],
+    ['Compliance', `${all.length ? numberText((published / all.length) * 100) : 0}%`, '◈', 'green', ''],
+  ]);
+  const body = rows.map((sop) => `<tr data-row="${esc(sop.sop_id)}" class="${selected && selected.sop_id === sop.sop_id ? 'selected' : ''}">${cell(esc(sop.sop_id), true)}${cell(esc(sop.title))}${cell(esc(sop.sop_type || '—'))}${cell(esc(sop.revision || '—'))}${cell(liveBadge(sop.status))}${cell(fmtDate(sop.review_date))}</tr>`);
+  const detail = ui.mode === 'create' ? sopForm() : detailPanel('SOP Details', selected?.status || '—', selected?.sop_id || '—', selected?.title || '', [
+    ['Equipment', selected?.equipment_id], ['Category', selected?.sop_type], ['Revision', selected?.revision],
+    ['Effective', fmtDate(selected?.effective_date)], ['Review', fmtDate(selected?.review_date)], ['Prepared by', selected?.prepared_by],
+    ['Approved by', selected?.approved_by],
+  ]);
+  document.getElementById('workspace').className = 'workspace';
+  document.getElementById('workspace').innerHTML = `<section class="panel"><div class="split">${assetList(chosen)}<div class="asset-view">${tabsHtml(['All SOPs', 'Published', 'Under Review', 'Draft'])}${tableShell(['SOP Code', 'SOP Title', 'Category', 'Version', 'Status', 'Last Review'], body, shown(rows.length, all.length, 'SOPs'))}</div></div></section>${detail}`;
+  bindAssets();
+  bindRows();
+  bindForm();
+}
+
+function workOrderFor(row) {
+  if (!row) return null;
+  if (row.wo_id) {
+    const linked = store.orders.find((order) => order.work_order_id === row.wo_id);
+    if (linked) return linked;
+  }
+  const code = row.equipment_id;
+  const matches = store.orders.filter((order) => order.equipment_id === code || order.manual_equipment_code === code);
+  const recordDay = String(row.record_date || '').slice(0, 10);
+  const sameDay = matches.filter((order) => order.planned_date === recordDay || order.request_date === recordDay);
+  return sameDay[0] || matches[0] || null;
+}
+
+function workOrderNumber(row) {
+  return workOrderFor(row)?.work_order_id || row?.wo_id || '';
+}
+
+function maintenanceKind(row) {
+  const type = row?.record_type || workOrderFor(row)?.work_order_type || '';
+  if (/Emergency/i.test(type)) return 'Emergency';
+  if (/Corrective/i.test(type)) return 'Corrective';
+  return '';
+}
+
+function isHighMaintenance(row) {
+  const kind = maintenanceKind(row);
+  return (kind === 'Corrective' || kind === 'Emergency') && workOrderFor(row)?.priority === 'High';
+}
+
+function drawRecords() {
+  const chosen = ui.equipmentId;
+  const listed = scoped(store.records).filter(isHighMaintenance);
+  const rows = listed.filter((row) => ui.tab === 'All' || maintenanceKind(row) === ui.tab);
+  const selected = rows.find((row) => String(row.id) === ui.rowKey) || rows[0];
+  document.getElementById('page-subtitle').textContent = 'Corrective and emergency maintenance classified as High';
+  document.getElementById('metric-grid').innerHTML = metrics([
+    ['Total', String(listed.length), '▤', 'blue', ''],
+    ['Corrective', String(listed.filter((row) => maintenanceKind(row) === 'Corrective').length), '⚒', 'orange', ''],
+    ['Emergency', String(listed.filter((row) => maintenanceKind(row) === 'Emergency').length), '◉', 'red', ''],
+    ['High', String(listed.length), '◈', 'red', ''],
+    ['Equipment', String(new Set(listed.map((row) => row.equipment_id).filter(Boolean)).size), '⚙', 'purple', ''],
+    ['Total Downtime (hrs)', numberText(sum(listed, 'downtime_h'), 1), '◷', 'green', ''],
+  ]);
+  dateLabel(listed.map((row) => row.record_date));
+  const body = rows.map((row) => `<tr data-row="${esc(row.id)}" class="${selected && selected.id === row.id ? 'selected' : ''}">${cell(esc(workOrderNumber(row) || '—'), true)}${cell(`${fmtDate(row.record_date)}${row.start_time ? `<br>${esc(String(row.start_time).slice(0, 5))}` : ''}`)}${cell(liveBadge(maintenanceKind(row)))}${cell(liveBadge('High'))}${cell(esc(row.description || row.action || row.cause || '—'))}${cell(esc(technicianName(row.technician_id)))}${cell(numberText(row.downtime_h, 2))}</tr>`);
+  const detail = detailPanel('Machine Details', 'High', workOrderNumber(selected) || '—', equipmentText(selected || {}), [
+    ['Type', maintenanceKind(selected)], ['Priority', 'High'], ['Date', fmtDate(selected?.record_date)],
+    ['Work order', workOrderNumber(selected)], ['Technician', technicianName(selected?.technician_id)], ['Cause', selected?.cause],
+    ['Action', selected?.action], ['Downtime (h)', selected?.downtime_h ?? '—'], ['Spare parts', selected?.spare_parts],
+  ]);
+  document.getElementById('workspace').className = 'workspace';
+  document.getElementById('workspace').innerHTML = `<section class="panel"><div class="split">${assetList(chosen)}<div class="asset-view">${tabsHtml(['All', 'Corrective', 'Emergency'])}${tableShell(['WO No.', 'Date & Time', 'Type', 'Priority', 'Description', 'Performed By', 'Downtime (hrs)'], body, shown(rows.length, listed.length, 'high corrective and emergency records'))}</div></div></section>${detail}`;
+  bindAssets();
+  bindRows();
+}
+
+function jobPartRows(text) {
+  const parsed = String(text || '').split('\n').map((line) => line.trim()).filter(Boolean).map((line) => {
+    const match = line.match(/^\d+ \| (.*?) \| No: (.*)$/);
+    if (!match) return { name: line, number: '' };
+    return { name: match[1] === '—' ? '' : match[1], number: match[2] === '—' ? '' : match[2] };
+  });
+  while (parsed.length < 5) parsed.push({ name: '', number: '' });
+  return parsed.map((part, index) => `<tr><td class="lube-no">${index + 1}</td><td><input data-job-part="name" value="${esc(part.name)}"></td><td><input data-job-part="number" value="${esc(part.number)}"></td></tr>`).join('');
+}
+
+function workOrderForm(order) {
+  const today = isoDate(new Date());
+  const partRows = order ? jobPartRows(order.parts_used) : Array.from({ length: 5 }, (_, index) => `<tr><td class="lube-no">${index + 1}</td><td><input data-job-part="name"></td><td><input data-job-part="number"></td></tr>`).join('');
+  if (order) {
+    const equipment = store.equipment.find((item) => item.equipment_id === order.equipment_id);
+    const plantId = equipment?.plant_id || order.manual_plant_id;
+    const department = store.plants.find((item) => item.plant_id === plantId)?.name || '';
+    const kind = order.work_order_type === 'Preventive' ? t('Preventive') : order.work_order_type === 'Corrective' ? t('Curative') : t(order.work_order_type || '');
+    const crew = order.crew_type === 'External' ? t('External maintenance team') : t('Company maintenance team');
+    const resultDate = String(order.closing_date || '').slice(0, 10);
+    return `<form id="live-form" class="lube-paper job-order" data-order-id="${esc(order.work_order_id)}"><header class="lube-head"><img src="logo-rayan.png" alt="Rayan"><div><h2>${esc(t('Maintenance Job Order'))}</h2><p class="job-kind">${esc(kind)}</p><small>Maintenance Job Order</small></div><dl><div><dt>${esc(t('Form No.:'))}</dt><dd>PMF 17-04</dd></div><div><dt>${esc(t('Rev.'))}</dt><dd>a</dd></div></dl></header><div class="lube-meta"><label><span>${esc(t('Machine name'))}</span><input value="${esc(equipmentText(order))}" readonly></label><label><span>${esc(t('Repair order no.'))}</span><input value="${esc(order.work_order_id)}" readonly></label><label><span>${esc(t('Section'))}</span><input value="${esc(department)}" readonly></label><label><span>${esc(t('Date'))}</span><input type="date" value="${esc(String(order.planned_date || '').slice(0, 10))}" readonly></label></div><div class="job-crew"><b>${esc(crew)}</b></div><label class="job-block"><span>${esc(t('Fault'))}</span><textarea readonly>${esc(order.problem_description || '')}</textarea></label><label class="job-block"><span>${esc(t('Action taken'))}</span><textarea name="corrective_action">${esc(order.corrective_action || '')}</textarea></label><div class="job-block"><span>${esc(t('Technician signature'))}</span><input value="${esc(getSavedUser()?.full_name || assigneeNames(order))}" readonly></div><section class="daily-parts"><h3>${esc(t('Parts used'))}</h3><table class="lube-table"><thead><tr><th>${esc(t('No.'))}</th><th>${esc(t('Parts used'))}</th><th>${esc(t('Part No.'))}</th></tr></thead><tbody id="job-parts">${partRows}</tbody></table></section><label class="job-block"><span>${esc(t('Result'))}</span><textarea name="verification">${esc(order.verification || '')}</textarea></label><label class="job-result-date"><span>${esc(t('Date'))}</span><input name="result_date" type="date" value="${esc(resultDate)}"></label><p id="live-form-error" class="form-error"></p><div class="lube-actions"><button type="button" id="job-back">${esc(t('Back'))}</button><button type="submit">${esc(t('Save'))}</button></div></form>`;
+  }
+  const equipment = store.equipment.map((item) => `<option value="${esc(item.name)}"></option><option value="${esc(item.equipment_id)}"></option>`).join('');
+  return `<form id="live-form" class="lube-paper job-order"><header class="lube-head"><img src="logo-rayan.png" alt="Rayan"><div><h2>${esc(t('Maintenance Job Order'))}</h2><p class="job-kind"><label><input type="radio" name="work_order_type" value="Preventive" required> ${esc(t('Preventive'))}</label><label><input type="radio" name="work_order_type" value="Corrective" checked> ${esc(t('Curative'))}</label></p><small>Maintenance Job Order</small></div><dl><div><dt>${esc(t('Form No.:'))}</dt><dd>PMF 17-04</dd></div><div><dt>${esc(t('Rev.'))}</dt><dd>a</dd></div></dl></header><div class="lube-meta"><label><span>${esc(t('Machine name'))}</span><input name="machine_name" id="job-equipment" list="job-equipment-list" required autocomplete="off" placeholder="${esc(t('Equipment name or number'))}"><datalist id="job-equipment-list">${equipment}</datalist></label><label><span>${esc(t('Repair order no.'))}</span><input value="${esc(t('Created when saved'))}" readonly></label><label><span>${esc(t('Section'))}</span><input id="job-department" readonly></label><label><span>${esc(t('Date'))}</span><input name="planned_date" type="date" value="${today}" required></label></div><div class="job-crew"><label><input type="radio" name="crew_type" value="Company" checked> ${esc(t('Company maintenance team'))}</label><label><input type="radio" name="crew_type" value="External"> ${esc(t('External maintenance team'))}</label></div><label class="job-block"><span>${esc(t('Fault'))}</span><textarea name="problem_description" required></textarea></label><label class="job-block"><span>${esc(t('Action taken'))}</span><textarea name="corrective_action"></textarea></label><div class="job-block"><span>${esc(t('Technician signature'))}</span>${technicianChecks([])}</div><section class="daily-parts"><h3>${esc(t('Parts used'))}</h3><table class="lube-table"><thead><tr><th>${esc(t('No.'))}</th><th>${esc(t('Parts used'))}</th><th>${esc(t('Part No.'))}</th></tr></thead><tbody id="job-parts">${partRows}</tbody></table></section><label class="job-block"><span>${esc(t('Result'))}</span><textarea name="verification"></textarea></label><label class="job-result-date"><span>${esc(t('Date'))}</span><input name="result_date" type="date"></label><p id="live-form-error" class="form-error"></p><div class="lube-actions"><button type="button" id="job-back">${esc(t('Back'))}</button><button type="submit">${esc(t('Save'))}</button></div></form>`;
+}
+
+function planForm() {
+  return formPanel('New PM Task', [
+    field('Equipment', selectField('equipment_id', equipmentOptions())),
+    field('Task', '<textarea name="task" rows="3" required></textarea>'),
+    field('Frequency', selectField('frequency', ['Daily', 'Weekly', 'Monthly', 'Annual'].map((type) => `<option>${type}</option>`).join(''))),
+    field('Next due date', '<input name="next_due_date" type="date">'),
+    field('Priority', selectField('priority', ['High', 'Medium', 'Low'].map((type) => `<option${type === 'Medium' ? ' selected' : ''}>${type}</option>`).join(''))),
+    field('Estimated hours', '<input name="estimated_time_h" type="number" min="0" step="0.1">'),
+  ].join(''));
+}
+
+function equipmentForm() {
+  const plants = store.plants.map((plant) => `<option value="${esc(plant.plant_id)}">${esc(plant.name)}</option>`).join('');
+  return formPanel('Add Equipment', [
+    field('Equipment code', '<input name="equipment_id" required>'),
+    field('Name', '<input name="name" required>'),
+    field('Category', '<input name="equipment_type" required>'),
+    field('Plant', selectField('plant_id', plants, true)),
+    field('Line number', '<select name="line_id" required><option value="">Select a plant first</option></select>'),
+    field('Status', selectField('status', ['Running', 'Under Maintenance', 'Out of Service'].map((type) => `<option>${type}</option>`).join(''))),
+    field('Criticality', selectField('criticality', ['A', 'B', 'C'].map((type) => `<option${type === 'B' ? ' selected' : ''}>${type}</option>`).join(''))),
+  ].join(''));
+}
+
+function bindEquipmentLines(form) {
+  const plantSelect = form.querySelector('[name="plant_id"]');
+  const lineSelect = form.querySelector('[name="line_id"]');
+  if (!plantSelect || !lineSelect) return;
+  const fill = () => {
+    const lines = store.lines.filter((line) => line.plant_id === plantSelect.value).sort((a, b) => Number(a.line_number) - Number(b.line_number));
+    lineSelect.innerHTML = `<option value="">${plantSelect.value ? 'Select line number' : 'Select a plant first'}</option>${lines.map((line) => {
+      const label = lineText(line);
+      const extra = line.name && line.name !== label ? ` — ${line.name}` : '';
+      return `<option value="${esc(line.line_id)}">${esc(label + extra)}</option>`;
+    }).join('')}`;
+  };
+  plantSelect.addEventListener('change', fill);
+  fill();
+}
+
+function sopForm() {
+  return formPanel('Add SOP', [
+    field('Equipment', selectField('equipment_id', equipmentOptions())),
+    field('Title', '<input name="title" required>'),
+    field('Category', '<input name="sop_type">'),
+    field('Revision', '<input name="revision" value="00">'),
+    field('Status', selectField('status', ['Draft', 'Under Review', 'Published'].map((type) => `<option>${type}</option>`).join(''))),
+  ].join(''));
+}
+
+function bindFilters() {
+  const fields = { plant: 'plantId', line: 'lineId', equipment: 'equipmentId', technician: 'technicianId', from: 'dateFrom', to: 'dateTo' };
+  document.querySelectorAll('[data-filter]').forEach((select) => select.addEventListener('change', () => {
+    ui[fields[select.dataset.filter] || 'equipmentId'] = select.value;
+    if (select.dataset.filter === 'plant') { ui.lineId = ''; ui.equipmentId = ''; }
+    if (select.dataset.filter === 'line') ui.equipmentId = '';
+    ui.rowKey = '';
+    draw(ui.page);
+  }));
+}
+
+function bindRows() {
+  document.querySelectorAll('[data-tab]').forEach((button) => button.addEventListener('click', () => {
+    ui.tab = button.dataset.tab;
+    ui.mode = 'view';
+    ui.rowKey = '';
+    draw(ui.page);
+  }));
+  document.querySelectorAll('[data-row]').forEach((row) => row.addEventListener('click', () => {
+    ui.rowKey = row.dataset.row;
+    ui.mode = 'view';
+    draw(ui.page);
+  }));
+}
+
+function bindAssets() {
+  document.querySelectorAll('[data-asset]').forEach((item) => item.addEventListener('click', () => {
+    ui.equipmentId = ui.equipmentId === item.dataset.asset ? '' : item.dataset.asset;
+    ui.rowKey = '';
+    draw(ui.page);
+  }));
+  document.getElementById('asset-search')?.addEventListener('input', (event) => {
+    const query = event.target.value.toLowerCase();
+    document.querySelectorAll('[data-asset]').forEach((item) => { item.hidden = !item.textContent.toLowerCase().includes(query); });
+  });
+}
+
+function bindForm() {
+  const form = document.getElementById('live-form');
+  if (!form) return;
+  if (ui.page === 'equipment') bindEquipmentLines(form);
+  form.addEventListener('submit', async (event) => {
+    event.preventDefault();
+    const error = document.getElementById('live-form-error');
+    const formData = new FormData(form);
+    const data = Object.fromEntries(formData.entries());
+    Object.keys(data).forEach((key) => { if (data[key] === '') data[key] = null; });
+    try {
+      if (ui.page === 'work-orders') {
+        const parts = [...document.querySelectorAll('#job-parts tr')].map((row) => ({
+          name: row.querySelector('[data-job-part="name"]').value.trim(),
+          number: row.querySelector('[data-job-part="number"]').value.trim(),
+        })).filter((part) => part.name || part.number);
+        const partsUsed = parts.length ? parts.map((part, index) => `${index + 1} | ${part.name || '—'} | No: ${part.number || '—'}`).join('\n') : null;
+        if (form.dataset.orderId) {
+          await apiRequest(`/work-orders/${encodeURIComponent(form.dataset.orderId)}`, { method: 'PUT', body: JSON.stringify({
+            corrective_action: data.corrective_action,
+            verification: data.verification,
+            parts_used: partsUsed,
+            closing_date: data.result_date ? `${data.result_date}T00:00:00` : null,
+          }) });
+        } else {
+          const technicians = formData.getAll('assigned_technician_ids').filter(Boolean);
+          const knownMachine = matchEquipment(data.machine_name);
+          await apiRequest('/work-orders', { method: 'POST', body: JSON.stringify({
+            work_order_type: data.work_order_type,
+            equipment_id: knownMachine ? knownMachine.equipment_id : null,
+            manual_equipment_name: knownMachine ? null : data.machine_name,
+            priority: 'Medium',
+            status: 'Open',
+            problem_description: data.problem_description,
+            corrective_action: data.corrective_action,
+            verification: data.verification,
+            parts_used: partsUsed,
+            crew_type: data.crew_type,
+            planned_date: data.planned_date,
+            closing_date: data.result_date ? `${data.result_date}T00:00:00` : null,
+            assigned_technician_ids: technicians,
+          }) });
+        }
+      } else if (ui.page === 'pm-schedule') {
+        data.frequency_value = 1;
+        data.pm_type = 'Preventive';
+        data.active = true;
+        if (data.estimated_time_h) data.estimated_time_h = Number(data.estimated_time_h);
+        await apiRequest('/pm', { method: 'POST', body: JSON.stringify(data) });
+      } else if (ui.page === 'equipment') {
+        if (!data.plant_id || !data.line_id) throw new Error('Select a plant and then a line number.');
+        await apiRequest('/equipment', { method: 'POST', body: JSON.stringify(data) });
+      } else if (ui.page === 'plants') {
+        data.active = true;
+        await apiRequest('/plants', { method: 'POST', body: JSON.stringify(data) });
+      } else if (ui.page === 'sop') {
+        data.revision = data.revision || '00';
+        await apiRequest('/sops', { method: 'POST', body: JSON.stringify(data) });
+      }
+      store = null;
+      ui.mode = 'view';
+      toast(form.dataset.orderId ? t('Work order accepted and added to your daily report.') : 'Saved.');
+      await paint(ui.page);
+    } catch (exception) {
+      error.textContent = exception.message;
+    }
+  });
+}
+
+function exportRecords() {
+  const rows = scoped(store.records).filter(isHighMaintenance);
+  const header = ['WO No.', 'Date', 'Type', 'Equipment', 'Description', 'Technician', 'Downtime hours'];
+  const lines = rows.map((row) => [workOrderNumber(row), row.record_date, row.record_type, row.equipment_id, row.description || row.action || '', technicianName(row.technician_id), row.downtime_h ?? '']);
+  const csv = [header, ...lines].map((line) => line.map((value) => `"${String(value ?? '').replaceAll('"', '""')}"`).join(',')).join('\n');
+  const blob = new Blob([csv], { type: 'text/csv' });
+  const link = document.createElement('a');
+  link.href = URL.createObjectURL(blob);
+  link.download = 'machine-records.csv';
+  link.click();
+  URL.revokeObjectURL(link.href);
+}
+
+function pendingSource(row) {
+  const reportId = String(row?.report_id || '');
+  if (reportId.startsWith('LR-')) return t('Oil and grease report');
+  if (reportId.startsWith('DR-')) return t('Daily maintenance report');
+  return t('Report');
+}
+
+function drawNewEquipment() {
+  const rows = store.pending || [];
+  const selected = rows.find((row) => String(row.id) === String(ui.rowKey)) || rows[0];
+  document.getElementById('metric-grid').innerHTML = metrics([
+    ['New equipment', String(rows.length), '＋', 'orange', ''],
+    ['Pending Approval', String(rows.length), '⌛', 'purple', ''],
+  ]);
+  const body = rows.map((row) => {
+    const plant = store.plants.find((item) => item.plant_id === row.plant_id)?.name || row.plant_id || '—';
+    return `<tr data-row="${esc(row.id)}" class="${selected && selected.id === row.id ? 'selected' : ''}">${cell(esc(row.equipment_code), true)}${cell(esc(row.equipment_name))}${cell(esc(plant))}${cell(esc(row.line_number || '—'))}${cell(esc(technicianName(row.technician_id)))}</tr>`;
+  });
+  const review = selected ? `<form class="live-form" id="pending-review"><label>${esc(t('Equipment name'))}<input id="pending-name" value="${esc(selected.equipment_name || '')}" required></label><label>${esc(t('Plant'))}<select id="pending-plant"><option value="">${esc(t('Select'))}</option>${store.plants.map((plant) => `<option value="${esc(plant.plant_id)}"${plant.plant_id === selected.plant_id ? ' selected' : ''}>${esc(plant.name)}</option>`).join('')}</select></label><label>${esc(t('Line number'))}<select id="pending-line"><option value="">${esc(t('Select'))}</option></select></label><div class="summary-row"><span>${esc(t('Technician'))}</span><b>${esc(technicianName(selected.technician_id))}</b></div><div class="summary-row"><span>${esc(t('Report'))}</span><b>${esc(pendingSource(selected))} ${esc(selected.report_id || '')}</b></div></form><div class="assign-block"><button class="detail-button primary" type="button" id="approve-equipment">${esc(t('Approve'))}</button><button class="detail-button" type="button" id="reject-equipment">${esc(t('Reject'))}</button><p id="pending-error" class="form-error"></p></div>` : `<p class="live-note">${esc(t('No new equipment'))}</p>`;
+  const detail = `<aside class="panel detail pending-review"><h2>${esc(t('New equipment'))}</h2><div class="detail-top"><div class="machine">⚙</div>${selected ? liveBadge('Pending') : ''}<h3>${esc(selected?.equipment_code || '—')}</h3></div>${review}</aside>`;
+  document.getElementById('workspace').className = 'workspace';
+  document.getElementById('workspace').innerHTML = `<section class="panel">${tableShell(['Code', 'Name', 'Plant', 'Line No.', 'Technician'], body, shown(rows.length, rows.length, 'new equipment'))}</section>${detail}`;
+  bindRows();
+  const pendingPlant = document.getElementById('pending-plant');
+  const pendingLine = document.getElementById('pending-line');
+  const fillPendingLines = () => {
+    if (!pendingLine) return;
+    const lines = store.lines.filter((line) => line.plant_id === pendingPlant.value);
+    pendingLine.innerHTML = `<option value="">${esc(t('Select'))}</option>${lines.map((line) => `<option value="${esc(line.line_id)}"${line.line_id === selected?.line_id ? ' selected' : ''}>${esc(line.line_number ?? '')} — ${esc(line.name || '')}</option>`).join('')}`;
+  };
+  pendingPlant?.addEventListener('change', fillPendingLines);
+  fillPendingLines();
+  document.getElementById('pending-review')?.addEventListener('submit', (event) => {
+    event.preventDefault();
+    decidePending(selected, 'approve');
+  });
+  document.getElementById('approve-equipment')?.addEventListener('click', () => decidePending(selected, 'approve'));
+  document.getElementById('reject-equipment')?.addEventListener('click', () => decidePending(selected, 'reject'));
+}
+
+async function decidePending(row, decision) {
+  const error = document.getElementById('pending-error');
+  try {
+    let path = `/pending-equipment/${row.id}/${decision}`;
+    if (decision === 'approve') {
+      const plant = document.getElementById('pending-plant')?.value || '';
+      const line = document.getElementById('pending-line')?.value || '';
+      const name = document.getElementById('pending-name')?.value.trim() || '';
+      if (!name || !plant || !line) {
+        if (error) error.textContent = t('Enter the name, plant, and line before approving this equipment.');
+        return;
+      }
+      const params = new URLSearchParams({ plant_id: plant, line_id: line, name });
+      path += `?${params}`;
+    }
+    await apiRequest(path, { method: 'POST' });
+    store = null;
+    ui.rowKey = '';
+    toast(decision === 'approve' ? 'Equipment added to the plant register.' : 'Equipment was rejected.');
+    await paint('new-equipment');
+  } catch (err) {
+    if (error) error.textContent = err.message || 'Could not update this equipment.';
+  }
+}
+
+const LUBE_SHIFTS = ['Morning (07:00 - 15:00)', 'Evening (15:00 - 23:00)', 'Night (23:00 - 07:00)'];
+let lubeCache = [];
+let dailyCache = [];
+let dailyOpenTimer = 0;
+const DAILY_TYPES = ['Preventive', 'Corrective', 'Emergency', 'Routine', 'Inspection'];
+
+function lubeDayName(value) {
+  const date = new Date(`${value}T00:00:00`);
+  return WEEKDAYS[date.getDay()] || '';
+}
+
+function lubeTypeCell(line) {
+  const types = ['Oil change', 'Grease change', 'Other'];
+  const options = [`<option value="">${esc(t('Select'))}</option>`, ...types.map((type) => `<option value="${esc(type)}"${line.work_type === type ? ' selected' : ''}>${esc(t(type))}</option>`)];
+  const order = line.work_order_id ? `<small class="lube-order">${esc(t('Work order'))} ${esc(line.work_order_id)}</small>` : '';
+  return `<td class="lube-type"><select data-field="work_type">${options.join('')}</select>${order}</td>`;
+}
+
+function lubeRow(line = {}, index = 0) {
+  const field = (name, value, placeholder) => `<input data-field="${name}" value="${esc(value || '')}" placeholder="${esc(t(placeholder))}">`;
+  return `<tr><td class="lube-no">${index + 1}</td><td class="lube-machine">${field('equipment_code', line.equipment_code, 'Equipment number')}${field('equipment_name', line.equipment_name, 'Equipment name')}</td>${lubeTypeCell(line)}<td>${field('component', line.component, 'Component')}</td><td>${field('quantity', line.quantity, 'Qty')}</td><td>${field('lubricant_name', line.lubricant_name, 'Oil or grease name')}</td><td>${field('notes', line.notes, 'Remarks')}</td></tr>`;
+}
+
+function lubeLinesFromForm() {
+  return [...document.querySelectorAll('#lube-rows tr')].map((row) => ({
+    equipment_code: row.querySelector('[data-field="equipment_code"]').value.trim(),
+    equipment_name: row.querySelector('[data-field="equipment_name"]').value.trim(),
+    component: row.querySelector('[data-field="component"]').value.trim(),
+    quantity: row.querySelector('[data-field="quantity"]').value.trim(),
+    lubricant_name: row.querySelector('[data-field="lubricant_name"]').value.trim(),
+    notes: row.querySelector('[data-field="notes"]').value.trim(),
+    work_type: row.querySelector('[data-field="work_type"]').value,
+  })).filter((line) => Object.values(line).some(Boolean));
+}
+
+async function saveLubrication() {
+  const form = document.getElementById('lube-form');
+  const error = document.getElementById('lube-error');
+  if (!form) return;
+  const technicianId = isTechnician() ? (getSavedUser()?.technician_id || '') : form.querySelector('#lube-tech').value;
+  try {
+    const saved = await apiRequest('/lubrication-reports', {
+      method: 'PUT',
+      body: JSON.stringify({
+        report_date: form.querySelector('#lube-date').value,
+        shift: form.querySelector('#lube-shift').value,
+        technician_id: technicianId,
+        lines: lubeLinesFromForm(),
+      }),
+    });
+    ui.lubeId = saved.report_id;
+    toast(t(saved.new_equipment?.length ? 'The equipment was sent to the maintenance engineer for approval.' : 'The lubrication report was saved.'));
+    await drawLubrication();
+  } catch (exception) {
+    if (error) error.textContent = t(exception.message);
+  }
+}
+
+async function drawLubrication() {
+  const viewer = getSavedUser()?.role === 'ADMINISTRATOR_VIEWER';
+  lubeCache = await apiRequest('/lubrication-reports');
+  const today = isoDate(new Date());
+  let current = null;
+  if (ui.lubeId && ui.lubeId !== 'new') {
+    current = await apiRequest(`/lubrication-reports/${encodeURIComponent(ui.lubeId)}`);
+  } else if (!ui.lubeId) {
+    const user = getSavedUser();
+    const mine = lubeCache.find((row) => row.report_date === today && (!isTechnician() || row.technician_id === user?.technician_id));
+    if (mine && isTechnician()) current = await apiRequest(`/lubrication-reports/${encodeURIComponent(mine.report_id)}`);
+  }
+  const reportDate = current?.report_date || today;
+  const lines = current?.lines?.length ? current.lines : [];
+  while (lines.length < 10) lines.push({});
+  const monthKey = today.slice(0, 7);
+  const monthCount = lubeCache.filter((row) => String(row.report_date).startsWith(monthKey)).length;
+  document.getElementById('metric-grid').innerHTML = metrics([
+    ['Reports', String(lubeCache.length), '▣', 'blue', ''],
+    ['Lines recorded', String(lubeCache.reduce((total, row) => total + (Number(row.line_count) || 0), 0)), '▤', 'green', ''],
+    ['This month', String(monthCount), '◷', 'orange', ''],
+  ]);
+  const techField = isTechnician()
+    ? `<input id="lube-tech-name" value="${esc(current?.technician_name || getSavedUser()?.full_name || '')}" readonly>`
+    : `<select id="lube-tech">${store.technicians.map((item) => `<option value="${esc(item.technician_id)}"${item.technician_id === current?.technician_id ? ' selected' : ''}>${esc(item.name)}</option>`).join('')}</select>`;
+  const list = lubeCache.map((row) => `<button type="button" class="lube-open${current?.report_id === row.report_id ? ' selected' : ''}" data-lube="${esc(row.report_id)}"><b>${esc(fmtDate(row.report_date))}</b><small>${esc(row.technician_name)} · ${esc(t(row.shift))} · ${row.line_count}</small></button>`).join('') || `<p class="live-note">${esc(t('No lubrication reports yet.'))}</p>`;
+  document.getElementById('workspace').className = 'workspace lube-board';
+  document.getElementById('workspace').innerHTML = `<aside class="panel lube-list"><div class="lube-list-head"><b>${esc(t('Reports'))}</b><button type="button" class="detail-button" id="lube-new">${esc(t('New report'))}</button></div>${list}</aside><form id="lube-form" class="lube-paper"><header class="lube-head"><img src="logo-rayan.png" alt="Rayan"><div><h2>${esc(t('Daily report for the lubrication technician'))}</h2><p>${esc(t('Oil and grease change log'))}</p><small>${esc(t('Mechanical Maintenance Department'))}</small></div><dl><div><dt>${esc(t('Form No.:'))}</dt><dd>PMF 17-05 rev.a</dd></div><div><dt>${esc(t('Report No.'))}</dt><dd>${esc(current?.report_id || t('New'))}</dd></div></dl></header><div class="lube-meta"><label><span>${esc(t('Shift'))}</span><select id="lube-shift">${LUBE_SHIFTS.map((shift) => `<option value="${esc(shift)}"${shift === (current?.shift || LUBE_SHIFTS[0]) ? ' selected' : ''}>${esc(t(shift))}</option>`).join('')}</select></label><label><span>${esc(t("Technician's name"))}</span>${techField}</label><label><span>${esc(t('Day'))}</span><input id="lube-day" value="${esc(t(current?.day_name || lubeDayName(reportDate)))}" readonly></label><label><span>${esc(t('Date'))}</span><input id="lube-date" type="date" value="${esc(reportDate)}" required></label></div><table class="lube-table"><thead><tr><th>${esc(t('Seq.'))}</th><th>${esc(t('Machine'))}</th><th>${esc(t('Work type'))}</th><th>${esc(t('Component'))}</th><th>${esc(t('Qty'))}</th><th>${esc(t('Oil or grease name'))}</th><th>${esc(t('Remarks'))}</th></tr></thead><tbody id="lube-rows">${lines.map(lubeRow).join('')}</tbody></table><div class="lube-foot"><span>PMF 17-05 rev.a</span><span>${esc(t('Mechanical Maintenance Department'))}</span></div><p class="lube-help no-print">${esc(t('An equipment number that is not registered is sent to the maintenance engineer for approval.'))}</p><p id="lube-error" class="form-error"></p><div class="lube-actions no-print"><button type="button" id="lube-add">${esc(t('Add row'))}</button><button type="button" id="lube-print">${esc(t('Print'))}</button></div></form>`;
+  if (viewer) document.querySelectorAll('#lube-form input, #lube-form select, #lube-add').forEach((node) => { node.disabled = true; });
+  document.querySelectorAll('#lube-rows tr').forEach((row) => {
+    const code = row.querySelector('[data-field="equipment_code"]');
+    const name = row.querySelector('[data-field="equipment_name"]');
+    if (code && name) bindEquipmentCode(code, name);
+  });
+  document.getElementById('lube-date')?.addEventListener('change', (event) => {
+    document.getElementById('lube-day').value = t(lubeDayName(event.target.value));
+    const technicianId = isTechnician() ? getSavedUser()?.technician_id : document.getElementById('lube-tech')?.value;
+    const found = lubeCache.find((row) => row.report_date === event.target.value && row.technician_id === technicianId);
+    if (found) {
+      ui.lubeId = found.report_id;
+      drawLubrication();
+    }
+  });
+  document.getElementById('lube-new')?.addEventListener('click', () => { ui.lubeId = 'new'; drawLubrication(); });
+  document.querySelectorAll('[data-lube]').forEach((button) => button.addEventListener('click', () => { ui.lubeId = button.dataset.lube; drawLubrication(); }));
+  document.getElementById('lube-add')?.addEventListener('click', () => {
+    const body = document.getElementById('lube-rows');
+    body.insertAdjacentHTML('beforeend', lubeRow({}, body.children.length));
+    const row = body.lastElementChild;
+    bindEquipmentCode(row.querySelector('[data-field="equipment_code"]'), row.querySelector('[data-field="equipment_name"]'));
+  });
+  document.getElementById('lube-print')?.addEventListener('click', () => window.print());
+  document.getElementById('lube-form')?.addEventListener('submit', (event) => { event.preventDefault(); saveLubrication(); });
+}
+
+function dailyHours(start, end) {
+  if (!start || !end) return '';
+  const [sh, sm] = start.split(':').map(Number);
+  const [eh, em] = end.split(':').map(Number);
+  if ([sh, sm, eh, em].some((part) => Number.isNaN(part))) return '';
+  let minutes = (eh * 60 + em) - (sh * 60 + sm);
+  if (minutes < 0) minutes += 24 * 60;
+  return (minutes / 60).toFixed(2);
+}
+
+function dailyPartsText(parts) {
+  const rows = parts.filter((part) => part.description || part.number || part.quantity);
+  return rows.length
+    ? rows.map((part) => `${part.description || 'Part'} | No: ${part.number || '—'} | Qty: ${part.quantity || '—'}`).join('\n')
+    : null;
+}
+
+function dailyPartsFromText(text) {
+  const rows = String(text || '').split('\n').map((line) => line.trim()).filter(Boolean).map((line) => {
+    const match = line.match(/^(.*?) \| No: (.*?) \| Qty: (.*?)(?: \| .*)?$/);
+    if (!match) return { description: line, number: '', quantity: '' };
+    return {
+      description: match[1] === 'Part' ? '' : match[1],
+      number: match[2] === '—' ? '' : match[2],
+      quantity: match[3] === '—' ? '' : match[3],
+    };
+  });
+  while (rows.length < 2) rows.push({ description: '', number: '', quantity: '' });
+  return rows;
+}
+
+function dailyPartRow(part, index) {
+  return `<tr><td class="lube-no">${index + 1}</td><td><input data-part="description" value="${esc(part.description || '')}" placeholder="${esc(t('Part'))}"></td><td><input data-part="number" value="${esc(part.number || '')}" placeholder="${esc(t('Part No.'))}"></td><td><input data-part="quantity" value="${esc(part.quantity || '')}" placeholder="${esc(t('Qty'))}"></td></tr>`;
+}
+
+function dailyPartsFromForm() {
+  return [...document.querySelectorAll('#daily-parts tr')].map((row) => ({
+    description: row.querySelector('[data-part="description"]').value.trim(),
+    number: row.querySelector('[data-part="number"]').value.trim(),
+    quantity: row.querySelector('[data-part="quantity"]').value.trim(),
+  }));
+}
+
+function reportSentAt(row) {
+  const raw = row?.submitted_at;
+  if (!raw) return null;
+  const text = String(raw);
+  const stamp = new Date(/Z|[+-]\d\d:?\d\d$/.test(text) ? text : `${text}Z`).getTime();
+  return Number.isNaN(stamp) ? null : stamp;
+}
+
+function dailySendLock(rows) {
+  const sent = rows
+    .map((row) => ({ row, at: reportSentAt(row) }))
+    .filter((item) => item.at && ['Submitted', 'Approved'].includes(item.row.status))
+    .sort((a, b) => b.at - a.at)[0];
+  if (!sent) return null;
+  const opens = sent.at + 24 * 60 * 60 * 1000;
+  if (Date.now() >= opens) return null;
+  return { reportId: sent.row.report_id, status: sent.row.status, opens };
+}
+
+function openReportDate(rows) {
+  const cursor = new Date();
+  cursor.setHours(12, 0, 0, 0);
+  for (let step = 0; step < 21; step += 1) {
+    const day = isoDate(cursor);
+    const taken = rows.some((row) => String(row.report_date).slice(0, 10) === day && row.status !== 'Returned');
+    if (!taken) return day;
+    cursor.setDate(cursor.getDate() + 1);
+  }
+  return isoDate(new Date());
+}
+
+function fmtStamp(value) {
+  if (!value) return '—';
+  const text = String(value);
+  const stamp = new Date(/Z|[+-]\d\d:?\d\d$/.test(text) ? text : `${text.replace(' ', 'T')}Z`);
+  if (Number.isNaN(stamp.getTime())) return '—';
+  return stamp.toLocaleString('en-GB', { dateStyle: 'short', timeStyle: 'short' });
+}
+
+function rejectedFieldHtml(rows, openId) {
+  const rejected = rows.filter((row) => row.status === 'Returned');
+  if (!rejected.length) return '';
+  const items = rejected.map((row) => {
+    const selected = openId === row.report_id;
+    const detail = selected ? `<div class="daily-rejected-detail"><div><span>${esc(t('Submitted to the engineer'))}</span><p>${esc(fmtStamp(row.submitted_at))}</p></div><div><span>${esc(t('Rejected by the engineer'))}</span><p>${esc(fmtStamp(row.returned_at))}</p></div><div><span>${esc(t('Rejection reason'))}</span><p>${esc(row.return_reason || t('No reason was entered.'))}</p></div></div>` : '';
+    return `<button type="button" class="daily-rejected-item${selected ? ' selected' : ''}" data-daily="${esc(row.report_id)}"><b>${esc(row.report_id)}</b><small>${esc(fmtDate(String(row.report_date).slice(0, 10)))}</small></button>${detail}`;
+  }).join('');
+  return `<section class="daily-rejected no-print"><h3>${esc(t('Rejected reports'))}</h3>${items}</section>`;
+}
+
+function dailyListHtml(rows, openId, techName) {
+  return rows.map((row) => {
+    const day = String(row.report_date).slice(0, 10);
+    const who = store.technicians.find((item) => item.technician_id === row.technician_id)?.name || techName;
+    return `<button type="button" class="lube-open${openId === row.report_id ? ' selected' : ''}" data-daily="${esc(row.report_id)}"><b>${esc(fmtDate(day))}</b><small>${esc(who)} · ${esc(t(row.status || 'Draft'))}</small></button>`;
+  }).join('') || `<p class="live-note">${esc(t(ui.dailyFilter ? 'No reports on this date.' : 'No daily reports yet.'))}</p>`;
+}
+
+function refreshDailyTotal() {
+  const total = [...document.querySelectorAll('#daily-rows [data-field="downtime"]')].reduce((sum, input) => sum + (Number(input.value) || 0), 0);
+  const node = document.getElementById('daily-total');
+  if (node) node.textContent = total.toFixed(2);
+}
+
+function dailyRow(item = {}, index = 0) {
+  const options = [`<option value="">${esc(t('Select'))}</option>`, ...DAILY_TYPES.map((type) => `<option value="${esc(type)}"${item.maintenance_type === type ? ' selected' : ''}>${esc(t(type))}</option>`)];
+  const order = item.wo_id ? `<small class="lube-order">${esc(item.wo_id)}</small>` : '';
+  const line = store.lines.find((row) => row.line_id === item.line_id);
+  const lineNumber = item.entered_line_number || (line?.line_number ?? '');
+  const start = item.maintenance_start ? String(item.maintenance_start).slice(0, 5) : '';
+  const end = item.maintenance_end ? String(item.maintenance_end).slice(0, 5) : '';
+  return `<tr data-wo="${esc(item.wo_id || '')}"><td class="lube-no">${index + 1}</td><td class="lube-machine"><input data-field="code" placeholder="${esc(t('Equipment number'))}" value="${esc(item.equipment_code || item.equipment_id || '')}"><input data-field="name" placeholder="${esc(t('Equipment name'))}" value="${esc(item.equipment_name || '')}"><input data-field="line" placeholder="${esc(t('Line'))}" value="${esc(lineNumber)}"></td><td class="lube-type"><select data-field="type">${options.join('')}</select>${order}</td><td class="daily-work"><input data-field="failure" placeholder="${esc(t('Failure Reason'))}" value="${esc(item.failure_reason || '')}"><input data-field="action" placeholder="${esc(t('Repair Actions'))}" value="${esc(item.action_taken || '')}"></td><td><input data-field="start" type="time" value="${esc(start)}"></td><td><input data-field="end" type="time" value="${esc(end)}"></td><td><input data-field="downtime" value="${item.downtime_h != null && item.downtime_h !== '' ? Number(item.downtime_h).toFixed(2) : ''}" readonly></td></tr>`;
+}
+
+function dailyItemsFromForm() {
+  const plantId = document.getElementById('daily-plant').value;
+  if (!plantId) throw new Error('Select a plant at the top of the report.');
+  const items = [];
+  document.querySelectorAll('#daily-rows tr').forEach((row) => {
+    const get = (field) => row.querySelector(`[data-field="${field}"]`).value.trim();
+    const code = get('code');
+    const name = get('name');
+    const touched = [code, name, get('type'), get('failure'), get('action'), get('start'), get('end')].some(Boolean);
+    if (!touched) return;
+    if (!code || !name || !get('type')) throw new Error('Each activity needs an equipment number, a name, and a maintenance type.');
+    const start = get('start') || null;
+    const end = get('end') || null;
+    const lineNumber = get('line');
+    const line = store.lines.find((item) => item.plant_id === plantId && String(item.line_number) === lineNumber);
+    const known = equipmentByCode(code);
+    items.push({
+      equipment_id: known ? known.equipment_id : code,
+      equipment_code: code,
+      equipment_name: name,
+      plant_id: plantId,
+      line_id: line?.line_id || null,
+      entered_line_number: lineNumber || null,
+      is_manual_entry: !known,
+      maintenance_type: get('type'),
+      maintenance_start: start,
+      maintenance_end: end,
+      downtime_start: start,
+      downtime_end: end,
+      downtime_h: get('downtime') ? Number(get('downtime')) : null,
+      failure_reason: get('failure') || null,
+      action_taken: get('action') || null,
+      wo_id: row.dataset.wo || null,
+      spare_parts: dailyPartsText(dailyPartsFromForm()),
+      maintenance_completed: true,
+    });
+  });
+  if (!items.length) throw new Error('Enter at least one maintenance activity.');
+  return items;
+}
+
+function fillKnownEquipmentRow(row) {
+  const code = row.querySelector('[data-field="code"]');
+  const name = row.querySelector('[data-field="name"]');
+  const line = row.querySelector('[data-field="line"]');
+  if (!code || !name) return;
+  const found = matchEquipment(code.value) || matchEquipment(name.value);
+  if (!found) return;
+  if (!code.value) code.value = found.equipment_id || '';
+  if (!name.value) name.value = found.name || '';
+  const lineNumber = equipmentLineNumber(found);
+  if (line && lineNumber && !line.value) line.value = lineNumber;
+  const plant = document.getElementById('daily-plant');
+  if (plant && !plant.value && found.plant_id) plant.value = found.plant_id;
+}
+
+function bindDailyRow(row) {
+  const code = row.querySelector('[data-field="code"]');
+  const name = row.querySelector('[data-field="name"]');
+  if (code && name) bindEquipmentCode(code, name);
+  fillKnownEquipmentRow(row);
+}
+
+async function saveDailyReport(submit) {
+  const form = document.getElementById('daily-form');
+  const error = document.getElementById('daily-error');
+  if (!form) return;
+  const reportId = form.dataset.reportId || '';
+  const status = form.dataset.status || 'Draft';
+  const sendLock = isTechnician() ? dailySendLock(dailyCache) : null;
+  if (submit && sendLock && reportId !== sendLock.reportId) {
+    if (error) error.textContent = t('You can send one report a day. A new report opens 24 hours after the last one was sent.');
+    return;
+  }
+  if (reportId && status !== 'Draft' && status !== 'Returned') {
+    if (error) error.textContent = t('This report can no longer be edited.');
+    return;
+  }
+  try {
+    const payload = {
+      report_date: form.querySelector('#daily-date').value,
+      plant_id: form.querySelector('#daily-plant').value || null,
+      shift: form.querySelector('#daily-shift').value,
+      shift_engineer: form.querySelector('#daily-engineer').value.trim() || null,
+      general_notes: form.querySelector('#daily-notes').value.trim() || null,
+      items: dailyItemsFromForm(),
+    };
+    if (!payload.report_date) throw new Error('Report date is required.');
+    const response = reportId
+      ? await apiRequest(`/daily-reports/${encodeURIComponent(reportId)}`, { method: 'PUT', body: JSON.stringify(payload) })
+      : await apiRequest('/daily-reports', { method: 'POST', body: JSON.stringify(payload) });
+    const savedId = response.report.report_id;
+    if (submit) await apiRequest(`/daily-reports/${encodeURIComponent(savedId)}/submit`, { method: 'POST' });
+    ui.dailyId = submit ? 'new' : savedId;
+    toast(t(submit && status === 'Returned' ? 'Report sent again to the maintenance engineer.' : submit ? 'Report sent to the maintenance engineer for approval.' : 'Draft saved.'));
+    await drawDailyReport();
+  } catch (exception) {
+    const existing = String(exception.message || '').match(/Daily Report already exists for this technician\/date: (\S+)/);
+    if (existing && !reportId) {
+      ui.dailyId = existing[1];
+      toast(t('A report already exists for this date.'));
+      await drawDailyReport();
+      return;
+    }
+    if (error) error.textContent = t(exception.message);
+  }
+}
+
+async function drawDailyReport() {
+  dailyCache = await apiRequest('/daily-reports');
+  const missingReason = dailyCache.filter((row) => row.status === 'Returned' && (row.return_reason == null || row.returned_at == null));
+  await Promise.all(missingReason.map(async (row) => {
+    const detail = await apiRequest(`/daily-reports/${encodeURIComponent(row.report_id)}`);
+    const source = detail.report || {};
+    row.return_reason = source.return_reason || row.return_reason || '';
+    row.returned_at = source.returned_at || row.returned_at || '';
+    row.submitted_at = row.submitted_at || source.submitted_at || '';
+  }));
+  const today = isoDate(new Date());
+  const windowLock = isTechnician() ? dailySendLock(dailyCache) : null;
+  window.clearTimeout(dailyOpenTimer);
+  if (windowLock) {
+    dailyOpenTimer = window.setTimeout(() => {
+      if (ui.page === 'daily-reports') drawDailyReport();
+    }, Math.max(1000, windowLock.opens - Date.now()));
+  }
+  let detail = null;
+  if (ui.dailyId && ui.dailyId !== 'new') {
+    detail = await apiRequest(`/daily-reports/${encodeURIComponent(ui.dailyId)}`);
+  } else if (!ui.dailyId) {
+    const mine = dailyCache.find((row) => String(row.report_date).slice(0, 10) === today && row.status === 'Draft');
+    if (mine) detail = await apiRequest(`/daily-reports/${encodeURIComponent(mine.report_id)}`);
+  }
+  const report = detail?.report || null;
+  const items = detail?.items?.length ? detail.items.slice() : [];
+  const parts = dailyPartsFromText(items.find((item) => item.spare_parts)?.spare_parts || '');
+  while (items.length < 6) items.push({});
+  const monthKey = today.slice(0, 7);
+  const monthCount = dailyCache.filter((row) => String(row.report_date).startsWith(monthKey)).length;
+  const approved = dailyCache.filter((row) => row.status === 'Approved').length;
+  document.getElementById('metric-grid').innerHTML = metrics([
+    ['Reports', String(dailyCache.length), '▣', 'blue', ''],
+    ['Approved', String(approved), '✓', 'green', ''],
+    ['This month', String(monthCount), '◷', 'orange', ''],
+  ]);
+  const locked = Boolean(report && !['Draft', 'Returned'].includes(report.status));
+  const returned = report?.status === 'Returned';
+  const draftButton = document.getElementById('draft-action');
+  const sendButton = document.getElementById('primary-action');
+  if (draftButton) draftButton.hidden = locked || returned;
+  if (sendButton) {
+    sendButton.hidden = locked || returned;
+    if (!sendButton.hidden) sendButton.textContent = t('Send report');
+  }
+  const reportDate = String(report?.report_date || openReportDate(dailyCache)).slice(0, 10);
+  const plantId = report?.plant_id || items.find((item) => item.plant_id)?.plant_id || '';
+  const plants = [`<option value="">${esc(t('Select plant'))}</option>`, ...store.plants.map((plant) => `<option value="${esc(plant.plant_id)}"${plant.plant_id === plantId ? ' selected' : ''}>${esc(plant.name)}</option>`)].join('');
+  const techName = report?.technician_name || getSavedUser()?.full_name || '';
+  const visibleReports = () => (ui.dailyFilter
+    ? dailyCache.filter((row) => String(row.report_date).slice(0, 10) === ui.dailyFilter)
+    : dailyCache);
+  const list = dailyListHtml(visibleReports(), report?.report_id || '', techName);
+  const workspace = document.getElementById('workspace');
+  workspace.className = 'workspace lube-board';
+  workspace.innerHTML = `<aside class="panel lube-list"><div class="lube-list-head"><b>${esc(t('Reports'))}</b><button type="button" class="detail-button" id="daily-new">${esc(t('New report'))}</button></div><label class="daily-filter"><span>${esc(t('Date'))}</span><input id="daily-filter" type="date" value="${esc(ui.dailyFilter || '')}"></label>${rejectedFieldHtml(dailyCache, report?.report_id || '')}${windowLock ? `<p class="daily-window no-print">${esc(t('You can send one report a day. A new report opens 24 hours after the last one was sent.'))}</p>` : ''}<div id="daily-report-list">${list}</div></aside><form id="daily-form" class="lube-paper daily-paper" data-report-id="${esc(report?.report_id || '')}" data-status="${esc(report?.status || 'Draft')}"><header class="lube-head"><img src="logo-rayan.png" alt="Rayan"><div><h2>${esc(t('DAILY MAINTENANCE REPORT'))}</h2><p>${esc(t(report?.status || 'Draft report'))}</p><small>${esc(t('Mechanical Maintenance Department'))}</small></div><dl><div><dt>${esc(t('Form No.:'))}</dt><dd>DR</dd></div><div><dt>${esc(t('Report No.'))}</dt><dd>${esc(report?.report_id || t('New'))}</dd></div></dl></header><div class="lube-meta"><label><span>${esc(t('Shift'))}</span><select id="daily-shift">${LUBE_SHIFTS.map((shift) => `<option value="${esc(shift)}"${shift === (report?.shift || LUBE_SHIFTS[0]) ? ' selected' : ''}>${esc(t(shift))}</option>`).join('')}</select></label><label><span>${esc(t("Technician's name"))}</span><input id="daily-tech" value="${esc(techName)}" readonly></label><label><span>${esc(t('Plant'))}</span><select id="daily-plant">${plants}</select></label><label><span>${esc(t('Date'))}</span><input id="daily-date" type="date" value="${esc(reportDate)}" required></label><label><span>${esc(t('Day'))}</span><input id="daily-day" value="${esc(t(lubeDayName(reportDate)))}" readonly></label><label><span>${esc(t('Maintenance Engineer'))}</span><input id="daily-engineer" value="${esc(report?.shift_engineer || '')}" placeholder="${esc(t('Engineer name / ID'))}"></label></div><table class="lube-table"><thead><tr><th>${esc(t('Seq.'))}</th><th>${esc(t('Machine'))}</th><th>${esc(t('Maintenance Type'))}</th><th>${esc(t('Repair Actions'))}</th><th>${esc(t('Start Time'))}</th><th>${esc(t('End Time'))}</th><th>${esc(t('Downtime (hrs)'))}</th></tr></thead><tbody id="daily-rows">${items.map(dailyRow).join('')}</tbody></table><section class="daily-parts"><div class="lube-list-head"><h3>${esc(t('SPARE PARTS USED'))}</h3><button type="button" class="no-print" id="daily-add-part">${esc(t('Add part'))}</button></div><table class="lube-table"><thead><tr><th>${esc(t('No.'))}</th><th>${esc(t('Part'))}</th><th>${esc(t('Part No.'))}</th><th>${esc(t('Qty'))}</th></tr></thead><tbody id="daily-parts">${parts.map(dailyPartRow).join('')}</tbody></table></section><label class="daily-notes"><span>${esc(t('GENERAL NOTES'))}</span><div class="daily-note-box"><textarea id="daily-notes">${esc(report?.general_notes || '')}</textarea><b class="daily-tdt">TDT: <span id="daily-total">0.00</span></b></div></label><p id="daily-error" class="form-error"></p><div class="lube-actions no-print"><button type="button" id="daily-add">${esc(t('Add row'))}</button>${returned ? `<button type="button" id="daily-resend">${esc(t('Resend the report'))}</button>` : ''}<button type="button" id="daily-print">${esc(t('Print'))}</button></div></form>`;
+  if (locked) document.querySelectorAll('#daily-form input, #daily-form select, #daily-form textarea, #daily-add, #daily-add-part').forEach((node) => { node.disabled = true; });
+  if (returned) {
+    ['daily-shift', 'daily-plant', 'daily-date', 'daily-engineer', 'daily-notes'].forEach((id) => {
+      const node = document.getElementById(id);
+      if (node) node.disabled = true;
+    });
+    document.querySelectorAll('#daily-parts input, #daily-add-part').forEach((node) => { node.disabled = true; });
+  }
+  document.querySelectorAll('#daily-rows tr').forEach(bindDailyRow);
+  document.getElementById('daily-rows')?.addEventListener('input', (event) => {
+    const row = event.target.closest('tr');
+    if (!row || (event.target.dataset.field !== 'start' && event.target.dataset.field !== 'end')) return;
+    row.querySelector('[data-field="downtime"]').value = dailyHours(row.querySelector('[data-field="start"]').value, row.querySelector('[data-field="end"]').value);
+    refreshDailyTotal();
+  });
+  refreshDailyTotal();
+  document.getElementById('daily-date')?.addEventListener('change', (event) => {
+    document.getElementById('daily-day').value = t(lubeDayName(event.target.value));
+    const found = dailyCache.find((row) => String(row.report_date).slice(0, 10) === event.target.value && row.status !== 'Returned');
+    if (found && found.report_id !== document.getElementById('daily-form')?.dataset.reportId) {
+      ui.dailyId = found.report_id;
+      drawDailyReport();
+    }
+  });
+  const bindDailyList = () => {
+    document.querySelectorAll('#daily-report-list [data-daily]').forEach((button) => button.addEventListener('click', () => { ui.dailyId = button.dataset.daily; drawDailyReport(); }));
+  };
+  document.querySelectorAll('.daily-rejected [data-daily]').forEach((button) => button.addEventListener('click', () => { ui.dailyId = button.dataset.daily; drawDailyReport(); }));
+  document.getElementById('daily-filter')?.addEventListener('change', (event) => {
+    ui.dailyFilter = event.target.value;
+    const box = document.getElementById('daily-report-list');
+    if (!box) return;
+    box.innerHTML = dailyListHtml(visibleReports(), document.getElementById('daily-form')?.dataset.reportId || '', techName);
+    bindDailyList();
+  });
+  const newReport = document.getElementById('daily-new');
+  if (newReport) newReport.hidden = false;
+  newReport?.addEventListener('click', () => {
+    ui.dailyId = 'new';
+    drawDailyReport();
+  });
+  bindDailyList();
+  document.getElementById('daily-add')?.addEventListener('click', () => {
+    const body = document.getElementById('daily-rows');
+    body.insertAdjacentHTML('beforeend', dailyRow({}, body.children.length));
+    bindDailyRow(body.lastElementChild);
+  });
+  document.getElementById('daily-resend')?.addEventListener('click', () => saveDailyReport(true));
+  document.getElementById('daily-add-part')?.addEventListener('click', () => {
+    const body = document.getElementById('daily-parts');
+    body.insertAdjacentHTML('beforeend', dailyPartRow({}, body.children.length));
+  });
+  document.getElementById('daily-print')?.addEventListener('click', () => window.print());
+  document.getElementById('daily-form')?.addEventListener('submit', (event) => { event.preventDefault(); saveDailyReport(false); });
+}
+
+async function draw(page) {
+  if (page === 'dashboard') await drawDashboard();
+  else if (page === 'work-orders') drawWorkOrders();
+  else if (page === 'pm-schedule') await drawPlans();
+  else if (page === 'plants') drawPlants();
+  else if (page === 'new-equipment') drawNewEquipment();
+  else if (page === 'equipment') drawEquipment();
+  else if (page === 'sop') drawSops();
+  else if (page === 'lubrication') await drawLubrication();
+  else if (page === 'daily-reports') await drawDailyReport();
+  else drawRecords();
+}
+
+async function paint(page) {
+  const token = ++paintToken;
+  ui.page = page;
+  setHeader(page);
+  document.getElementById('metric-grid').innerHTML = metrics([['Loading', '…', '◷', 'blue', '']]);
+  const workspace = document.getElementById('workspace');
+  workspace.hidden = false;
+  workspace.className = 'workspace';
+  workspace.innerHTML = `<section class="panel"><p class="live-note">${esc(t('Loading live records…'))}</p></section>`;
+  try {
+    if (!store) await loadStore();
+    if (token !== paintToken) return;
+    await draw(page);
+  } catch (error) {
+    if (token !== paintToken) return;
+    document.getElementById('workspace').innerHTML = `<section class="panel"><p class="live-note">${esc(error.message)}</p></section>`;
+  }
+}
+
+function openCreate() {
+  if (isTechnician()) {
+    if (ui.page !== 'equipment') {
+      toast(t('A technician can add equipment only.'));
+      return;
+    }
+  } else if (!canMaintain()) {
+    toast(t('Only a maintenance engineer can add this record.'));
+    return;
+  }
+  ui.mode = 'create';
+  draw(ui.page);
+}
+
+document.getElementById('primary-action').addEventListener('click', (event) => {
+  if (!document.body.dataset.livePage) return;
+  event.preventDefault();
+  event.stopImmediatePropagation();
+  if (ui.page === 'machine-records') exportRecords();
+  else if (ui.page === 'dashboard') document.querySelector('[data-filter="plant"]')?.focus();
+  else if (ui.page === 'pm-schedule' && isTechnician()) return;
+  else if (ui.page === 'pm-schedule' && document.querySelector('.week-day')) saveWeekTasks();
+  else if (ui.page === 'pm-schedule' && document.getElementById('annual-rows')) saveAnnualPlan();
+  else if (ui.page === 'pm-schedule') return;
+  else if (ui.page === 'lubrication') saveLubrication();
+  else if (ui.page === 'daily-reports') saveDailyReport(true);
+  else openCreate();
+}, true);
+
+document.getElementById('draft-action')?.addEventListener('click', (event) => {
+  if (ui.page !== 'daily-reports') return;
+  event.preventDefault();
+  saveDailyReport(false);
+});
+
+render = function liveRender(page) {
+  if (page === 'users') {
+    document.body.dataset.livePage = '';
+    shellRender(page);
+    return;
+  }
+  if (page === 'daily-reports' && !isTechnician()) {
+    location.href = 'daily-reports.html';
+    return;
+  }
+  let name = LIVE_PAGES.has(page) ? page : 'dashboard';
+  if (name === 'new-equipment' && !canMaintain()) name = isTechnician() ? 'work-orders' : 'dashboard';
+  if (isTechnician() && !['work-orders', 'pm-schedule', 'equipment', 'sop', 'lubrication', 'daily-reports'].includes(name)) name = 'work-orders';
+  if (name !== ui.page) {
+    ui.tab = DEFAULT_TAB[name];
+    ui.rowKey = '';
+    ui.mode = 'view';
+  }
+  document.body.dataset.livePage = name;
+  paint(name);
+};
+
+const boot = location.hash.slice(1);
+render(boot === 'users' || boot === 'daily-reports' || LIVE_PAGES.has(boot) ? boot : 'dashboard');
+document.addEventListener('cmms-language', () => {
+  captureAnnual();
+  if (document.body.dataset.livePage) paint(ui.page);
+  else if (location.hash === '#users' && typeof renderUsers === 'function') renderUsers();
+});

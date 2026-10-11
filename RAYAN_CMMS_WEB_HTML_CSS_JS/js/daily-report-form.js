@@ -3,13 +3,14 @@ const PART_ROWS = 5;
 let currentUser = null;
 let currentReport = null;
 let serializedActivityRows = [];
+let catalog = { plants: [], lines: [] };
 
 function activityRow(number) {
-  return `<tr data-row="${number}"><td class="row-number">${number}</td><td><input class="line-input" data-field="line" aria-label="Line ${number}"></td><td><input class="equipment-code" data-field="code" aria-label="Equipment code ${number}" placeholder="Code"></td><td><input class="equipment-name" data-field="name" aria-label="Equipment name ${number}" placeholder="Name"></td><td><select data-field="type" aria-label="Maintenance type ${number}"><option value="">Select</option><option value="Preventive">Preventive</option><option value="Corrective">Corrective</option><option value="Routine">Routine</option><option value="Inspection">Inspection</option></select></td><td><input class="work-order" data-field="wo" aria-label="Work order ${number}" readonly></td><td><input data-field="failure" aria-label="Failure reason ${number}"></td><td><input data-field="action" aria-label="Repair actions ${number}"></td><td><input class="time" data-field="start" type="time" step="60" aria-label="Start time (hours and minutes) ${number}"></td><td><input class="time" data-field="end" type="time" step="60" aria-label="End time (hours and minutes) ${number}"></td><td><input class="downtime" data-field="downtime" aria-label="Downtime (hours) ${number}" type="number" min="0" step="0.01" inputmode="decimal" placeholder="0.00" readonly title="Calculated from start and end time"></td></tr>`;
+  return `<tr data-row="${number}"><td class="row-number">${number}</td><td class="line-cell"><input class="line-input" data-field="line" inputmode="numeric" aria-label="Line number ${number}" data-i18n-placeholder="No." placeholder="No."><span class="line-name" data-line-name></span></td><td><input class="equipment-code" data-field="code" aria-label="Equipment code ${number}" data-i18n-placeholder="Code" placeholder="Code" required></td><td><input class="equipment-name" data-field="name" aria-label="Equipment name ${number}" data-i18n-placeholder="Name" placeholder="Name"></td><td><select data-field="type" aria-label="Maintenance type ${number}"><option value="" data-i18n-option="Select">Select</option><option value="Preventive" data-i18n-option="Preventive">Preventive</option><option value="Corrective" data-i18n-option="Corrective">Corrective</option><option value="Emergency" data-i18n-option="Emergency">Emergency</option><option value="Routine" data-i18n-option="Routine">Routine</option><option value="Inspection" data-i18n-option="Inspection">Inspection</option></select></td><td><input class="work-order" data-field="wo" aria-label="Work order ${number}" readonly></td><td><input data-field="failure" aria-label="Failure reason ${number}"></td><td><input data-field="action" aria-label="Repair actions ${number}"></td><td><input class="time" data-field="start" type="time" step="60" aria-label="Start time (hours and minutes) ${number}"></td><td><input class="time" data-field="end" type="time" step="60" aria-label="End time (hours and minutes) ${number}"></td><td><input class="downtime" data-field="downtime" aria-label="Downtime (hours) ${number}" type="number" min="0" step="0.01" inputmode="decimal" placeholder="0.00" readonly title="Calculated from start and end time"></td></tr>`;
 }
 
 function activityHeader() {
-  return `<thead><tr><th rowspan="2">No.</th><th rowspan="2">Line</th><th colspan="2">Machine</th><th rowspan="2">Maintenance<br>Type</th><th rowspan="2">Work Order<br>No.</th><th rowspan="2">Failure Reason</th><th rowspan="2">Repair Actions</th><th rowspan="2">Start<br>Time</th><th rowspan="2">End<br>Time</th><th rowspan="2">Downtime<br>(hrs)</th></tr><tr><th>Code</th><th>Name</th></tr></thead>`;
+  return `<thead><tr><th rowspan="2" data-i18n="No.">No.</th><th rowspan="2" data-i18n="Line">Line</th><th colspan="2" data-i18n="Machine">Machine</th><th rowspan="2" data-i18n="Maintenance Type">Maintenance Type</th><th rowspan="2" data-i18n="Work Order No.">Work Order No.</th><th rowspan="2" data-i18n="Failure Reason">Failure Reason</th><th rowspan="2" data-i18n="Repair Actions">Repair Actions</th><th rowspan="2" data-i18n="Start Time">Start Time</th><th rowspan="2" data-i18n="End Time">End Time</th><th rowspan="2" data-i18n="Downtime (hrs)">Downtime (hrs)</th></tr><tr><th data-i18n="Code">Code</th><th data-i18n="Name">Name</th></tr></thead>`;
 }
 
 function activityPage(pageNumber) {
@@ -19,7 +20,7 @@ function activityPage(pageNumber) {
     (_, index) => activityRow(firstRow + index)
   ).join('');
 
-  return `<section class="activity-page" data-page="${pageNumber}"><div class="activity-page-label"><strong>DAILY MAINTENANCE REPORT</strong><span>Activity page ${pageNumber} · rows ${firstRow}–${firstRow + ACTIVITY_ROWS_PER_PAGE - 1}</span></div><table class="activity-table">${activityHeader()}<tbody>${rows}</tbody></table></section>`;
+  return `<section class="activity-page" data-page="${pageNumber}"><div class="activity-page-label"><strong data-i18n="DAILY MAINTENANCE REPORT">DAILY MAINTENANCE REPORT</strong><span>${t('Activity page')} ${pageNumber}</span></div><table class="activity-table">${activityHeader()}<tbody>${rows}</tbody></table></section>`;
 }
 
 function partRow(number) {
@@ -33,7 +34,9 @@ function message(text, isError = false) {
 }
 
 function dateForInput(date) {
-  return date.toISOString().slice(0, 10);
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${date.getFullYear()}-${month}-${day}`;
 }
 
 function timeToMinutes(value) {
@@ -75,79 +78,151 @@ function calculateRowDowntime(row) {
   updateTotalDowntime();
 }
 
+function htmlEscape(value) {
+  return String(value ?? '').replace(/[&<>"']/g, (ch) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch]));
+}
+
+function selectedPlantId() {
+  return document.getElementById('plant-summary').value;
+}
+
+function fillPlantSelect(selected) {
+  const select = document.getElementById('plant-summary');
+  select.innerHTML = `<option value="">Select plant</option>${catalog.plants.map((plant) => `<option value="${htmlEscape(plant.plant_id)}">${htmlEscape(plant.name)}</option>`).join('')}`;
+  if (selected) select.value = selected;
+}
+
 function setRegisteredEquipment(row, equipment) {
   row.dataset.registered = 'true';
   row.dataset.equipmentId = equipment.equipment_id;
   row.dataset.plantId = equipment.plant_id || '';
-  row.dataset.lineId = equipment.line_id || '';
-  const code = row.querySelector('[data-field="code"]');
+  if (equipment.line_id) row.dataset.lineId = equipment.line_id;
   const name = row.querySelector('[data-field="name"]');
-  const line = row.querySelector('[data-field="line"]');
-  code.value = equipment.equipment_code;
   name.value = equipment.equipment_name;
   name.readOnly = true;
-  line.value = equipment.line_name || equipment.line_id || '';
-  line.readOnly = true;
   name.classList.add('found');
   name.classList.remove('manual');
-  updatePlantSummary();
+  const line = row.querySelector('[data-field="line"]');
+  if (!line.value && equipment.line_number != null) {
+    line.value = equipment.line_number;
+    resolveLine(row, false);
+  }
 }
 
 function setManualEquipment(row) {
   row.dataset.registered = 'false';
   row.dataset.equipmentId = '';
-  row.dataset.plantId = '';
-  row.dataset.lineId = '';
   const name = row.querySelector('[data-field="name"]');
-  const line = row.querySelector('[data-field="line"]');
-  name.readOnly = false;
-  line.readOnly = false;
+  if (row.dataset.assigned !== 'true') name.readOnly = false;
   name.classList.remove('found');
   name.classList.add('manual');
-  updatePlantSummary();
+}
+
+function resolveLine(row, lookup = true) {
+  const number = row.querySelector('[data-field="line"]').value.trim();
+  const name = row.querySelector('[data-line-name]');
+  const line = catalog.lines.find((item) => item.plant_id === selectedPlantId() && String(item.line_number) === number);
+  if (line) {
+    row.dataset.lineId = line.line_id;
+    name.textContent = line.name;
+  } else {
+    if (row.dataset.assigned !== 'true') row.dataset.lineId = '';
+    name.textContent = number ? 'Not found' : '';
+  }
+  if (lookup && row.dataset.assigned !== 'true') lookupEquipment(row);
 }
 
 async function lookupEquipment(row) {
+  if (row.dataset.assigned === 'true') return;
   const code = row.querySelector('[data-field="code"]').value.trim();
   if (!code) {
     setManualEquipment(row);
     return;
   }
-  message('Looking up equipment code…');
+  const params = new URLSearchParams({ code });
+  if (selectedPlantId()) params.set('plant_id', selectedPlantId());
+  if (row.dataset.lineId) params.set('line_id', row.dataset.lineId);
   try {
-    const result = await apiRequest(`/equipment/lookup?code=${encodeURIComponent(code)}`);
+    const result = await apiRequest(`/equipment/lookup?${params.toString()}`);
     if (result.matches.length === 1) {
       setRegisteredEquipment(row, result.matches[0]);
-      message(`Registered equipment found: ${result.matches[0].equipment_name}`);
-    } else if (result.matches.length > 1) {
-      setManualEquipment(row);
-      message('More than one registered item has this code. Enter its line to identify it.', true);
+      message(`Registered equipment: ${result.matches[0].equipment_name}`);
     } else {
       setManualEquipment(row);
-      message('Equipment is not registered. Enter its name and line as a manual report entry.');
+      message('This code is not registered. Enter its name. It stays off the plant equipment list until an engineer approves it.');
     }
   } catch (error) {
     setManualEquipment(row);
-    message(`Cannot look up equipment: ${error.message}`, true);
+    message(error.message || 'Could not look up the equipment code.', true);
   }
 }
 
-function updatePlantSummary() {
-  const plants = [...document.querySelectorAll('#activity-pages tr[data-registered="true"]')]
-    .map(row => row.dataset.plantId)
-    .filter(Boolean);
-  document.getElementById('plant-summary').value = [...new Set(plants)].join(', ') || '';
-}
-
 function bindActivityInputs(scope) {
+  scope.querySelectorAll('.line-input').forEach((input) => {
+    input.addEventListener('input', () => resolveLine(input.closest('tr')));
+  });
   scope.querySelectorAll('.equipment-code').forEach(input => {
-    input.addEventListener('input', () => setManualEquipment(input.closest('tr')));
+    input.addEventListener('input', () => {
+      const row = input.closest('tr');
+      if (row.dataset.registered === 'true') row.querySelector('[data-field="name"]').value = '';
+      setManualEquipment(row);
+    });
     input.addEventListener('change', () => lookupEquipment(input.closest('tr')));
+  });
+  scope.querySelectorAll('[data-field="type"]').forEach((input) => {
+    input.addEventListener('change', () => issueHighWorkOrder(input.closest('tr')));
   });
   scope.querySelectorAll('.time').forEach(input => {
     ['input', 'change', 'blur'].forEach(event => {
       input.addEventListener(event, () => calculateRowDowntime(input.closest('tr')));
     });
+  });
+}
+
+async function issueHighWorkOrder(row) {
+  if (!row || row.dataset.assigned === 'true') return;
+  const typeInput = row.querySelector('[data-field="type"]');
+  const type = typeInput.value;
+  const workOrder = row.querySelector('[data-field="wo"]');
+  if (type !== 'Corrective' && type !== 'Emergency') return;
+  if (workOrder.value.trim()) return;
+  const code = row.querySelector('[data-field="code"]').value.trim();
+  const name = row.querySelector('[data-field="name"]').value.trim();
+  if (!code || !name) {
+    typeInput.value = '';
+    message('Enter the equipment code and name before choosing Corrective or Emergency.', true);
+    return;
+  }
+  if (!selectedPlantId() && row.dataset.registered !== 'true') {
+    typeInput.value = '';
+    message('Select a plant at the top of the report first.', true);
+    return;
+  }
+  try {
+    const order = await apiRequest('/work-orders/from-activity', {
+      method: 'POST',
+      body: JSON.stringify({
+        equipment_code: code,
+        equipment_name: name,
+        plant_id: selectedPlantId() || row.dataset.plantId || null,
+        line_id: row.dataset.lineId || null,
+        maintenance_type: type,
+        failure_reason: row.querySelector('[data-field="failure"]').value.trim() || null,
+        action_taken: row.querySelector('[data-field="action"]').value.trim() || null,
+      }),
+    });
+    workOrder.value = order.work_order_id;
+    message(`Work order ${order.work_order_id} was registered as High and added to the related records.`);
+  } catch (error) {
+    typeInput.value = '';
+    message(error.message || 'Could not register the work order.', true);
+  }
+}
+
+function writeWorkOrderNumbers(items) {
+  (items || []).forEach((item, index) => {
+    const row = serializedActivityRows[index];
+    if (row && item.wo_id) row.querySelector('[data-field="wo"]').value = item.wo_id;
   });
 }
 
@@ -166,6 +241,7 @@ function addActivityPage() {
   const pages = document.getElementById('activity-pages');
   const pageNumber = pages.querySelectorAll('.activity-page').length + 1;
   pages.insertAdjacentHTML('beforeend', activityPage(pageNumber));
+  if (typeof applyLanguage === 'function') applyLanguage();
   const page = pages.lastElementChild;
   bindActivityInputs(page);
   updatePageLabels();
@@ -195,8 +271,9 @@ function serializeActivities() {
     const name = get('name');
     const selected = [code, name, get('type'), get('failure'), get('action'), get('start'), get('end'), get('downtime')].some(Boolean);
     if (!selected) continue;
+    if (!selectedPlantId()) throw new Error('Select a plant at the top of the report.');
     if (!code || !name || !get('type')) {
-      throw new Error(`Activity row ${row.dataset.row}: code, machine name, and maintenance type are required.`);
+      throw new Error(`Activity row ${row.dataset.row}: equipment code, machine name, and maintenance type are required.`);
     }
     const start = get('start') || null;
     const end = get('end') || null;
@@ -204,8 +281,9 @@ function serializeActivities() {
       equipment_id: row.dataset.registered === 'true' ? row.dataset.equipmentId : null,
       equipment_code: code,
       equipment_name: name,
-      plant_id: row.dataset.registered === 'true' ? row.dataset.plantId || null : null,
-      line_id: row.dataset.registered === 'true' ? row.dataset.lineId || null : get('line') || null,
+      plant_id: row.dataset.registered === 'true' ? (row.dataset.plantId || selectedPlantId()) : selectedPlantId(),
+      line_id: row.dataset.lineId || null,
+      entered_line_number: get('line') || null,
       is_manual_entry: row.dataset.registered !== 'true',
       maintenance_type: get('type'),
       // Start/end are used by the work order and by the downtime engine.
@@ -216,6 +294,7 @@ function serializeActivities() {
       downtime_h: get('downtime') ? Number(get('downtime')) : null,
       failure_reason: get('failure') || null,
       action_taken: get('action') || null,
+      wo_id: get('wo') || null,
       spare_parts: parts,
       maintenance_completed: true,
     });
@@ -225,20 +304,153 @@ function serializeActivities() {
   return activities;
 }
 
+function lockAssignedRow(row) {
+  row.dataset.assigned = 'true';
+  const open = new Set(['type', 'action', 'start', 'end']);
+  row.querySelectorAll('input, select').forEach((input) => {
+    if (!input.dataset.field || input.dataset.field === 'downtime') return;
+    input.disabled = !open.has(input.dataset.field);
+  });
+}
+
+function valueOf(item, name) {
+  return item?.[name] ? String(item[name]).slice(0, 5) : '';
+}
+
+function fillReport(detail) {
+  currentReport = detail.report;
+  document.getElementById('report-number').textContent = currentReport.report_id;
+  document.getElementById('report-state').textContent = currentReport.status;
+  document.getElementById('report-date').value = String(currentReport.report_date).slice(0, 10);
+  document.getElementById('report-date').disabled = true;
+  document.getElementById('meta-date').textContent = new Date(`${String(currentReport.report_date).slice(0, 10)}T00:00:00`).toLocaleDateString('en-GB');
+  if (currentReport.shift) document.getElementById('shift').value = currentReport.shift;
+  if (currentReport.shift_engineer) document.getElementById('shift-engineer').value = currentReport.shift_engineer;
+  if (currentReport.general_notes) document.getElementById('general-notes').value = currentReport.general_notes;
+  const items = detail.items || [];
+  fillPlantSelect(currentReport.plant_id || items.find((item) => item.plant_id)?.plant_id || '');
+  const pageCount = Math.max(1, Math.ceil(items.length / ACTIVITY_ROWS_PER_PAGE));
+  const pages = document.getElementById('activity-pages');
+  pages.innerHTML = Array.from({ length: pageCount }, (_, index) => activityPage(index + 1)).join('');
+  if (typeof applyLanguage === 'function') applyLanguage();
+  bindActivityInputs(pages);
+  updatePageLabels();
+  const rows = [...pages.querySelectorAll('tr[data-row]')];
+  items.forEach((item, index) => {
+    const row = rows[index];
+    if (!row) return;
+    const set = (field, value) => {
+      const input = row.querySelector(`[data-field="${field}"]`);
+      if (input) input.value = value || '';
+    };
+    row.dataset.registered = item.is_manual_entry ? 'false' : 'true';
+    row.dataset.equipmentId = item.equipment_id || '';
+    row.dataset.plantId = item.plant_id || '';
+    row.dataset.lineId = item.line_id || '';
+    const knownLine = catalog.lines.find((line) => line.line_id === item.line_id);
+    set('line', knownLine?.line_number ?? item.entered_line_number ?? '');
+    resolveLine(row, false);
+    set('code', item.equipment_code || item.equipment_id);
+    set('name', item.equipment_name);
+    const nameInput = row.querySelector('[data-field="name"]');
+    nameInput.readOnly = row.dataset.registered === 'true';
+    nameInput.classList.toggle('found', row.dataset.registered === 'true');
+    nameInput.classList.toggle('manual', row.dataset.registered !== 'true');
+    set('type', item.maintenance_type);
+    set('wo', item.wo_id);
+    set('failure', item.failure_reason);
+    set('action', item.action_taken);
+    set('start', valueOf(item, 'maintenance_start'));
+    set('end', valueOf(item, 'maintenance_end'));
+    if (item.downtime_h != null) set('downtime', Number(item.downtime_h).toFixed(2));
+    if (item.wo_id) lockAssignedRow(row);
+  });
+  updateTotalDowntime();
+}
+
+function blankReport() {
+  currentReport = null;
+  const today = dateForInput(new Date());
+  document.getElementById('report-date').disabled = false;
+  document.getElementById('report-date').value = today;
+  document.getElementById('meta-date').textContent = new Date().toLocaleDateString('en-GB');
+  document.getElementById('report-number').textContent = t('New');
+  document.getElementById('report-state').textContent = t('Draft report');
+  document.getElementById('save-draft').disabled = false;
+  document.getElementById('submit-report').disabled = false;
+  const pages = document.getElementById('activity-pages');
+  pages.innerHTML = activityPage(1);
+  if (typeof applyLanguage === 'function') applyLanguage();
+  bindActivityInputs(pages);
+  updatePageLabels();
+}
+
+async function drawMyReports() {
+  if (currentUser?.role !== 'TECHNICIAN') return;
+  const box = document.getElementById('my-reports');
+  if (!box) return;
+  box.hidden = false;
+  const reports = await apiRequest('/daily-reports');
+  const openId = currentReport?.report_id || '';
+  const buttons = reports.map((report) => {
+    const day = String(report.report_date).slice(0, 10);
+    const label = new Date(`${day}T00:00:00`).toLocaleDateString('en-GB');
+    return `<button type="button" data-report="${htmlEscape(report.report_id)}" class="${report.report_id === openId ? 'selected' : ''}">${htmlEscape(label)} · ${htmlEscape(t(report.status || 'Draft'))}</button>`;
+  }).join('');
+  box.innerHTML = `<b>${htmlEscape(t('My Reports'))}</b><button type="button" id="open-today">${htmlEscape(t('Today'))}</button>${buttons}`;
+  document.getElementById('open-today')?.addEventListener('click', openToday);
+  box.querySelectorAll('[data-report]').forEach((button) => button.addEventListener('click', () => openSavedReport(button.dataset.report)));
+}
+
+async function openSavedReport(reportId) {
+  fillReport(await apiRequest(`/daily-reports/${encodeURIComponent(reportId)}`));
+  await drawMyReports();
+}
+
+async function openToday() {
+  blankReport();
+  await loadTodaysReport();
+  await drawMyReports();
+}
+
+async function loadTodaysReport() {
+  const today = document.getElementById('report-date').value;
+  const reports = await apiRequest('/daily-reports');
+  const todays = reports.filter((report) => String(report.report_date).slice(0, 10) === today);
+  const mine = todays.find((report) => report.status === 'Draft' || report.status === 'Returned') || todays[0];
+  if (!mine) return;
+  fillReport(await apiRequest(`/daily-reports/${encodeURIComponent(mine.report_id)}`));
+  message('Accepted work orders show the equipment, failure reason, and work order number. Enter the repair actions and the repair time.');
+}
+
 async function saveReport(submit) {
+  if (currentReport && currentReport.status !== 'Draft' && currentReport.status !== 'Returned') {
+    message('This report can no longer be edited.', true);
+    return;
+  }
   if (currentReport) {
-    if (!submit) {
-      message('This report is already saved as a draft. You can now send it for engineer approval.');
-      return;
-    }
     try {
-      message('Sending daily report for engineer approval…');
-      await apiRequest(`/daily-reports/${encodeURIComponent(currentReport.report_id)}/submit`, { method: 'POST' });
-      document.getElementById('report-state').textContent = 'Submitted for engineer approval';
-      document.getElementById('submit-report').disabled = true;
-      message('Report sent to the maintenance engineer for approval.');
+      const payload = {
+        plant_id: selectedPlantId() || null,
+        general_notes: document.getElementById('general-notes').value.trim() || null,
+        items: serializeActivities(),
+      };
+      message(submit ? 'Saving repair actions and sending the report…' : 'Saving repair actions…');
+      const response = await apiRequest(`/daily-reports/${encodeURIComponent(currentReport.report_id)}`, { method: 'PUT', body: JSON.stringify(payload) });
+      currentReport = response.report;
+      writeWorkOrderNumbers(response.items);
+      if (submit) {
+        await apiRequest(`/daily-reports/${encodeURIComponent(currentReport.report_id)}/submit`, { method: 'POST' });
+        document.getElementById('report-state').textContent = 'Submitted for engineer approval';
+        document.getElementById('submit-report').disabled = true;
+        message('Report sent to the maintenance engineer for approval.');
+      } else {
+        document.getElementById('report-state').textContent = currentReport.status;
+        message('Repair actions saved.');
+      }
+      drawMyReports();
     } catch (error) {
-      message(error.message || 'Could not submit the daily report.', true);
+      message(error.message || 'Could not save the daily report.', true);
     }
     return;
   }
@@ -246,6 +458,7 @@ async function saveReport(submit) {
   try {
     const payload = {
       report_date: document.getElementById('report-date').value,
+      plant_id: selectedPlantId() || null,
       shift: document.getElementById('shift').value,
       shift_engineer: document.getElementById('shift-engineer').value.trim() || null,
       general_notes: document.getElementById('general-notes').value.trim() || null,
@@ -257,10 +470,7 @@ async function saveReport(submit) {
     currentReport = response.report;
     document.getElementById('report-number').textContent = currentReport.report_id;
     document.getElementById('report-state').textContent = currentReport.status;
-    response.items.forEach((item, index) => {
-      const row = serializedActivityRows[index];
-      if (row && item.wo_id) row.querySelector('[data-field="wo"]').value = item.wo_id;
-    });
+    writeWorkOrderNumbers(response.items);
     if (submit) {
       await apiRequest(`/daily-reports/${encodeURIComponent(currentReport.report_id)}/submit`, { method: 'POST' });
       document.getElementById('report-state').textContent = 'Submitted for engineer approval';
@@ -268,6 +478,7 @@ async function saveReport(submit) {
     } else {
       message('Draft saved successfully. You can now submit it for engineer approval.');
     }
+    drawMyReports();
     document.getElementById('save-draft').disabled = true;
     document.getElementById('submit-report').disabled = submit;
   } catch (error) {
@@ -283,16 +494,28 @@ async function initializeForm() {
       message('Daily Report entry is available to a Technician account. Select a technician account to submit a report.', true);
     }
     document.getElementById('technician-name').value = currentUser.full_name || 'Technician';
+    if (currentUser.role === 'TECHNICIAN') {
+      document.querySelector('.tool-bar a[href="daily-reports.html"]')?.setAttribute('hidden', '');
+      const back = document.querySelector('.tool-bar a[href="index.html#daily-reports"]');
+      if (back) back.href = 'index.html#work-orders';
+    }
   } catch (_) {
     logout();
     return location.replace('login.html');
   }
 
+  catalog.plants = await apiRequest('/plants');
+  catalog.lines = await apiRequest('/lines');
+  fillPlantSelect('');
+  document.getElementById('plant-summary').addEventListener('change', () => {
+    document.querySelectorAll('#activity-pages tr[data-row]').forEach((row) => resolveLine(row));
+  });
   const today = dateForInput(new Date());
   document.getElementById('report-date').value = today;
   document.getElementById('meta-date').textContent = new Date().toLocaleDateString('en-GB');
   const pages = document.getElementById('activity-pages');
   pages.innerHTML = activityPage(1);
+  if (typeof applyLanguage === 'function') applyLanguage();
   bindActivityInputs(pages);
   updatePageLabels();
   document.getElementById('parts-rows').innerHTML = Array.from({ length: PART_ROWS }, (_, index) => partRow(index + 1)).join('');
@@ -305,6 +528,18 @@ async function initializeForm() {
   document.getElementById('print-report').addEventListener('click', () => {
     if (currentReport) window.open(`daily-report-print.html?report=${encodeURIComponent(currentReport.report_id)}`, '_blank');
   });
+  try {
+    await loadTodaysReport();
+    await drawMyReports();
+  } catch (error) {
+    message(error.message || 'Could not load the assigned work orders.', true);
+  }
 }
 
 document.addEventListener('DOMContentLoaded', initializeForm);
+document.addEventListener('cmms-language', () => {
+  document.querySelectorAll('.activity-page').forEach((page, index) => {
+    const label = page.querySelector('.activity-page-label span');
+    if (label) label.textContent = `${t('Activity page')} ${index + 1}`;
+  });
+});

@@ -1,6 +1,6 @@
 from datetime import date, datetime, time
-from sqlalchemy import String, Integer, Float, Date, DateTime, Text, Boolean, ForeignKey, Time
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy import String, Integer, Float, Date, DateTime, Text, Boolean, ForeignKey, Time, UniqueConstraint
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 from .database import Base
 
 class User(Base):
@@ -27,8 +27,10 @@ class PlantLine(Base):
     id: Mapped[int]=mapped_column(Integer,primary_key=True)
     line_id: Mapped[str]=mapped_column(String(50),unique=True,index=True)
     plant_id: Mapped[str]=mapped_column(String(50),ForeignKey('plants.plant_id'))
+    line_number: Mapped[int|None]=mapped_column(Integer,nullable=True)
     name: Mapped[str]=mapped_column(String(150))
     active: Mapped[bool]=mapped_column(Boolean,default=True)
+    __table_args__=(UniqueConstraint('plant_id','line_number',name='uq_plant_line_number'),)
 
 class Equipment(Base):
     __tablename__='equipment'
@@ -98,6 +100,43 @@ class PMPlan(Base):
     added_unplanned: Mapped[bool]=mapped_column(Boolean,default=False)
     added_reason: Mapped[str|None]=mapped_column(Text,nullable=True)
 
+class AnnualPMPlan(Base):
+    __tablename__='annual_pm_plans'
+    id: Mapped[int]=mapped_column(Integer,primary_key=True)
+    plant_id: Mapped[str]=mapped_column(String(50),ForeignKey('plants.plant_id'),index=True)
+    year: Mapped[int]=mapped_column(Integer)
+    __table_args__=(UniqueConstraint('plant_id','year',name='uq_annual_pm_plant_year'),)
+
+class AnnualPMItem(Base):
+    __tablename__='annual_pm_items'
+    id: Mapped[int]=mapped_column(Integer,primary_key=True)
+    plan_id: Mapped[int]=mapped_column(Integer,ForeignKey('annual_pm_plans.id'))
+    sort_order: Mapped[int]=mapped_column(Integer,default=0)
+    machine_code: Mapped[str]=mapped_column(String(80),default='')
+    machine_name: Mapped[str]=mapped_column(String(150),default='')
+    task: Mapped[str]=mapped_column(Text,default='')
+    frequency_time: Mapped[str]=mapped_column(String(40),default='')
+    frequency_hours: Mapped[str]=mapped_column(String(40),default='')
+    maintenance_type: Mapped[str]=mapped_column(String(40),default='Preventive')
+    line_key: Mapped[str]=mapped_column(String(40),default='')
+    weeks: Mapped[str]=mapped_column(Text,default='')
+    days: Mapped[str]=mapped_column(Text,default='')
+
+class AnnualPMDayTask(Base):
+    __tablename__='annual_pm_day_tasks'
+    id: Mapped[int]=mapped_column(Integer,primary_key=True)
+    plan_id: Mapped[int]=mapped_column(Integer,ForeignKey('annual_pm_plans.id'),index=True)
+    work_date: Mapped[date]=mapped_column(Date,index=True)
+    sort_order: Mapped[int]=mapped_column(Integer,default=0)
+    machine_code: Mapped[str]=mapped_column(String(80),default='')
+    machine_name: Mapped[str]=mapped_column(String(150),default='')
+    task: Mapped[str]=mapped_column(Text,default='')
+    maintenance_type: Mapped[str]=mapped_column(String(40),default='Preventive')
+    source_key: Mapped[str]=mapped_column(String(40),default='',index=True)
+    technician_id: Mapped[str|None]=mapped_column(String(50),nullable=True)
+    work_order_id: Mapped[str|None]=mapped_column(String(60),nullable=True,index=True)
+    released_at: Mapped[datetime|None]=mapped_column(DateTime,nullable=True)
+
 class SOP(Base):
     __tablename__='sops'
     id: Mapped[int]=mapped_column(Integer,primary_key=True)
@@ -135,6 +174,7 @@ class WorkOrder(Base):
     request_date: Mapped[date]=mapped_column(Date,default=date.today)
     planned_date: Mapped[date|None]=mapped_column(Date,nullable=True)
     assigned_technician_id: Mapped[str|None]=mapped_column(String(50),nullable=True)
+    assignments: Mapped[list['WorkOrderAssignment']] = relationship(back_populates='work_order', cascade='all, delete-orphan', lazy='selectin')
     start_time: Mapped[datetime|None]=mapped_column(DateTime,nullable=True)
     end_time: Mapped[datetime|None]=mapped_column(DateTime,nullable=True)
     downtime_h: Mapped[float|None]=mapped_column(Float,nullable=True)
@@ -142,12 +182,43 @@ class WorkOrder(Base):
     failure_mode: Mapped[str|None]=mapped_column(String(100),nullable=True)
     failure_cause: Mapped[str|None]=mapped_column(String(150),nullable=True)
     corrective_action: Mapped[str|None]=mapped_column(Text,nullable=True)
+    crew_type: Mapped[str|None]=mapped_column(String(30),nullable=True)
     result: Mapped[str|None]=mapped_column(String(50),nullable=True)
     verification: Mapped[str|None]=mapped_column(Text,nullable=True)
     parts_used: Mapped[str|None]=mapped_column(Text,nullable=True)
     closed_by: Mapped[str|None]=mapped_column(String(80),nullable=True)
     closing_date: Mapped[datetime|None]=mapped_column(DateTime,nullable=True)
     created_by: Mapped[str]=mapped_column(String(80),default='SYSTEM')
+    records_committed: Mapped[bool]=mapped_column(Boolean,default=False)
+
+    @property
+    def assigned_technician_ids(self) -> list[str]:
+        ids = [row.technician_id for row in self.assignments]
+        if self.assigned_technician_id and self.assigned_technician_id not in ids:
+            ids.insert(0, self.assigned_technician_id)
+        return ids
+
+    @property
+    def assignment_states(self) -> list[dict]:
+        return [
+            {
+                'technician_id': row.technician_id,
+                'response': row.response or 'Pending',
+                'assigned_at': row.assigned_at,
+            }
+            for row in self.assignments
+        ]
+
+class WorkOrderAssignment(Base):
+    __tablename__ = 'work_order_assignments'
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    work_order_id: Mapped[str] = mapped_column(String(60), ForeignKey('work_orders.work_order_id'), index=True)
+    technician_id: Mapped[str] = mapped_column(String(50), ForeignKey('technicians.technician_id'), index=True)
+    response: Mapped[str] = mapped_column(String(20), default='Pending')
+    assigned_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    responded_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    work_order: Mapped['WorkOrder'] = relationship(back_populates='assignments')
+    __table_args__ = (UniqueConstraint('work_order_id', 'technician_id', name='uq_wo_technician'),)
 
 class DailyReport(Base):
     __tablename__ = 'daily_reports'
@@ -168,6 +239,9 @@ class DailyReport(Base):
         String(60), nullable=True, index=True
     )
     equipment_id: Mapped[str | None] = mapped_column(
+        String(50), nullable=True, index=True
+    )
+    plant_id: Mapped[str | None] = mapped_column(
         String(50), nullable=True, index=True
     )
 
@@ -204,6 +278,8 @@ class DailyReport(Base):
     locked_at: Mapped[datetime | None] = mapped_column(
         DateTime, nullable=True
     )
+    return_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
+    returned_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
 
 
 class DailyReportItem(Base):
@@ -231,6 +307,9 @@ class DailyReportItem(Base):
     )
     line_id: Mapped[str | None] = mapped_column(
         String(50), nullable=True, index=True
+    )
+    entered_line_number: Mapped[str | None] = mapped_column(
+        String(20), nullable=True
     )
     is_manual_entry: Mapped[bool] = mapped_column(
         Boolean, default=False
@@ -292,6 +371,19 @@ class DailyReportItem(Base):
         String(60), nullable=True, index=True
     )
 
+class PendingEquipment(Base):
+    __tablename__ = 'pending_equipment'
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    equipment_code: Mapped[str] = mapped_column(String(50), index=True)
+    equipment_name: Mapped[str] = mapped_column(String(150))
+    plant_id: Mapped[str | None] = mapped_column(String(50), nullable=True, index=True)
+    line_id: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    line_number: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    report_id: Mapped[str | None] = mapped_column(String(60), nullable=True)
+    technician_id: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    status: Mapped[str] = mapped_column(String(20), default='Pending', index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
 
 class MachineRecord(Base):
     __tablename__='machine_records'
@@ -350,6 +442,16 @@ class AuditTrail(Base):
     new_value: Mapped[str|None]=mapped_column(Text,nullable=True)
     created_at: Mapped[datetime]=mapped_column(DateTime,default=datetime.utcnow)
 
+class KpiTarget(Base):
+    __tablename__ = 'kpi_targets'
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    metric: Mapped[str] = mapped_column(String(40), index=True)
+    plant_id: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    line_id: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    equipment_id: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    target_value: Mapped[float] = mapped_column(Float)
+
+
 class Measurement(Base):
     __tablename__='measurements'
     id: Mapped[int]=mapped_column(Integer,primary_key=True)
@@ -361,6 +463,36 @@ class Measurement(Base):
     value: Mapped[float|None]=mapped_column(Float,nullable=True)
     unit: Mapped[str|None]=mapped_column(String(30),nullable=True)
     condition: Mapped[str|None]=mapped_column(String(30),nullable=True)
+
+class LubricationReport(Base):
+    __tablename__ = 'lubrication_reports'
+    __table_args__ = (UniqueConstraint('technician_id', 'report_date', name='uq_lube_tech_date'),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    report_id: Mapped[str] = mapped_column(String(60), unique=True, index=True)
+    report_date: Mapped[date] = mapped_column(Date, index=True)
+    day_name: Mapped[str] = mapped_column(String(20), default='')
+    shift: Mapped[str] = mapped_column(String(40))
+    technician_id: Mapped[str] = mapped_column(String(50), ForeignKey('technicians.technician_id'), index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+
+class LubricationLine(Base):
+    __tablename__ = 'lubrication_lines'
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    report_id: Mapped[int] = mapped_column(Integer, ForeignKey('lubrication_reports.id'), index=True)
+    sort_order: Mapped[int] = mapped_column(Integer, default=0)
+    equipment_code: Mapped[str] = mapped_column(String(50), default='')
+    equipment_name: Mapped[str] = mapped_column(String(150), default='')
+    component: Mapped[str] = mapped_column(String(150), default='')
+    quantity: Mapped[str] = mapped_column(String(40), default='')
+    lubricant_name: Mapped[str] = mapped_column(String(150), default='')
+    notes: Mapped[str] = mapped_column(Text, default='')
+    work_type: Mapped[str] = mapped_column(String(30), default='')
+    work_order_id: Mapped[str | None] = mapped_column(String(60), nullable=True, index=True)
+
 
 class PartUsed(Base):
     __tablename__='parts_used'

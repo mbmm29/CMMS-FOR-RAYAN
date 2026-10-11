@@ -8,51 +8,54 @@
   <meta name="apple-mobile-web-app-capable" content="yes">
   <link rel="manifest" href="manifest.webmanifest">
   <title>Daily Maintenance Report | RAYAN CMMS</title>
-  <link rel="stylesheet" href="css/daily-report-form.css?v=5">
+  <link rel="stylesheet" href="css/daily-report-form.css?v=7">
+  <link rel="stylesheet" href="css/i18n.css?v=2">
   <link rel="stylesheet" href="css/mobile-web-app.css?v=1">
-  <style>.downtime-help{margin:0 0 6px;font-size:12px;color:#66738b}.activity-table .downtime{background:#f0f6ff;text-align:center;font-weight:bold}</style>
+  <link rel="stylesheet" href="css/theme.css?v=1">
+  <style>.downtime-help{margin:0 0 6px;font-size:12px;color:#66738b}.activity-table .downtime{background:#f0f6ff;text-align:center;font-weight:bold}.my-reports{display:flex;flex-wrap:wrap;gap:8px;align-items:center;width:min(1500px,calc(100vw - 36px));margin:14px auto 0}.my-reports b{color:#102d60}.my-reports button{border:1px solid #99baf0;border-radius:8px;background:#fff;color:#102d60;padding:7px 10px;font-weight:700;cursor:pointer}.my-reports button.selected{background:#0755dc;color:#fff;border-color:#0755dc}.my-reports[hidden]{display:none}</style>
 </head>
 <body>
   <header class="tool-bar no-print">
-    <a href="index.html#daily-reports">← CMMS Dashboard</a>
+    <a href="index.html#daily-reports" data-i18n="← CMMS Dashboard">← CMMS Dashboard</a>
     <span id="report-state">Draft report</span>
-    <a href="daily-reports.html">Daily reports</a>
+    <a href="daily-reports.html" data-i18n="Daily reports">Daily reports</a>
   </header>
+  <nav id="my-reports" class="my-reports no-print" hidden></nav>
   <main class="report-paper">
     <header class="report-head">
       <div class="company-logo"><img src="logo-rayan.png" alt="Rayan"><span>FOR OIL EXTRACTION &amp; FEED MILL</span></div>
-      <div class="report-title"><h1>DAILY MAINTENANCE REPORT</h1><h2>Mechanical Maintenance Department</h2></div>
-      <dl class="form-meta"><div><dt>Form No.:</dt><dd id="report-number">New</dd></div><div><dt>Date:</dt><dd id="meta-date">—</dd></div><div><dt>Pages:</dt><dd id="page-count">1 of 1</dd></div></dl>
+      <div class="report-title"><h1 data-i18n="DAILY MAINTENANCE REPORT">DAILY MAINTENANCE REPORT</h1><h2 data-i18n="Mechanical Maintenance Department">Mechanical Maintenance Department</h2></div>
+      <dl class="form-meta"><div><dt data-i18n="Form No.:">Form No.:</dt><dd id="report-number">New</dd></div><div><dt data-i18n="Date:">Date:</dt><dd id="meta-date">—</dd></div><div><dt data-i18n="Pages:">Pages:</dt><dd id="page-count">1 of 1</dd></div></dl>
     </header>
     <form id="daily-report-form">
       <section class="report-info">
         <div class="info-column">
-          <label>Technician's name:<input id="technician-name" readonly></label>
-          <label>Date:<input id="report-date" type="date" required></label>
-          <label>Shift:<select id="shift"><option value="Morning (07:00 - 15:00)">Morning (07:00 - 15:00)</option><option value="Evening (15:00 - 23:00)">Evening (15:00 - 23:00)</option><option value="Night (23:00 - 07:00)">Night (23:00 - 07:00)</option></select></label>
+          <label><span data-i18n="Technician's name">Technician's name</span>:<input id="technician-name" readonly></label>
+          <label><span data-i18n="Shift">Shift</span>:<select id="shift"><option value="Morning (07:00 - 15:00)" data-i18n-option="Morning (07:00 - 15:00)">Morning (07:00 - 15:00)</option><option value="Evening (15:00 - 23:00)" data-i18n-option="Evening (15:00 - 23:00)">Evening (15:00 - 23:00)</option><option value="Night (23:00 - 07:00)" data-i18n-option="Night (23:00 - 07:00)">Night (23:00 - 07:00)</option></select></label>
+          <input id="report-date" type="date" required hidden>
         </div>
         <div class="info-column">
-          <label>Plant:<input id="plant-summary" placeholder="Filled from registered equipment" readonly></label>
-          <label>Maintenance Engineer:<input id="shift-engineer" placeholder="Engineer name / ID"></label>
-          <label>Engineer Signature:<span class="signature-line"></span></label>
+          <label><span data-i18n="Plant">Plant</span>:<select id="plant-summary" required><option value="" data-i18n-option="Select plant">Select plant</option></select></label>
+          <label><span data-i18n="Maintenance Engineer">Maintenance Engineer</span>:<input id="shift-engineer" data-i18n-placeholder="Engineer name / ID" placeholder="Engineer name / ID"></label>
         </div>
       </section>
       <section class="activity-section">
         <div class="activity-tools no-print">
-          <div><strong>MAINTENANCE ACTIVITIES</strong><span>Downtime is calculated automatically from Start and End time.</span></div>
-          <button type="button" id="add-activity-page" class="add-page-button">+ Add another activity page</button>
+          <div><strong data-i18n="MAINTENANCE ACTIVITIES">MAINTENANCE ACTIVITIES</strong><span data-i18n="Downtime is calculated automatically from Start and End time.">Downtime is calculated automatically from Start and End time.</span></div>
+          <button type="button" id="add-activity-page" class="add-page-button" data-i18n="+ Add another activity page">+ Add another activity page</button>
         </div>
-        <p class="downtime-help no-print">Enter Start and End time in hours and minutes. The result is calculated automatically; correct the two times if the actual machine downtime is different.</p>
+        <p class="downtime-help no-print" data-i18n="Enter Start and End time in hours and minutes. The result is calculated automatically; correct the two times if the actual machine downtime is different.">Enter Start and End time in hours and minutes. The result is calculated automatically; correct the two times if the actual machine downtime is different.</p>
         <div id="activity-pages"></div>
       </section>
       <section class="report-bottom">
-        <table class="parts-table"><thead><tr><th colspan="5">SPARE PARTS USED</th></tr><tr><th>No.</th><th>Part Name / Description</th><th>Part No.</th><th>Qty</th><th>Remarks</th></tr></thead><tbody id="parts-rows"></tbody></table>
-        <section class="notes-box"><div class="notes-heading"><b>GENERAL NOTES</b><span>TOTAL DOWNTIME: <output id="total-downtime">0.0</output> HRS</span></div><textarea id="general-notes" aria-label="General notes"></textarea></section>
+        <table class="parts-table"><thead><tr><th colspan="5" data-i18n="SPARE PARTS USED">SPARE PARTS USED</th></tr><tr><th data-i18n="No.">No.</th><th data-i18n="Part Name / Description">Part Name / Description</th><th data-i18n="Part No.">Part No.</th><th data-i18n="Qty">Qty</th><th data-i18n="Remarks">Remarks</th></tr></thead><tbody id="parts-rows"></tbody></table>
+        <section class="notes-box"><div class="notes-heading"><b data-i18n="GENERAL NOTES">GENERAL NOTES</b><span><span data-i18n="TOTAL DOWNTIME:">TOTAL DOWNTIME:</span> <output id="total-downtime">0.0</output> <span data-i18n="HRS">HRS</span></span></div><textarea id="general-notes" aria-label="General notes"></textarea></section>
       </section>
-      <footer class="form-actions no-print"><p id="form-message" role="status"></p><button type="button" id="save-draft">Save Draft</button><button type="button" id="submit-report" class="submit">Send for Engineer Approval</button><button type="button" id="print-report" disabled>Print Approved Report</button></footer>
+      <footer class="form-actions no-print"><p id="form-message" role="status"></p><button type="button" id="save-draft" data-i18n="Save Draft">Save Draft</button><button type="button" id="submit-report" class="submit" data-i18n="Send for Engineer Approval">Send for Engineer Approval</button><button type="button" id="print-report" data-i18n="Print Approved Report" disabled>Print Approved Report</button></footer>
     </form>
   </main>
-  <script src="js/api.js?v=4"></script>
-  <script src="js/daily-report-form.js?v=5"></script>
+  <script src="js/i18n.js?v=16"></script>
+  <script src="js/api.js?v=5"></script>
+  <script src="js/daily-report-form.js?v=11"></script>
 </body>
 </html>

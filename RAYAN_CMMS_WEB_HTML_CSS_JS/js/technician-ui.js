@@ -6,7 +6,7 @@
   const user = typeof getSavedUser === 'function' ? getSavedUser() : null;
   if (user?.role !== 'TECHNICIAN') return;
 
-  const allowedPages = new Set(['work-orders', 'daily-reports']);
+  const allowedPages = new Set(['work-orders', 'pm-schedule', 'equipment', 'sop', 'daily-reports', 'lubrication']);
   document.body.classList.add('technician-interface');
 
   document.querySelectorAll('.nav-link').forEach(link => {
@@ -14,12 +14,5 @@
   });
 
   const requestedPage = location.hash.replace('#', '');
-  if (!allowedPages.has(requestedPage) || requestedPage === 'daily-reports') {
-    location.replace('daily-reports.html');
-    return;
-  }
-
-  // Technicians update assigned work rather than create a new work order.
-  const action = document.getElementById('primary-action');
-  if (action) action.hidden = true;
+  if (!allowedPages.has(requestedPage)) location.replace('index.html#work-orders');
 })();

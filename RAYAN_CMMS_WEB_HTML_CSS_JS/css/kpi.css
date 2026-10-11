@@ -1,0 +1,89 @@
+/* Shared command-center surfaces. Logical margins keep Arabic and English aligned. */
+.shell{color-scheme:dark}
+html body .shell .content,
+html[dir="rtl"] body .shell .content{
+  margin-left:0;margin-right:0;margin-inline-start:238px;min-width:0;min-height:100vh;
+  padding:22px 22px 36px;color:#e7eefc;
+  background:
+    radial-gradient(ellipse 70% 42% at 8% -8%,#1a5ec866,transparent 52%),
+    radial-gradient(ellipse 55% 36% at 96% 0%,#12967a33,transparent 48%),
+    linear-gradient(180deg,#071633 0%,#0a1c3d 42%,#081428 100%);
+}
+body .page-header{
+  align-items:flex-end;flex-wrap:wrap;gap:16px;margin-bottom:18px;padding:18px 20px;
+  border:1px solid #2d5ea6;border-radius:18px;
+  background:linear-gradient(135deg,#0c2f68ee,#0a234eee 58%,#0c3d4aee);
+  box-shadow:0 16px 40px #02081455,inset 0 1px 0 #ffffff22;
+}
+body .page-header>div:first-child{min-width:0;flex:1 1 240px}
+body .page-header h1{margin:0 0 4px;color:#f5f8ff;font-size:clamp(26px,3vw,34px);letter-spacing:0;line-height:1.15;overflow-wrap:anywhere}
+body .page-header p{margin:0;color:#c5d6f4;font-size:14px;line-height:1.45;overflow-wrap:anywhere}
+body .header-actions{flex:0 0 auto}
+body .primary{box-shadow:0 0 0 1px #9ec4ff55,0 8px 22px #075cf555}
+
+body .metric-grid{grid-template-columns:repeat(auto-fit,minmax(min(100%,240px),1fr));gap:12px;margin-bottom:14px}
+body .metric{
+  height:auto;min-height:132px;display:grid;grid-template-columns:minmax(0,1fr) 46px;grid-template-areas:"title icon" "value icon" "trend trend";
+  align-items:center;column-gap:12px;row-gap:4px;padding:14px 16px 12px;overflow:hidden;
+  border:1px solid #2a4f88;border-radius:16px;color:#e7eefc;
+  background:linear-gradient(180deg,#12305ccc,#0c1e40cc);
+  box-shadow:0 12px 28px #02081440,inset 0 1px 0 #ffffff14;
+}
+body .metric h3{grid-area:title;margin:0;min-width:0;color:#b7c9e6;font-size:12px;font-weight:700;line-height:1.35;overflow-wrap:anywhere}
+body .metric b{grid-area:value;display:block;min-width:0;margin:0;color:#f7fbff;font-size:clamp(22px,2.2vw,32px);font-variant-numeric:tabular-nums;letter-spacing:0;line-height:1.05;overflow-wrap:anywhere}
+body .metric .glyph{position:static;grid-area:icon;justify-self:end;width:42px;height:42px;font-size:20px;box-shadow:0 0 0 1px #ffffff22,0 0 18px #7eb6ff33}
+body .metric .trend{grid-area:trend;min-width:0;margin:2px 0 0;color:#8ee0c2;font-size:11px;line-height:1.35;overflow-wrap:anywhere}
+
+body .kpi-layout{grid-template-columns:repeat(auto-fit,minmax(min(100%,300px),1fr));gap:12px}
+body .chart-wide{grid-column:1 / -1}
+body .live-filters,
+body .kpi-period,
+body .kpi-board{grid-column:1 / -1}
+body .live-filters{
+  display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,170px),1fr));gap:10px;margin:0;
+  padding:14px;border:1px solid #2a4f88;border-radius:16px;
+  background:linear-gradient(180deg,#10284fcc,#0c1d3ccc);
+}
+body .live-filters label{min-width:0;color:#b7c9e6;font-size:11px;gap:6px}
+body .live-filters select,
+body .live-filters input[type="date"]{
+  width:100%;min-width:0;height:38px;padding-inline:10px;color:#f4f8ff;background:#071428;border:1px solid #2c528c;border-radius:10px;
+}
+body .kpi-period{margin:0;color:#9eb4d6;font-size:12px;line-height:1.5;overflow-wrap:anywhere}
+body .kpi-board{grid-template-columns:repeat(auto-fit,minmax(min(100%,220px),1fr));gap:12px}
+body .kpi-card,
+body .panel{
+  min-width:0;color:#e7eefc;border:1px solid #2a4f88;border-radius:16px;
+  background:linear-gradient(180deg,#10284fcc,#0c1d3ccc);
+  box-shadow:0 12px 28px #02081440,inset 0 1px 0 #ffffff12;
+}
+body .kpi-card{padding:14px 16px}
+body .kpi-card h3{color:#b7c9e6;font-size:12px;line-height:1.35;overflow-wrap:anywhere}
+body .kpi-card b{margin-top:8px;color:#f7fbff;font-size:clamp(22px,2vw,30px);font-variant-numeric:tabular-nums;letter-spacing:0;line-height:1.1;overflow-wrap:anywhere}
+body .kpi-card small,
+body .kpi-note{color:#9eb4d6;line-height:1.45;overflow-wrap:anywhere}
+body .chart-panel{min-height:0;padding:16px}
+body .chart-panel h2{color:#f4f8ff;font-size:15px;line-height:1.3;overflow-wrap:anywhere}
+body .summary-row{gap:12px;align-items:baseline;padding:12px 0;border-bottom-color:#23406e;font-size:13px}
+body .summary-row span{min-width:0;overflow-wrap:anywhere}
+body .summary-row b{flex:0 0 auto;color:#f7fbff;text-align:end;font-variant-numeric:tabular-nums}
+body .area-chart{direction:ltr;height:220px}
+body .area-chart .area-grid line{stroke:#23406e}
+body .area-chart text{fill:#9eb4d6}
+body .area-legend li{color:#c5d6f4;min-width:0}
+body .area-legend span{overflow-wrap:anywhere}
+body .donut:after{background:#0e2144;color:#f7fbff;font-size:13px;line-height:1.25;padding:6px;overflow-wrap:anywhere}
+body .chart-empty{color:#9eb4d6}
+body .kpi-target{min-width:0}
+body .kpi-target b{color:#f4f8ff;font-size:13px;line-height:1.4;overflow-wrap:anywhere}
+body .kpi-target label{display:flex;flex-direction:column;gap:6px;min-width:0;color:#b7c9e6}
+body .kpi-target select,
+body .kpi-target input{width:100%;min-width:0;color:#f4f8ff;background:#071428;border:1px solid #2c528c;border-radius:10px}
+body .detail-button.primary{width:100%}
+
+@media(max-width:760px){
+  html body .shell .content,
+  html[dir="rtl"] body .shell .content{margin-inline-start:0;padding:76px 13px 28px}
+  body .metric{min-height:0}
+  body .metric .glyph{top:auto;right:auto;bottom:auto}
+}
