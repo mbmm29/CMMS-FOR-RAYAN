@@ -200,7 +200,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     layout?.classList.add('reviewing');
     sheet.innerHTML = `<div class="review-bar no-print"><button type="button" id="review-close">${escapeHtml(t('Back to reports'))}</button>${decisions}</div>
       <form class="lube-paper daily-paper" id="review-paper">
-        <header class="lube-head"><img src="logo-rayan.png" alt="Rayan"><div><h2>${escapeHtml(t('DAILY MAINTENANCE REPORT'))}</h2><p>${escapeHtml(t(report.status || 'Draft'))}</p><small>${escapeHtml(t('Mechanical Maintenance Department'))}</small></div><dl><div><dt>${escapeHtml(t('Form No.:'))}</dt><dd>DR</dd></div><div><dt>${escapeHtml(t('Report No.'))}</dt><dd>${escapeHtml(report.id)}</dd></div></dl></header>
+        <header class="lube-head"><img src="logo-rayan.png?v=2" alt="Rayan"><div><h2>${escapeHtml(t('DAILY MAINTENANCE REPORT'))}</h2><p>${escapeHtml(t(report.status || 'Draft'))}</p><small>${escapeHtml(t('Mechanical Maintenance Department'))}</small></div><dl><div><dt>${escapeHtml(t('Form No.:'))}</dt><dd>DR</dd></div><div><dt>${escapeHtml(t('Report No.'))}</dt><dd>${escapeHtml(report.id)}</dd></div></dl></header>
         <div class="lube-meta">
           <label><span>${escapeHtml(t('Shift'))}</span><input value="${escapeHtml(t(report.shift || ''))}" readonly></label>
           <label><span>${escapeHtml(t("Technician's name"))}</span><input value="${escapeHtml(report.technician)}" readonly></label>

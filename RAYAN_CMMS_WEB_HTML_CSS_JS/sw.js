@@ -1,4 +1,4 @@
-const CACHE = 'rayan-cmms-shell-2';
+const CACHE = 'rayan-cmms-shell-3';
 const SHELL = [
   '/login.html',
   '/index.html',

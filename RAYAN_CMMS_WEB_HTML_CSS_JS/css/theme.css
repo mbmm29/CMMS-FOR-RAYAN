@@ -205,8 +205,8 @@ body .workspace.lube-board{grid-template-columns:240px minmax(0,1fr);align-items
 .lube-open.selected{border-color:#3b82f6;background:#14315d}
 .lube-open small{color:#9eb4d6}
 .lube-paper{background:#fff;color:#102d60;border:1px solid #d5e2f4;border-radius:12px;padding:16px 18px}
-.lube-head{display:grid;grid-template-columns:150px minmax(0,1fr) 180px;gap:12px;align-items:center;padding-bottom:10px;border-bottom:2px solid #2a5287}
-.lube-head img{width:140px;height:auto}
+.lube-head{display:grid;grid-template-columns:minmax(180px,240px) minmax(0,1fr) 168px;gap:12px;align-items:center;padding-bottom:10px;border-bottom:2px solid #2a5287}
+.lube-head img{width:100%;max-width:240px;height:auto;object-fit:contain}
 .lube-head h2,.lube-head p,.lube-head small{display:block;margin:0;text-align:center;color:#102d60}
 .lube-head h2{font-size:20px}
 .lube-head p{margin-top:4px;font-weight:800}
@@ -345,7 +345,7 @@ button.job-open:hover{filter:brightness(1.12)}
   body:has(.lube-paper) .lube-paper{margin:8mm!important;padding:0!important;border:0!important;box-shadow:none!important}
   body:has(.daily-paper) .lube-head,
   body:has(.daily-paper) .lube-meta{direction:ltr}
-  body:has(.daily-paper) .lube-head{display:grid!important;grid-template-columns:150px minmax(0,1fr) 180px!important;gap:12px;align-items:center}
+  body:has(.daily-paper) .lube-head{display:grid!important;grid-template-columns:220px minmax(0,1fr) 160px!important;gap:12px;align-items:center}
   body:has(.daily-paper) .lube-head h2,
   body:has(.daily-paper) .lube-head p,
   body:has(.daily-paper) .lube-head small{text-align:center}
@@ -356,7 +356,7 @@ button.job-open:hover{filter:brightness(1.12)}
 @media(max-width:980px){
   body .workspace.lube-board{grid-template-columns:minmax(0,1fr)}
   .lube-head{grid-template-columns:1fr;justify-items:center;text-align:center}
-  .lube-head img{width:min(180px,62vw)}
+  .lube-head{min-width:0}.lube-head img{width:100%;max-width:100%;height:auto}
   .lube-head dl{width:100%}
   .lube-head h2{font-size:clamp(16px,4.6vw,22px);line-height:1.25;overflow-wrap:anywhere}
   .lube-meta{grid-template-columns:1fr}
