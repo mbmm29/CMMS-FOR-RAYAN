@@ -130,6 +130,8 @@ const CMMS_AR = {
   'Machine Records': 'سجلات المعدات',
   'Users': 'المستخدمون',
   'Sign out': 'تسجيل الخروج',
+  'Install app': 'تثبيت التطبيق',
+  'Add RAYAN CMMS to your home screen from the browser Share menu.': 'أضف RAYAN CMMS إلى الشاشة الرئيسية من قائمة المشاركة في المتصفح.',
   'Mechanical Maintenance': 'الصيانة الميكانيكية',
   'Search...': 'بحث...',
   'Search Daily Reports...': 'بحث في التقارير...',

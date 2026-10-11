@@ -1,9 +1,10 @@
 <!doctype html>
 <html lang="en">
-<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="theme-color" content="#062857"><meta name="mobile-web-app-capable" content="yes"><link rel="manifest" href="manifest.webmanifest"><title>Print Daily Maintenance Report</title><link rel="stylesheet" href="css/daily-report-form.css?v=7"><link rel="stylesheet" href="css/mobile-web-app.css?v=1"></head>
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="theme-color" content="#062857"><meta name="mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-capable" content="yes"><link rel="manifest" href="manifest.webmanifest"><link rel="icon" href="icons/icon-192.png" type="image/png"><link rel="apple-touch-icon" href="icons/apple-touch-icon.png"><meta name="apple-mobile-web-app-title" content="RAYAN CMMS"><title>Print Daily Maintenance Report</title><link rel="stylesheet" href="css/daily-report-form.css?v=7"><link rel="stylesheet" href="css/mobile-web-app.css?v=1"></head>
 <body>
   <header class="tool-bar no-print"><a href="daily-reports.html">← Daily reports</a><span id="print-message">Loading approved report…</span><button onclick="window.print()">Print A3 Landscape</button></header>
   <main class="report-paper" id="print-paper"></main>
+  <script src="js/pwa.js?v=1"></script>
   <script src="js/api.js?v=5"></script><script src="js/daily-report-print.js?v=6"></script>
 </body>
 </html>

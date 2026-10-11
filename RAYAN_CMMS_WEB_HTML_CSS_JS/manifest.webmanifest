@@ -1,9 +1,33 @@
 {
+  "id": "/",
   "name": "RAYAN CMMS",
   "short_name": "CMMS",
+  "description": "Mechanical maintenance management system for Rayan.",
   "start_url": "/login.html",
+  "scope": "/",
   "display": "standalone",
-  "background_color": "#f5f7fb",
+  "background_color": "#062857",
   "theme_color": "#062857",
-  "description": "Mechanical maintenance management system for Rayan."
+  "lang": "ar",
+  "dir": "rtl",
+  "icons": [
+    {
+      "src": "icons/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "icons/icon-maskable-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ]
 }

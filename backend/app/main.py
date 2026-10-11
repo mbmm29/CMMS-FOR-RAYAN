@@ -8,6 +8,7 @@ from pathlib import Path
 from fastapi import FastAPI, Depends, HTTPException
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from sqlalchemy.orm import Session
 from sqlalchemy import and_, func, or_, inspect, text
@@ -3049,5 +3050,18 @@ def seed(db:Session=Depends(get_db)):
 # The web app is served by the same FastAPI host as the API. This avoids a
 # separate frontend server and lets browser calls use one trusted origin.
 web_root = Path(os.getenv('WEB_ROOT', '/app/web'))
+
+@app.get('/manifest.webmanifest', include_in_schema=False)
+def web_manifest():
+    return FileResponse(web_root / 'manifest.webmanifest', media_type='application/manifest+json')
+
+@app.get('/sw.js', include_in_schema=False)
+def service_worker():
+    return FileResponse(
+        web_root / 'sw.js',
+        media_type='application/javascript',
+        headers={'Cache-Control': 'no-cache', 'Service-Worker-Allowed': '/'},
+    )
+
 if web_root.exists():
     app.mount('/', StaticFiles(directory=web_root, html=True), name='web')

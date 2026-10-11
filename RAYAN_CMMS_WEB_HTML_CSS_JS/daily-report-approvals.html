@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1"><meta name="theme-color" content="#062857"><meta name="mobile-web-app-capable" content="yes"><link rel="manifest" href="manifest.webmanifest">
+  <meta name="viewport" content="width=device-width, initial-scale=1"><meta name="theme-color" content="#062857"><meta name="mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-capable" content="yes"><link rel="manifest" href="manifest.webmanifest"><link rel="icon" href="icons/icon-192.png" type="image/png"><link rel="apple-touch-icon" href="icons/apple-touch-icon.png"><meta name="apple-mobile-web-app-title" content="RAYAN CMMS">
   <title>Daily Report Approvals | RAYAN CMMS</title>
   <link rel="stylesheet" href="css/approvals.css">
   <link rel="stylesheet" href="css/mobile-web-app.css?v=1">
@@ -10,6 +10,7 @@
 <body>
   <header><a href="index.html#daily-reports">← CMMS Dashboard</a><h1>Daily Report Approval Inbox</h1><span id="account-name"></span></header>
   <main><section class="panel"><h2>Submitted reports awaiting review</h2><table><thead><tr><th>Report No.</th><th>Date</th><th>Technician</th><th>Shift</th><th>Equipment</th><th>Actions</th></tr></thead><tbody id="approval-rows"><tr><td colspan="6">Loading reports…</td></tr></tbody></table></section><aside class="panel details"><h2>Approval details</h2><div id="approval-detail">Choose a submitted report to view its activity summary.</div></aside></main>
+  <script src="js/pwa.js?v=1"></script>
   <script src="js/api.js?v=5"></script>
   <script src="js/daily-report-approvals.js"></script>
 </body>
