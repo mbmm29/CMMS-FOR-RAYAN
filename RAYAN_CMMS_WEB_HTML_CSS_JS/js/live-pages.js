@@ -245,7 +245,7 @@ async function loadStore() {
     apiRequest('/sops'),
     apiRequest('/machine-records'),
     apiRequest('/technicians'),
-    (canMaintain() || isLubricationTechnician()) ? apiRequest('/pending-equipment') : Promise.resolve([]),
+    canMaintain() ? apiRequest('/pending-equipment') : Promise.resolve([]),
   ]);
   store = { plants, lines, equipment, orders, plans, sops, records, technicians, pending };
 }
@@ -279,8 +279,7 @@ function setHeader(page) {
     action.textContent = t(page === 'machine-records' ? 'Export' : spec.action);
   }
   document.querySelectorAll('.engineer-only').forEach((link) => {
-    const lubricationPage = isLubricationTechnician() && link.dataset.page === 'new-equipment';
-    link.hidden = !canMaintain() && !lubricationPage;
+    link.hidden = !canMaintain();
   });
   document.querySelectorAll('.nav-link').forEach((link) => link.classList.toggle('active', link.dataset.page === page));
   if (location.hash !== `#${page}`) location.hash = page;
@@ -2088,7 +2087,7 @@ render = function liveRender(page) {
     return;
   }
   let name = LIVE_PAGES.has(page) ? page : 'dashboard';
-  const lubricationPages = ['lubrication', 'work-orders', 'new-equipment', 'sop', 'pm-schedule'];
+  const lubricationPages = ['lubrication', 'work-orders', 'sop'];
   const maintenancePages = ['work-orders', 'pm-schedule', 'sop'];
   if (isLubricationTechnician()) {
     if (!lubricationPages.includes(name)) name = 'lubrication';
