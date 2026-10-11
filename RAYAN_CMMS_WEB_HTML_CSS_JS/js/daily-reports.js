@@ -174,12 +174,19 @@ document.addEventListener('DOMContentLoaded', async () => {
     return value ? String(value).slice(0, 5) : '';
   }
 
+  function lineNameOf(item, plantId) {
+    const lines = state.lines || [];
+    const line = lines.find((row) => item.line_id && row.line_id === item.line_id)
+      || lines.find((row) => String(row.line_number) === String(item.entered_line_number || '') && row.plant_id === (item.plant_id || plantId));
+    return line?.name || '';
+  }
+
   function openReview(report) {
     if (!report) return;
     state.selected = report;
     const activityRows = report.items.map((item, index) => `<tr>
       <td class="lube-no">${index + 1}</td>
-      <td class="lube-machine"><input value="${escapeHtml(item.equipment_code || item.equipment_id || '')}" readonly><input value="${escapeHtml(item.equipment_name || '')}" readonly><input value="${escapeHtml(item.entered_line_number || '')}" readonly></td>
+      <td class="lube-machine"><input value="${escapeHtml(item.equipment_code || item.equipment_id || '')}" readonly><input value="${escapeHtml(item.equipment_name || '')}" readonly><input value="${escapeHtml(item.entered_line_number || '')}" readonly><input value="${escapeHtml(lineNameOf(item, report.plantId))}" readonly></td>
       <td><input value="${escapeHtml(t(item.maintenance_type || ''))}" readonly>${item.wo_id ? `<small class="lube-order">${escapeHtml(item.wo_id)}</small>` : ''}</td>
       <td class="daily-work"><input value="${escapeHtml(item.failure_reason || '')}" readonly><input value="${escapeHtml(item.action_taken || '')}" readonly></td>
       <td><input value="${escapeHtml(reviewValue(item.maintenance_start))}" readonly></td>
@@ -372,6 +379,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     bindNavigation();
     emptyDetails();
     await loadTechnicians();
+    state.lines = await apiRequest('/lines');
     await loadReports();
     document.addEventListener('cmms-language', () => {
       renderTechnicianMenu();

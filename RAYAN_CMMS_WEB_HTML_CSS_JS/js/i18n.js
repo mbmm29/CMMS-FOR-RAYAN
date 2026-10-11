@@ -183,6 +183,7 @@ const CMMS_AR = {
   'No dated records': 'لا توجد تواريخ',
   'Plant': 'المصنع',
   'Line': 'الخط',
+  'Line name': 'اسم الخط',
   'All plants': 'كل المصانع',
   'All lines': 'كل الخطوط',
   'All equipment': 'كل المعدات',

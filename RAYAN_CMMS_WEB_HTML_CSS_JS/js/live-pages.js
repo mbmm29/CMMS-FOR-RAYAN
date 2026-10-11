@@ -85,6 +85,7 @@ function bindEquipmentCode(codeInput, nameInput) {
     const lineInput = row?.querySelector('[data-field="line"]');
     const lineNumber = equipmentLineNumber(found);
     if (lineInput && lineNumber) lineInput.value = lineNumber;
+    if (row) showDailyLineName(row);
     const plant = document.getElementById('daily-plant');
     if (plant && !plant.value && found.plant_id) plant.value = found.plant_id;
     return true;
@@ -1747,14 +1748,33 @@ function refreshDailyTotal() {
   if (node) node.textContent = total.toFixed(2);
 }
 
+function dailyLineMatch(number) {
+  const value = String(number || '').trim();
+  if (!value || !store?.lines) return null;
+  const plantId = document.getElementById('daily-plant')?.value || '';
+  const matches = store.lines.filter((line) => String(line.line_number) === value && (!plantId || line.plant_id === plantId));
+  return matches.length === 1 ? matches[0] : null;
+}
+
+function showDailyLineName(row) {
+  const number = row.querySelector('[data-field="line"]')?.value.trim() || '';
+  const name = row.querySelector('[data-field="line-name"]');
+  if (!name) return;
+  const line = dailyLineMatch(number);
+  name.value = line?.name || '';
+  row.dataset.lineId = line?.line_id || '';
+}
+
 function dailyRow(item = {}, index = 0) {
   const options = [`<option value="">${esc(t('Select'))}</option>`, ...DAILY_TYPES.map((type) => `<option value="${esc(type)}"${item.maintenance_type === type ? ' selected' : ''}>${esc(t(type))}</option>`)];
   const order = item.wo_id ? `<small class="lube-order">${esc(item.wo_id)}</small>` : '';
-  const line = store.lines.find((row) => row.line_id === item.line_id);
+  const plantId = document.getElementById('daily-plant')?.value || item.plant_id || '';
+  const line = store.lines.find((row) => row.line_id === item.line_id)
+    || store.lines.find((row) => String(row.line_number) === String(item.entered_line_number || '') && (!plantId || row.plant_id === plantId));
   const lineNumber = item.entered_line_number || (line?.line_number ?? '');
   const start = item.maintenance_start ? String(item.maintenance_start).slice(0, 5) : '';
   const end = item.maintenance_end ? String(item.maintenance_end).slice(0, 5) : '';
-  return `<tr data-wo="${esc(item.wo_id || '')}"><td class="lube-no">${index + 1}</td><td class="lube-machine"><input data-field="code" placeholder="${esc(t('Equipment number'))}" value="${esc(item.equipment_code || item.equipment_id || '')}"><input data-field="name" placeholder="${esc(t('Equipment name'))}" value="${esc(item.equipment_name || '')}"><input data-field="line" placeholder="${esc(t('Line'))}" value="${esc(lineNumber)}"></td><td class="lube-type"><select data-field="type">${options.join('')}</select>${order}</td><td class="daily-work"><input data-field="failure" placeholder="${esc(t('Failure Reason'))}" value="${esc(item.failure_reason || '')}"><input data-field="action" placeholder="${esc(t('Repair Actions'))}" value="${esc(item.action_taken || '')}"></td><td><input data-field="start" type="time" value="${esc(start)}"></td><td><input data-field="end" type="time" value="${esc(end)}"></td><td><input data-field="downtime" value="${item.downtime_h != null && item.downtime_h !== '' ? Number(item.downtime_h).toFixed(2) : ''}" readonly></td></tr>`;
+  return `<tr data-wo="${esc(item.wo_id || '')}"><td class="lube-no">${index + 1}</td><td class="lube-machine"><input data-field="code" placeholder="${esc(t('Equipment number'))}" value="${esc(item.equipment_code || item.equipment_id || '')}"><input data-field="name" placeholder="${esc(t('Equipment name'))}" value="${esc(item.equipment_name || '')}"><input data-field="line" placeholder="${esc(t('Line'))}" value="${esc(lineNumber)}"><input data-field="line-name" value="${esc(line?.name || '')}" placeholder="${esc(t('Line name'))}" readonly></td><td class="lube-type"><select data-field="type">${options.join('')}</select>${order}</td><td class="daily-work"><input data-field="failure" placeholder="${esc(t('Failure Reason'))}" value="${esc(item.failure_reason || '')}"><input data-field="action" placeholder="${esc(t('Repair Actions'))}" value="${esc(item.action_taken || '')}"></td><td><input data-field="start" type="time" value="${esc(start)}"></td><td><input data-field="end" type="time" value="${esc(end)}"></td><td><input data-field="downtime" value="${item.downtime_h != null && item.downtime_h !== '' ? Number(item.downtime_h).toFixed(2) : ''}" readonly></td></tr>`;
 }
 
 function dailyItemsFromForm() {
@@ -1809,6 +1829,7 @@ function fillKnownEquipmentRow(row) {
   if (!name.value) name.value = found.name || '';
   const lineNumber = equipmentLineNumber(found);
   if (line && lineNumber && !line.value) line.value = lineNumber;
+  showDailyLineName(row);
   const plant = document.getElementById('daily-plant');
   if (plant && !plant.value && found.plant_id) plant.value = found.plant_id;
 }
@@ -1825,6 +1846,8 @@ function bindDailyRow(row) {
   const name = row.querySelector('[data-field="name"]');
   if (code && name) bindEquipmentCode(code, name);
   fillKnownEquipmentRow(row);
+  row.querySelector('[data-field="line"]')?.addEventListener('input', () => showDailyLineName(row));
+  showDailyLineName(row);
   row.querySelector('[data-field="type"]')?.addEventListener('change', () => syncDailyOrder(row));
 }
 
@@ -1945,6 +1968,9 @@ async function drawDailyReport() {
     refreshDailyTotal();
   });
   refreshDailyTotal();
+  document.getElementById('daily-plant')?.addEventListener('change', () => {
+    document.querySelectorAll('#daily-rows tr').forEach(showDailyLineName);
+  });
   document.getElementById('daily-date')?.addEventListener('change', (event) => {
     const found = dailyCache.find((row) => String(row.report_date).slice(0, 10) === event.target.value && row.status !== 'Returned');
     if (found && found.report_id !== document.getElementById('daily-form')?.dataset.reportId) {

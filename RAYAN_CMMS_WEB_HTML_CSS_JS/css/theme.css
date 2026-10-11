@@ -293,6 +293,7 @@ body .header-actions .ghost{background:transparent;color:#f4f8ff;border:1px soli
 .daily-paper .daily-work input,.daily-paper .lube-machine input{display:block}
 body .daily-paper .lube-table .lube-machine input + input,
 body .daily-paper .lube-table .daily-work input + input{border-top:1px solid #2a5287}
+body .daily-paper .lube-machine input[data-field="line-name"]{background:#f3f7ff;font-weight:700}
 .daily-parts{margin-top:14px}
 .daily-parts h3{margin:0;color:#102d60;font-size:13px}
 .daily-parts .lube-list-head{margin-bottom:6px}
