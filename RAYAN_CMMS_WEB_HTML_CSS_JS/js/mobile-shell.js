@@ -42,7 +42,7 @@
       if (event.key === 'Escape') close();
     });
     window.addEventListener('resize', () => {
-      if (window.innerWidth > 760) close();
+      if (window.innerWidth > 980) close();
     });
 
     document.body.append(backdrop, toggle);

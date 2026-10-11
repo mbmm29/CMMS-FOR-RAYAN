@@ -5,7 +5,7 @@
   body.mobile-shell-ready{overflow-x:hidden}
   .mobile-menu-button{position:fixed;z-index:42;top:13px;left:13px;display:grid;width:43px;height:43px;padding:11px 10px;border:1px solid #c7d7ef;border-radius:12px;background:#fff;box-shadow:0 7px 20px #06285728;gap:5px;cursor:pointer;transition:transform .2s ease,background .2s ease}
   .mobile-menu-button span{display:block;height:2px;border-radius:10px;background:#0b356f;transition:transform .2s ease,opacity .2s ease}
-  body.sidebar-open .mobile-menu-button{background:#e9f2ff;transform:translateX(226px)}
+  body.sidebar-open .mobile-menu-button{background:#e9f2ff}
   body.sidebar-open .mobile-menu-button span:nth-child(1){transform:translateY(7px) rotate(45deg)}body.sidebar-open .mobile-menu-button span:nth-child(2){opacity:0}body.sidebar-open .mobile-menu-button span:nth-child(3){transform:translateY(-7px) rotate(-45deg)}
   .mobile-sidebar-backdrop{position:fixed;z-index:29;inset:0;border:0;background:#01173788;opacity:0;pointer-events:none;transition:opacity .22s ease;cursor:pointer}.sidebar-open .mobile-sidebar-backdrop{opacity:1;pointer-events:auto}
   .shell .sidebar,.app .sidebar{position:fixed;z-index:35;inset:0 auto 0 0;width:min(82vw,294px);min-width:0;padding-top:18px;transform:translateX(-105%);transition:transform .25s cubic-bezier(.2,.8,.2,1);box-shadow:12px 0 35px #00183a45}.sidebar-open .shell .sidebar,.sidebar-open .app .sidebar{transform:translateX(0)}
@@ -19,4 +19,67 @@
 }
 
 @media (max-width:380px){.app .date-filter{display:none}.shell .metric b{font-size:22px}.shell .metric .trend{font-size:9px}.tool-bar a,.tool-bar button{padding:7px 4px}.form-actions button{font-size:10px}}
+
+@media (max-width:980px){
+  html,body,.shell,.app{max-width:100%;overflow-x:hidden}
+  html body .shell .sidebar,
+  html[dir="rtl"] body .shell .sidebar,
+  html body .app .sidebar,
+  html[dir="rtl"] body .app .sidebar{
+    position:fixed;top:0;bottom:0;left:auto;right:auto;inset-inline-start:0;width:min(84vw,300px);min-width:0;margin:0;
+    transform:translate3d(-105%,0,0);z-index:40
+  }
+  html[dir="rtl"] body .shell .sidebar,
+  html[dir="rtl"] body .app .sidebar{transform:translate3d(105%,0,0)}
+  html body.sidebar-open .shell .sidebar,
+  html body.sidebar-open .app .sidebar,
+  html[dir="rtl"] body.sidebar-open .shell .sidebar,
+  html[dir="rtl"] body.sidebar-open .app .sidebar{transform:translate3d(0,0,0)}
+  html body .mobile-menu-button{
+    top:12px;left:auto;right:auto;inset-inline-start:12px;transform:none
+  }
+  html body.sidebar-open .mobile-menu-button{
+    inset-inline-start:min(84vw,300px);margin-inline-start:8px;transform:none
+  }
+  html body .shell .content,
+  html[dir="rtl"] body .shell .content,
+  html[dir="rtl"] body .content,
+  html body .app .main-content,
+  html[dir="rtl"] body .app .main-content,
+  html[dir="rtl"] body .main-content{
+    margin-left:0;margin-right:0;margin-inline:0;width:auto;max-width:100%;min-width:0;
+    padding:72px 12px 28px
+  }
+  html body .shell .nav-link,
+  html body .app .nav-item{text-align:start}
+  html body .page-header,
+  html body .app .topbar{flex-direction:column;align-items:stretch}
+  html body .header-actions,
+  html body .app .topbar-actions{display:flex;flex-wrap:wrap;width:100%;gap:8px}
+  html body .header-actions .primary,
+  html body .header-actions button,
+  html body .app .new-report-button{flex:1 1 140px;min-height:44px}
+  html body .workspace,
+  html body .workspace.lube-board,
+  html body .kpi-layout,
+  html body .split,
+  html body .app .reports-layout{grid-template-columns:minmax(0,1fr)}
+  html body .workspace,
+  html body .panel,
+  html body .lube-paper,
+  html body .job-order{min-width:0;max-width:100%}
+  html body .workspace .panel:has(table),
+  html body .table-wrap,
+  html body .table-container,
+  html body .sheet-scroll{max-width:100%;overflow-x:auto;-webkit-overflow-scrolling:touch}
+  html body .sheet-scroll .lube-table,
+  html body .workspace .panel table,
+  html body .table-container table{min-width:680px}
+  html body .lube-paper input,
+  html body .lube-paper select,
+  html body .lube-paper textarea,
+  html body .job-order input,
+  html body .job-order select,
+  html body .job-order textarea{font-size:16px}
+}
 @media (prefers-reduced-motion:reduce){*,*::before,*::after{scroll-behavior:auto!important;transition-duration:.01ms!important;animation-duration:.01ms!important}}

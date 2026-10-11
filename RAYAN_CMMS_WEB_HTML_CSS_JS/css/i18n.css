@@ -18,7 +18,6 @@ html[dir="rtl"] .nav-link,html[dir="rtl"] .nav-item{text-align:right}
 html[dir="rtl"] .data-table th,html[dir="rtl"] .data-table td{text-align:right}
 html[dir="rtl"] .profile .logout-button,html[dir="rtl"] .signout-button{margin-left:0;margin-right:auto}
 html[dir="rtl"] .report-link{text-align:right}
-@media(max-width:760px){
-  html[dir="rtl"] .content{margin-right:62px}
-  html[dir="rtl"] .main-content{margin-right:0}
+@media(max-width:980px){
+  html[dir="rtl"] .content,html[dir="rtl"] .main-content{margin-left:0;margin-right:0}
 }
