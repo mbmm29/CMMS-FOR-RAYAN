@@ -84,7 +84,10 @@ function bindEquipmentCode(codeInput, nameInput) {
     const row = codeInput.closest('tr');
     const lineInput = row?.querySelector('[data-field="line"]');
     const lineNumber = equipmentLineNumber(found);
-    if (lineInput && lineNumber) lineInput.value = lineNumber;
+    if (lineInput && lineNumber) {
+      lineInput.dataset.resolved = '';
+      lineInput.value = lineNumber;
+    }
     if (row) showDailyLineName(row);
     const plant = document.getElementById('daily-plant');
     if (plant && !plant.value && found.plant_id) plant.value = found.plant_id;
@@ -1783,21 +1786,39 @@ function refreshDailyTotal() {
   if (node) node.textContent = total.toFixed(2);
 }
 
-function dailyLineMatch(number) {
-  const value = String(number || '').trim();
-  if (!value || !store?.lines) return null;
+function dailyPlantLines() {
   const plantId = document.getElementById('daily-plant')?.value || '';
-  const matches = store.lines.filter((line) => String(line.line_number) === value && (!plantId || line.plant_id === plantId));
-  return matches.length === 1 ? matches[0] : null;
+  if (!plantId || !store?.lines) return [];
+  return store.lines.filter((line) => line.plant_id === plantId);
+}
+
+function applyDailyLine(row, number) {
+  const input = row.querySelector('[data-field="line"]');
+  if (!input) return;
+  const value = String(number ?? '').trim();
+  const lines = dailyPlantLines();
+  const exact = lines.filter((line) => String(line.line_number) === value);
+  const longer = lines.some((line) => {
+    const text = String(line.line_number);
+    return text !== value && text.startsWith(value);
+  });
+  const named = exact.length === 1 && !longer && exact[0].name ? exact[0] : null;
+  row.dataset.lineNumber = value;
+  row.dataset.lineId = exact.length === 1 ? (exact[0].line_id || '') : '';
+  if (named) {
+    input.value = named.name;
+    input.dataset.resolved = '1';
+    return;
+  }
+  input.dataset.resolved = '';
+  if (input.value !== value) input.value = value;
 }
 
 function showDailyLineName(row) {
-  const number = row.querySelector('[data-field="line"]')?.value.trim() || '';
-  const name = row.querySelector('[data-field="line-name"]');
-  if (!name) return;
-  const line = dailyLineMatch(number);
-  name.value = line?.name || '';
-  row.dataset.lineId = line?.line_id || '';
+  const input = row.querySelector('[data-field="line"]');
+  if (!input) return;
+  const number = input.dataset.resolved === '1' ? (row.dataset.lineNumber || '') : input.value.trim();
+  applyDailyLine(row, number);
 }
 
 function dailyRow(item = {}, index = 0) {
@@ -1807,9 +1828,10 @@ function dailyRow(item = {}, index = 0) {
   const line = store.lines.find((row) => row.line_id === item.line_id)
     || store.lines.find((row) => String(row.line_number) === String(item.entered_line_number || '') && (!plantId || row.plant_id === plantId));
   const lineNumber = item.entered_line_number || (line?.line_number ?? '');
+  const lineLabel = line?.name || lineNumber;
   const start = item.maintenance_start ? String(item.maintenance_start).slice(0, 5) : '';
   const end = item.maintenance_end ? String(item.maintenance_end).slice(0, 5) : '';
-  return `<tr data-wo="${esc(item.wo_id || '')}"><td class="lube-no">${index + 1}</td><td class="lube-machine"><input data-field="code" placeholder="${esc(t('Equipment number'))}" value="${esc(item.equipment_code || item.equipment_id || '')}"><input data-field="name" placeholder="${esc(t('Equipment name'))}" value="${esc(item.equipment_name || '')}"><input data-field="line" placeholder="${esc(t('Line'))}" value="${esc(lineNumber)}"><input data-field="line-name" value="${esc(line?.name || '')}" placeholder="${esc(t('Line name'))}" readonly></td><td class="lube-type"><select data-field="type">${options.join('')}</select>${order}</td><td class="daily-work"><input data-field="failure" placeholder="${esc(t('Failure Reason'))}" value="${esc(item.failure_reason || '')}"><input data-field="action" placeholder="${esc(t('Repair Actions'))}" value="${esc(item.action_taken || '')}"></td><td><input data-field="start" type="time" value="${esc(start)}"></td><td><input data-field="end" type="time" value="${esc(end)}"></td><td><input data-field="downtime" value="${item.downtime_h != null && item.downtime_h !== '' ? Number(item.downtime_h).toFixed(2) : ''}" readonly></td></tr>`;
+  return `<tr data-wo="${esc(item.wo_id || '')}" data-line-number="${esc(lineNumber)}" data-line-id="${esc(line?.line_id || '')}"><td class="lube-no">${index + 1}</td><td class="lube-machine"><input data-field="code" placeholder="${esc(t('Equipment number'))}" value="${esc(item.equipment_code || item.equipment_id || '')}"><input data-field="name" placeholder="${esc(t('Equipment name'))}" value="${esc(item.equipment_name || '')}"><input data-field="line" data-resolved="${line?.name ? '1' : ''}" placeholder="${esc(t('Line'))}" value="${esc(lineLabel)}"></td><td class="lube-type"><select data-field="type">${options.join('')}</select>${order}</td><td class="daily-work"><input data-field="failure" placeholder="${esc(t('Failure Reason'))}" value="${esc(item.failure_reason || '')}"><input data-field="action" placeholder="${esc(t('Repair Actions'))}" value="${esc(item.action_taken || '')}"></td><td><input data-field="start" type="time" value="${esc(start)}"></td><td><input data-field="end" type="time" value="${esc(end)}"></td><td><input data-field="downtime" value="${item.downtime_h != null && item.downtime_h !== '' ? Number(item.downtime_h).toFixed(2) : ''}" readonly></td></tr>`;
 }
 
 function dailyItemsFromForm() {
@@ -1825,8 +1847,8 @@ function dailyItemsFromForm() {
     if (!code || !name || !get('type')) throw new Error('Each activity needs an equipment number, a name, and a maintenance type.');
     const start = get('start') || null;
     const end = get('end') || null;
-    const lineNumber = get('line');
-    const line = store.lines.find((item) => item.plant_id === plantId && String(item.line_number) === lineNumber);
+    const lineNumber = row.dataset.lineNumber || get('line');
+    const line = store.lines.find((item) => item.plant_id === plantId && String(item.line_number) === String(lineNumber));
     const known = equipmentByCode(code);
     items.push({
       equipment_id: known ? known.equipment_id : code,
@@ -1863,7 +1885,10 @@ function fillKnownEquipmentRow(row) {
   if (!code.value) code.value = found.equipment_id || '';
   if (!name.value) name.value = found.name || '';
   const lineNumber = equipmentLineNumber(found);
-  if (line && lineNumber && !line.value) line.value = lineNumber;
+  if (line && lineNumber && !row.dataset.lineNumber && !line.value) {
+    line.dataset.resolved = '';
+    line.value = lineNumber;
+  }
   showDailyLineName(row);
   const plant = document.getElementById('daily-plant');
   if (plant && !plant.value && found.plant_id) plant.value = found.plant_id;
@@ -1881,7 +1906,23 @@ function bindDailyRow(row) {
   const name = row.querySelector('[data-field="name"]');
   if (code && name) bindEquipmentCode(code, name);
   fillKnownEquipmentRow(row);
-  row.querySelector('[data-field="line"]')?.addEventListener('input', () => showDailyLineName(row));
+  const lineInput = row.querySelector('[data-field="line"]');
+  lineInput?.addEventListener('beforeinput', (event) => {
+    if (lineInput.dataset.resolved !== '1' || !row.dataset.lineNumber) return;
+    if (event.inputType === 'insertText') {
+      event.preventDefault();
+      lineInput.dataset.resolved = '';
+      applyDailyLine(row, `${row.dataset.lineNumber}${event.data || ''}`);
+    } else if (event.inputType === 'deleteContentBackward' || event.inputType === 'deleteContentForward') {
+      event.preventDefault();
+      lineInput.dataset.resolved = '';
+      applyDailyLine(row, String(row.dataset.lineNumber).slice(0, -1));
+    }
+  });
+  lineInput?.addEventListener('input', () => {
+    lineInput.dataset.resolved = '';
+    applyDailyLine(row, lineInput.value.trim());
+  });
   showDailyLineName(row);
   row.querySelector('[data-field="type"]')?.addEventListener('change', () => syncDailyOrder(row));
 }

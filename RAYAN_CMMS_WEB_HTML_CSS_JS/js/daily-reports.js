@@ -186,7 +186,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     state.selected = report;
     const activityRows = report.items.map((item, index) => `<tr>
       <td class="lube-no">${index + 1}</td>
-      <td class="lube-machine"><input value="${escapeHtml(item.equipment_code || item.equipment_id || '')}" readonly><input value="${escapeHtml(item.equipment_name || '')}" readonly><input value="${escapeHtml(item.entered_line_number || '')}" readonly><input value="${escapeHtml(lineNameOf(item, report.plantId))}" readonly></td>
+      <td class="lube-machine"><input value="${escapeHtml(item.equipment_code || item.equipment_id || '')}" readonly><input value="${escapeHtml(item.equipment_name || '')}" readonly><input value="${escapeHtml(lineNameOf(item, report.plantId) || item.entered_line_number || '')}" readonly></td>
       <td><input value="${escapeHtml(t(item.maintenance_type || ''))}" readonly>${item.wo_id ? `<small class="lube-order">${escapeHtml(item.wo_id)}</small>` : ''}</td>
       <td class="daily-work"><input value="${escapeHtml(item.failure_reason || '')}" readonly><input value="${escapeHtml(item.action_taken || '')}" readonly></td>
       <td><input value="${escapeHtml(reviewValue(item.maintenance_start))}" readonly></td>
