@@ -253,9 +253,7 @@ async function loadStore() {
 function setHeader(page) {
   const spec = pages[page] || pages.dashboard;
   document.getElementById('page-title').textContent = t(spec.title);
-  const subtitle = page === 'new-equipment' && !canMaintain()
-    ? 'Equipment waiting for the maintenance engineer to approve.'
-    : spec.sub;
+  const subtitle = spec.sub;
   document.getElementById('page-subtitle').textContent = t(subtitle);
   const action = document.getElementById('primary-action');
   const draft = document.getElementById('draft-action');
@@ -270,10 +268,8 @@ function setHeader(page) {
     action.hidden = getSavedUser()?.role === 'ADMINISTRATOR_VIEWER';
     action.textContent = t('Save report');
   } else if (isTechnician()) {
-    action.hidden = page !== 'equipment';
-    action.textContent = t('+ Add Equipment');
-  } else if (page === 'new-equipment') {
     action.hidden = true;
+    action.textContent = t('+ Add Equipment');
   } else {
     action.hidden = false;
     action.textContent = t(page === 'machine-records' ? 'Export' : spec.action);
@@ -325,11 +321,11 @@ function formPanel(title, fields) {
 }
 
 function field(label, html) {
-  return `<label>${esc(label)}${html}</label>`;
+  return `<label>${esc(t(label))}${html}</label>`;
 }
 
 function selectField(name, options, required = true) {
-  return `<select name="${name}"${required ? ' required' : ''}><option value="">Select</option>${options}</select>`;
+  return `<select name="${name}"${required ? ' required' : ''}><option value="">${esc(t('Select'))}</option>${options}</select>`;
 }
 
 function equipmentOptions() {
@@ -1147,7 +1143,31 @@ function plantForm() {
   ].join(''));
 }
 
+function equipmentTabs() {
+  const pending = (store.pending || []).length;
+  const labels = ['All Equipment', 'From reports', 'Critical Assets', 'Out of Service', 'Under Maintenance'];
+  return `<div class="tabs">${labels.map((label) => {
+    const text = label === 'From reports' ? `${t(label)} (${pending})` : t(label);
+    return `<button class="tab${ui.tab === label ? ' active' : ''}" data-tab="${esc(label)}" type="button">${esc(text)}</button>`;
+  }).join('')}</div>`;
+}
+
+function equipmentDetail(selected) {
+  const capacity = selected?.capacity == null ? '—' : `${selected.capacity}${selected.capacity_unit ? ` ${selected.capacity_unit}` : ''}`;
+  return detailPanel('Equipment Details', selected?.status || '—', selected?.equipment_id || '—', selected?.name || '', [
+    ['Category', selected?.equipment_type], ['Location', placeOf(selected)], ['Area', selected?.area],
+    ['Manufacturer', selected?.manufacturer], ['Model', selected?.model], ['Serial number', selected?.serial_number],
+    ['Criticality', selected?.criticality], ['Condition', selected?.condition], ['Capacity', capacity],
+    ['Motor power (kW)', selected?.motor_power_kw ?? '—'], ['Operating hours', selected?.operating_hours ?? '—'],
+    ['Notes', selected?.notes],
+  ]);
+}
+
 function drawEquipment() {
+  if (ui.tab === 'From reports') {
+    drawEquipmentFromReports();
+    return;
+  }
   const rows = visibleEquipment().filter((item) => {
     if (ui.tab === 'Critical Assets') return item.criticality === 'A';
     if (ui.tab === 'Out of Service') return item.status === 'Out of Service';
@@ -1161,17 +1181,13 @@ function drawEquipment() {
     ['Operational', String(all.filter((item) => item.status === 'Running' || item.status === 'Operational').length), '✓', 'green', ''],
     ['Under Maintenance', String(all.filter((item) => item.status === 'Under Maintenance').length), '⚒', 'orange', ''],
     ['Out of Service', String(all.filter((item) => item.status === 'Out of Service').length), '×', 'red', ''],
-    ['Plants', String(new Set(all.map((item) => item.plant_id).filter(Boolean)).size), '▣', 'purple', ''],
+    ['From reports', String((store.pending || []).length), '＋', 'purple', ''],
     ['Critical Assets', String(all.filter((item) => item.criticality === 'A').length), '◈', 'red', ''],
   ]);
   const body = rows.map((item) => `<tr data-row="${esc(item.equipment_id)}" class="${selected && selected.equipment_id === item.equipment_id ? 'selected' : ''}">${cell(esc(item.equipment_id), true)}${cell(esc(item.name))}${cell(esc(item.equipment_type))}${cell(esc(placeOf(item)))}${cell(liveBadge(item.status))}${cell(liveBadge(item.condition || '—'))}${cell(liveBadge(item.criticality))}</tr>`);
-  const detail = ui.mode === 'create' ? equipmentForm() : detailPanel('Equipment Details', selected?.status || '—', selected?.equipment_id || '—', selected?.name || '', [
-    ['Category', selected?.equipment_type], ['Location', placeOf(selected)], ['Manufacturer', selected?.manufacturer],
-    ['Model', selected?.model], ['Criticality', selected?.criticality], ['Condition', selected?.condition],
-    ['Operating hours', selected?.operating_hours ?? '—'],
-  ]);
+  const detail = ui.mode === 'create' ? equipmentForm() : equipmentDetail(selected);
   document.getElementById('workspace').className = 'workspace';
-  document.getElementById('workspace').innerHTML = `<section class="panel">${filtersHtml()}${tabsHtml(['All Equipment', 'Critical Assets', 'Out of Service', 'Under Maintenance'])}${tableShell(['Equipment Code', 'Equipment Name', 'Category', 'Location (Plant / Line)', 'Status', 'Condition', 'Criticality'], body, shown(rows.length, all.length, 'equipment'))}</section>${detail}`;
+  document.getElementById('workspace').innerHTML = `<section class="panel">${filtersHtml()}${equipmentTabs()}${tableShell(['Equipment Code', 'Equipment Name', 'Category', 'Location (Plant / Line)', 'Status', 'Condition', 'Criticality'], body, shown(rows.length, all.length, 'equipment'))}</section>${detail}`;
   bindFilters();
   bindRows();
   bindForm();
@@ -1302,6 +1318,10 @@ function planForm() {
   ].join(''));
 }
 
+function equipmentChoice(values, selected = '') {
+  return values.map((type) => `<option value="${esc(type)}"${type === selected ? ' selected' : ''}>${esc(t(type))}</option>`).join('');
+}
+
 function equipmentForm() {
   const plants = store.plants.map((plant) => `<option value="${esc(plant.plant_id)}">${esc(plant.name)}</option>`).join('');
   return formPanel('Add Equipment', [
@@ -1309,9 +1329,19 @@ function equipmentForm() {
     field('Name', '<input name="name" required>'),
     field('Category', '<input name="equipment_type" required>'),
     field('Plant', selectField('plant_id', plants, true)),
-    field('Line number', '<select name="line_id" required><option value="">Select a plant first</option></select>'),
-    field('Status', selectField('status', ['Running', 'Under Maintenance', 'Out of Service'].map((type) => `<option>${type}</option>`).join(''))),
-    field('Criticality', selectField('criticality', ['A', 'B', 'C'].map((type) => `<option${type === 'B' ? ' selected' : ''}>${type}</option>`).join(''))),
+    field('Line number', '<select name="line_id" required><option value=""></option></select>'),
+    field('Area', '<input name="area">'),
+    field('Manufacturer', '<input name="manufacturer">'),
+    field('Model', '<input name="model">'),
+    field('Serial number', '<input name="serial_number">'),
+    field('Status', selectField('status', equipmentChoice(['Running', 'Under Maintenance', 'Out of Service'], 'Running'))),
+    field('Criticality', selectField('criticality', equipmentChoice(['A', 'B', 'C'], 'B'))),
+    field('Condition', selectField('condition', equipmentChoice(['Good', 'Fair', 'Poor']), false)),
+    field('Capacity', '<input name="capacity" type="number" min="0" step="any">'),
+    field('Capacity unit', '<input name="capacity_unit">'),
+    field('Motor power (kW)', '<input name="motor_power_kw" type="number" min="0" step="any">'),
+    field('Operating hours', '<input name="operating_hours" type="number" min="0" step="any">'),
+    field('Notes', '<textarea name="notes" rows="3"></textarea>'),
   ].join(''));
 }
 
@@ -1321,7 +1351,7 @@ function bindEquipmentLines(form) {
   if (!plantSelect || !lineSelect) return;
   const fill = () => {
     const lines = store.lines.filter((line) => line.plant_id === plantSelect.value).sort((a, b) => Number(a.line_number) - Number(b.line_number));
-    lineSelect.innerHTML = `<option value="">${plantSelect.value ? 'Select line number' : 'Select a plant first'}</option>${lines.map((line) => {
+    lineSelect.innerHTML = `<option value="">${esc(t(plantSelect.value ? 'Select line number' : 'Select a plant first'))}</option>${lines.map((line) => {
       const label = lineText(line);
       const extra = line.name && line.name !== label ? ` — ${line.name}` : '';
       return `<option value="${esc(line.line_id)}">${esc(label + extra)}</option>`;
@@ -1429,6 +1459,9 @@ function bindForm() {
         await apiRequest('/pm', { method: 'POST', body: JSON.stringify(data) });
       } else if (ui.page === 'equipment') {
         if (!data.plant_id || !data.line_id) throw new Error('Select a plant and then a line number.');
+        ['capacity', 'motor_power_kw', 'operating_hours'].forEach((key) => {
+          if (data[key] != null) data[key] = Number(data[key]);
+        });
         await apiRequest('/equipment', { method: 'POST', body: JSON.stringify(data) });
       } else if (ui.page === 'plants') {
         data.active = true;
@@ -1467,11 +1500,13 @@ function pendingSource(row) {
   return t('Report');
 }
 
-function drawNewEquipment() {
+function drawEquipmentFromReports() {
   const rows = store.pending || [];
   const selected = rows.find((row) => String(row.id) === String(ui.rowKey)) || rows[0];
+  const all = visibleEquipment();
   document.getElementById('metric-grid').innerHTML = metrics([
-    ['New equipment', String(rows.length), '＋', 'orange', ''],
+    ['Total Equipment', String(all.length), '▣', 'blue', ''],
+    ['From reports', String(rows.length), '＋', 'orange', ''],
     ['Pending Approval', String(rows.length), '⌛', 'purple', ''],
   ]);
   const body = rows.map((row) => {
@@ -1479,12 +1514,12 @@ function drawNewEquipment() {
     return `<tr data-row="${esc(row.id)}" class="${selected && selected.id === row.id ? 'selected' : ''}">${cell(esc(row.equipment_code), true)}${cell(esc(row.equipment_name))}${cell(esc(plant))}${cell(esc(row.line_number || '—'))}${cell(esc(technicianName(row.technician_id)))}</tr>`;
   });
   const reviewForm = `<form class="live-form" id="pending-review"><label>${esc(t('Equipment name'))}<input id="pending-name" value="${esc(selected?.equipment_name || '')}" required></label><label>${esc(t('Plant'))}<select id="pending-plant"><option value="">${esc(t('Select'))}</option>${store.plants.map((plant) => `<option value="${esc(plant.plant_id)}"${plant.plant_id === selected?.plant_id ? ' selected' : ''}>${esc(plant.name)}</option>`).join('')}</select></label><label>${esc(t('Line number'))}<select id="pending-line"><option value="">${esc(t('Select'))}</option></select></label><div class="summary-row"><span>${esc(t('Technician'))}</span><b>${esc(technicianName(selected?.technician_id))}</b></div><div class="summary-row"><span>${esc(t('Report'))}</span><b>${esc(pendingSource(selected))} ${esc(selected?.report_id || '')}</b></div></form><div class="assign-block"><button class="detail-button primary" type="button" id="approve-equipment">${esc(t('Approve'))}</button><button class="detail-button" type="button" id="reject-equipment">${esc(t('Reject'))}</button><p id="pending-error" class="form-error"></p></div>`;
-  const reviewView = `<div class="summary-row"><span>${esc(t('Equipment name'))}</span><b>${esc(selected?.equipment_name || '—')}</b></div><div class="summary-row"><span>${esc(t('Technician'))}</span><b>${esc(technicianName(selected?.technician_id))}</b></div><div class="summary-row"><span>${esc(t('Report'))}</span><b>${esc(pendingSource(selected))} ${esc(selected?.report_id || '')}</b></div>`;
-  const review = selected ? (canMaintain() ? reviewForm : reviewView) : `<p class="live-note">${esc(t('No new equipment'))}</p>`;
-  const detail = `<aside class="panel detail pending-review"><h2>${esc(t('New equipment'))}</h2><div class="detail-top"><div class="machine">⚙</div>${selected ? liveBadge('Pending') : ''}<h3>${esc(selected?.equipment_code || '—')}</h3></div>${review}</aside>`;
+  const review = selected ? reviewForm : `<p class="live-note">${esc(t('No new equipment'))}</p>`;
+  const detail = ui.mode === 'create' ? equipmentForm() : `<aside class="panel detail pending-review"><h2>${esc(t('From reports'))}</h2><div class="detail-top"><div class="machine">⚙</div>${selected ? liveBadge('Pending') : ''}<h3>${esc(selected?.equipment_code || '—')}</h3></div>${review}</aside>`;
   document.getElementById('workspace').className = 'workspace';
-  document.getElementById('workspace').innerHTML = `<section class="panel">${tableShell(['Code', 'Name', 'Plant', 'Line No.', 'Technician'], body, shown(rows.length, rows.length, 'new equipment'))}</section>${detail}`;
+  document.getElementById('workspace').innerHTML = `<section class="panel">${equipmentTabs()}${tableShell(['Code', 'Name', 'Plant', 'Line No.', 'Technician'], body, shown(rows.length, rows.length, 'new equipment'))}</section>${detail}`;
   bindRows();
+  bindForm();
   const pendingPlant = document.getElementById('pending-plant');
   const pendingLine = document.getElementById('pending-line');
   const fillPendingLines = () => {
@@ -1521,7 +1556,8 @@ async function decidePending(row, decision) {
     store = null;
     ui.rowKey = '';
     toast(decision === 'approve' ? 'Equipment added to the plant register.' : 'Equipment was rejected.');
-    await paint('new-equipment');
+    ui.tab = 'From reports';
+    await paint('equipment');
   } catch (err) {
     if (error) error.textContent = err.message || 'Could not update this equipment.';
   }
@@ -2014,8 +2050,7 @@ async function draw(page) {
   else if (page === 'work-orders') drawWorkOrders();
   else if (page === 'pm-schedule') await drawPlans();
   else if (page === 'plants') drawPlants();
-  else if (page === 'new-equipment') drawNewEquipment();
-  else if (page === 'equipment') drawEquipment();
+  else if (page === 'new-equipment' || page === 'equipment') drawEquipment();
   else if (page === 'sop') drawSops();
   else if (page === 'lubrication') await drawLubrication();
   else if (page === 'daily-reports') await drawDailyReport();
@@ -2089,15 +2124,16 @@ render = function liveRender(page) {
   let name = LIVE_PAGES.has(page) ? page : 'dashboard';
   const lubricationPages = ['lubrication', 'work-orders', 'sop'];
   const maintenancePages = ['work-orders', 'pm-schedule', 'sop'];
+  const openReports = name === 'new-equipment' && canMaintain();
   if (isLubricationTechnician()) {
     if (!lubricationPages.includes(name)) name = 'lubrication';
   } else if (getSavedUser()?.role === 'TECHNICIAN') {
     if (!maintenancePages.includes(name)) name = 'work-orders';
-  } else if (name === 'new-equipment' && !canMaintain()) {
-    name = 'dashboard';
+  } else if (name === 'new-equipment' || name === 'equipment') {
+    name = canMaintain() ? 'equipment' : 'dashboard';
   }
   if (name !== ui.page) {
-    ui.tab = DEFAULT_TAB[name];
+    ui.tab = openReports ? 'From reports' : DEFAULT_TAB[name];
     ui.rowKey = '';
     ui.mode = 'view';
   }

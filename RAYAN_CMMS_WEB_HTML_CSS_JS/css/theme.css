@@ -235,7 +235,7 @@ body .lube-paper .lube-table input,body .lube-paper .lube-table select{height:30
 .lube-foot{display:flex;justify-content:space-between;margin:8px 0 0;color:#31517f;font-size:11px;font-weight:700}
 .lube-help{margin:8px 0 0;color:#31517f;font-size:12px}
 .nav-link[hidden],.nav-item[hidden]{display:none!important}
-body[data-live-page="new-equipment"] .detail.pending-review{max-height:calc(100vh - 220px);overflow:auto}
+body[data-live-page="equipment"] .panel.detail,body[data-live-page="new-equipment"] .detail.pending-review{max-height:calc(100vh - 220px);overflow:auto}
 .pending-review .live-form{display:flex;flex-direction:column;gap:8px;margin-top:8px}
 .pending-review .assign-block{display:flex;flex-wrap:wrap;gap:8px;margin-top:10px}
 .pending-review .detail-button{width:auto;flex:1}
