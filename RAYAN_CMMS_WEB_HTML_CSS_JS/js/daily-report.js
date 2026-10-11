@@ -359,6 +359,20 @@ document.addEventListener("DOMContentLoaded", () => {
         allReports.forEach(
             report => {
 
+                const status =
+                    normalizeStatus(
+                        report.status
+                    );
+
+                if (
+                    status !== "Approved" &&
+                    status !== "Completed"
+                ) {
+
+                    return;
+
+                }
+
                 const downtime =
                     Number(
                         report.total_downtime_h ||

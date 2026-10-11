@@ -96,8 +96,9 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   function updateStatistics() {
     const reports = reportsForScope();
-    const totalDown = reports.reduce((sum, report) => sum + report.downtime, 0);
-    const average = reports.length ? totalDown / reports.length : 0;
+    const accepted = reports.filter(report => report.status === 'Approved');
+    const totalDown = accepted.reduce((sum, report) => sum + report.downtime, 0);
+    const average = accepted.length ? totalDown / accepted.length : 0;
     const parts = reports.reduce((sum, report) => sum + reviewParts((report.items || []).find(item => item.spare_parts)?.spare_parts || '').length, 0);
     setText('totalReports', reports.length);
     setText('completedReports', reports.filter(report => report.status === 'Approved').length);

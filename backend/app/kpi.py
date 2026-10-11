@@ -165,8 +165,12 @@ def compute_kpi(db: Session, plant_id=None, line_id=None, equipment_id=None, tec
             and equipment_ok(row.equipment_id)
         ]
         covered_orders = {row.wo_id for row in window_items if row.wo_id}
+        accepted_items = [
+            row for row in window_items
+            if report_by_id[row.report_id].status == 'Approved'
+        ]
         hours = _blank_hours()
-        for row in window_items:
+        for row in accepted_items:
             kind = row.maintenance_type if row.maintenance_type in hours else 'Routine'
             hours[kind] += _report_hours(row)
         for order in window_orders:
@@ -266,7 +270,7 @@ def compute_kpi(db: Session, plant_id=None, line_id=None, equipment_id=None, tec
             return item_plant, item_line
 
         grouped = {}
-        for row in window_items:
+        for row in accepted_items:
             if row.maintenance_type not in FAILURE_TYPES and row.maintenance_type != 'Preventive':
                 continue
             item_plant, item_line = located(row)
