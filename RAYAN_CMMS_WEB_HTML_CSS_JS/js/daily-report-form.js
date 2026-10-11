@@ -326,13 +326,12 @@ function valueOf(item, name) {
 
 function fillReport(detail) {
   currentReport = detail.report;
-  document.getElementById('report-number').textContent = currentReport.report_id;
+  document.getElementById('approved-by').textContent = currentReport.approved_by || '—';
   document.getElementById('report-state').textContent = currentReport.status;
   document.getElementById('report-date').value = String(currentReport.report_date).slice(0, 10);
   document.getElementById('report-date').disabled = true;
   document.getElementById('meta-date').textContent = new Date(`${String(currentReport.report_date).slice(0, 10)}T00:00:00`).toLocaleDateString('en-GB');
   if (currentReport.shift) document.getElementById('shift').value = currentReport.shift;
-  if (currentReport.shift_engineer) document.getElementById('shift-engineer').value = currentReport.shift_engineer;
   if (currentReport.general_notes) document.getElementById('general-notes').value = currentReport.general_notes;
   const items = detail.items || [];
   fillPlantSelect(currentReport.plant_id || items.find((item) => item.plant_id)?.plant_id || '');
@@ -381,7 +380,7 @@ function blankReport() {
   document.getElementById('report-date').disabled = false;
   document.getElementById('report-date').value = today;
   document.getElementById('meta-date').textContent = new Date().toLocaleDateString('en-GB');
-  document.getElementById('report-number').textContent = t('New');
+  document.getElementById('approved-by').textContent = '—';
   document.getElementById('report-state').textContent = t('Draft report');
   document.getElementById('save-draft').disabled = false;
   document.getElementById('submit-report').disabled = false;
@@ -467,7 +466,6 @@ async function saveReport(submit) {
       report_date: document.getElementById('report-date').value,
       plant_id: selectedPlantId() || null,
       shift: document.getElementById('shift').value,
-      shift_engineer: document.getElementById('shift-engineer').value.trim() || null,
       general_notes: document.getElementById('general-notes').value.trim() || null,
       items: serializeActivities(),
     };
@@ -475,7 +473,7 @@ async function saveReport(submit) {
     message('Saving daily report…');
     const response = await apiRequest('/daily-reports', { method: 'POST', body: JSON.stringify(payload) });
     currentReport = response.report;
-    document.getElementById('report-number').textContent = currentReport.report_id;
+    document.getElementById('approved-by').textContent = currentReport.approved_by || '—';
     document.getElementById('report-state').textContent = currentReport.status;
     writeWorkOrderNumbers(response.items);
     if (submit) {

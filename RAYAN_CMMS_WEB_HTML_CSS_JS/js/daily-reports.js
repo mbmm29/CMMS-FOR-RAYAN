@@ -157,8 +157,6 @@ document.addEventListener('DOMContentLoaded', async () => {
     document.querySelectorAll('[data-page]').forEach(button => button.addEventListener('click', () => { state.page = Number(button.dataset.page); renderTable(); }));
   }
 
-  const REVIEW_DAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
-
   function reviewParts(text) {
     const rows = String(text || '').split('\n').map(line => line.trim()).filter(Boolean).map(line => {
       const match = line.match(/^(.*?) \| No: (.*?) \| Qty: (.*?)(?: \| .*)?$/);
@@ -179,8 +177,6 @@ document.addEventListener('DOMContentLoaded', async () => {
   function openReview(report) {
     if (!report) return;
     state.selected = report;
-    const day = new Date(`${String(report.date).slice(0, 10)}T00:00:00`);
-    const dayName = REVIEW_DAYS[day.getDay()] || '';
     const activityRows = report.items.map((item, index) => `<tr>
       <td class="lube-no">${index + 1}</td>
       <td class="lube-machine"><input value="${escapeHtml(item.equipment_code || item.equipment_id || '')}" readonly><input value="${escapeHtml(item.equipment_name || '')}" readonly><input value="${escapeHtml(item.entered_line_number || '')}" readonly></td>
@@ -201,14 +197,12 @@ document.addEventListener('DOMContentLoaded', async () => {
     layout?.classList.add('reviewing');
     sheet.innerHTML = `<div class="review-bar no-print"><button type="button" id="review-close">${escapeHtml(t('Back to reports'))}</button>${decisions}</div>
       <form class="lube-paper daily-paper" id="review-paper">
-        <header class="lube-head"><img src="logo-rayan.png?v=2" alt="Rayan"><div><h2>${escapeHtml(t('DAILY MAINTENANCE REPORT'))}</h2><p>${escapeHtml(t(report.status || 'Draft'))}</p><small>${escapeHtml(t('Mechanical Maintenance Department'))}</small></div><dl><div><dt>${escapeHtml(t('Form No.:'))}</dt><dd>DR</dd></div><div><dt>${escapeHtml(t('Report No.'))}</dt><dd>${escapeHtml(report.id)}</dd></div></dl></header>
+        <header class="lube-head"><img src="logo-rayan.png?v=2" alt="Rayan"><div><h2>${escapeHtml(t('DAILY MAINTENANCE REPORT'))}</h2><p>${escapeHtml(t(report.status || 'Draft'))}</p><small>${escapeHtml(t('Mechanical Maintenance Department'))}</small></div><dl><div><dt>${escapeHtml(t('Form No.:'))}</dt><dd>DR</dd></div><div><dt>${escapeHtml(t('Approved by'))}</dt><dd>${escapeHtml(report.approvedBy || '—')}</dd></div></dl></header>
         <div class="lube-meta">
           <label><span>${escapeHtml(t('Shift'))}</span><input value="${escapeHtml(t(report.shift || ''))}" readonly></label>
           <label><span>${escapeHtml(t("Technician's name"))}</span><input value="${escapeHtml(report.technician)}" readonly></label>
           <label><span>${escapeHtml(t('Plant'))}</span><input value="${escapeHtml(report.plantLine && report.plantLine !== '-' ? report.plantLine : (report.plantId || ''))}" readonly></label>
           <label><span>${escapeHtml(t('Date'))}</span><input value="${escapeHtml(formatDate(report.date))}" readonly></label>
-          <label><span>${escapeHtml(t('Day'))}</span><input value="${escapeHtml(t(dayName))}" readonly></label>
-          <label><span>${escapeHtml(t('Maintenance Engineer'))}</span><input value="${escapeHtml(report.shiftEngineer || '')}" readonly></label>
         </div>
         <table class="lube-table"><thead><tr><th>${escapeHtml(t('Seq.'))}</th><th>${escapeHtml(t('Machine'))}</th><th>${escapeHtml(t('Maintenance Type'))}</th><th>${escapeHtml(t('Repair Actions'))}</th><th>${escapeHtml(t('Start Time'))}</th><th>${escapeHtml(t('End Time'))}</th><th>${escapeHtml(t('Downtime (hrs)'))}</th></tr></thead><tbody>${activityRows}</tbody></table>
         <section class="daily-parts"><h3>${escapeHtml(t('SPARE PARTS USED'))}</h3><table class="lube-table"><thead><tr><th>${escapeHtml(t('No.'))}</th><th>${escapeHtml(t('Part'))}</th><th>${escapeHtml(t('Part No.'))}</th><th>${escapeHtml(t('Qty'))}</th></tr></thead><tbody>${partRows}</tbody></table></section>

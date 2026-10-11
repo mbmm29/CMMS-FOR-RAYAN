@@ -19,6 +19,7 @@ const CMMS_AR = {
   'Date': 'التاريخ',
   'New': 'جديد',
   'Report No.': 'رقم التقرير',
+  'Approved by': 'المهندس الذي وافق',
   'Component': 'الجزء',
   'Oil or grease name': 'اسم الزيت أو الشحم',
   'Seq.': 'ت',
