@@ -496,7 +496,7 @@ async function initializeForm() {
   try {
     currentUser = await getCurrentUser();
     if (currentUser.role === 'TECHNICIAN') {
-      location.replace('index.html#work-orders');
+      location.replace('index.html#daily-reports');
       return;
     }
     message('Daily Report entry is available to a Technician account. Select a technician account to submit a report.', true);

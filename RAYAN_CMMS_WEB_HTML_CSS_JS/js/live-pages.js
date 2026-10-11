@@ -2123,7 +2123,7 @@ render = function liveRender(page) {
   }
   let name = LIVE_PAGES.has(page) ? page : 'dashboard';
   const lubricationPages = ['lubrication', 'work-orders', 'sop'];
-  const maintenancePages = ['work-orders', 'pm-schedule', 'sop'];
+  const maintenancePages = ['daily-reports', 'work-orders', 'pm-schedule', 'sop'];
   const openReports = name === 'new-equipment' && canMaintain();
   if (isLubricationTechnician()) {
     if (!lubricationPages.includes(name)) name = 'lubrication';
