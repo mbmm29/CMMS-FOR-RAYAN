@@ -213,6 +213,7 @@ ROLES = {
     'SYSTEM_DEVELOPER',
     'MAINTENANCE_ENGINEER',
     'TECHNICIAN',
+    'LUBRICATION_TECHNICIAN',
     'ADMINISTRATOR_VIEWER',
 }
 
@@ -227,7 +228,12 @@ DEVELOPER = {
 
 TECHNICIAN = {
     'TECHNICIAN',
+    'LUBRICATION_TECHNICIAN',
 }
+
+def is_technician_account(account) -> bool:
+    role = account if isinstance(account, str) else getattr(account, 'role', None)
+    return role in TECHNICIAN
 
 VIEWER = {
     'ADMINISTRATOR_VIEWER',
@@ -323,7 +329,7 @@ def create_bootstrap_system():
         bootstrap_system(db)
         # Repair legacy technician logins that were created before the user
         # account screen began creating the matching technician profile.
-        for account in db.query(User).filter(User.role == 'TECHNICIAN').all():
+        for account in db.query(User).filter(User.role.in_(tuple(TECHNICIAN))).all():
             provision_technician_profile(db, account)
         db.commit()
         try:
@@ -353,7 +359,7 @@ def users(db:Session=Depends(get_db),u=Depends(role(*DEVELOPER))): return db.que
 def provision_technician_profile(db: Session, account: User):
     """Create/resolve the operational profile required by technician reports."""
     technician_id = (account.technician_id or '').strip()
-    if account.role != 'TECHNICIAN' or not technician_id:
+    if not is_technician_account(account) or not technician_id:
         return None
     profile = db.query(Technician).filter(
         func.lower(Technician.technician_id) == technician_id.lower()
@@ -373,7 +379,7 @@ def provision_technician_profile(db: Session, account: User):
 def create_user(data:UserCreate,db:Session=Depends(get_db),u=Depends(role(*DEVELOPER))):
     if data.role not in ROLES: raise HTTPException(400,'Invalid role')
     if not data.password: raise HTTPException(400,'Password required')
-    if data.role == 'TECHNICIAN' and not (data.technician_id or '').strip():
+    if data.role in TECHNICIAN and not (data.technician_id or '').strip():
         raise HTTPException(400, 'Technician ID is required for a technician account')
     if db.query(User).filter(User.username==data.username).first(): raise HTTPException(409,'Username exists')
     o=User(username=data.username,password_hash=hash_password(data.password),full_name=data.full_name,role=data.role,technician_id=data.technician_id,is_active=data.is_active)
@@ -396,7 +402,7 @@ def update_user(user_id:int, data:UserUpdate, db:Session=Depends(get_db), u=Depe
     old = {key: getattr(account, key) for key in payload if key != 'password_hash'}
     for key, value in payload.items():
         setattr(account, key, value)
-    if account.role == 'TECHNICIAN' and not (account.technician_id or '').strip():
+    if is_technician_account(account) and not (account.technician_id or '').strip():
         raise HTTPException(400, 'Technician ID is required for a technician account')
     provision_technician_profile(db, account)
     audit(db, u, 'UPDATE', 'User', account.username, old=old, new=data.model_dump(exclude={'password'}, exclude_unset=True))
@@ -490,7 +496,7 @@ def as_dict(obj):
     return {column.name: getattr(obj, column.name) for column in obj.__table__.columns}
 @app.post('/equipment',response_model=EquipmentOut)
 def create_equipment(data:EquipmentCreate,db:Session=Depends(get_db),u=Depends(auth)):
-    if u.role not in ENGINEER and u.role != 'TECHNICIAN':
+    if u.role not in ENGINEER and not is_technician_account(u):
         raise HTTPException(403, 'Insufficient permission')
     if not data.plant_id or not data.line_id:
         raise HTTPException(400, 'Select a plant and then a line number')
@@ -511,7 +517,9 @@ def update_equipment(equipment_id:str,data:EquipmentCreate,db:Session=Depends(ge
     audit(db,u,'UPDATE','Equipment',equipment_id,old=old,new=data.model_dump()); db.commit(); db.refresh(o); return o
 
 @app.get('/pending-equipment')
-def pending_equipment(db: Session = Depends(get_db), u=Depends(role(*ENGINEER))):
+def pending_equipment(db: Session = Depends(get_db), u=Depends(auth)):
+    if u.role not in ENGINEER and u.role != 'LUBRICATION_TECHNICIAN':
+        raise HTTPException(403, 'Insufficient permission')
     rows = db.query(PendingEquipment).filter_by(status='Pending').order_by(PendingEquipment.id.desc()).all()
     return [as_dict(row) for row in rows]
 
@@ -1240,7 +1248,7 @@ def kpi_dashboard(
     db: Session = Depends(get_db),
     u=Depends(auth),
 ):
-    if u.role == 'TECHNICIAN' and u.technician_id:
+    if is_technician_account(u) and u.technician_id:
         technician_id = u.technician_id
     return compute_kpi(db, plant_id or None, line_id or None, equipment_id or None, technician_id or None, date_from, date_to)
 
@@ -1267,7 +1275,7 @@ def work_orders(status:str|None=None,equipment_id:str|None=None,db:Session=Depen
     q=db.query(WorkOrder)
     if status:q=q.filter(WorkOrder.status==status)
     if equipment_id:q=q.filter(WorkOrder.equipment_id==equipment_id)
-    if u.role == 'TECHNICIAN':
+    if is_technician_account(u):
         q = visible_to_technician(q, u.technician_id)
     return q.order_by(WorkOrder.id.desc()).all()
 def _plan_cycle_days(plan):
@@ -1605,7 +1613,7 @@ def create_work_order(data:WOCreate,db:Session=Depends(get_db),u=Depends(role(*E
 
 @app.post('/work-orders/from-activity', response_model=WOOut)
 def issue_activity_work_order(data: ActivityWorkOrderCreate, db: Session = Depends(get_db), u=Depends(auth)):
-    if u.role != 'TECHNICIAN' or not u.technician_id:
+    if not is_technician_account(u) or not u.technician_id:
         raise HTTPException(403, 'Only a technician can register this work order from the daily report')
     if data.maintenance_type not in ('Corrective', 'Emergency'):
         raise HTTPException(400, 'A work order is registered automatically for Corrective or Emergency work')
@@ -1641,7 +1649,7 @@ def issue_activity_work_order(data: ActivityWorkOrderCreate, db: Session = Depen
 @app.post('/work-orders/{wo_id}/release-activity')
 def release_activity_work_order(wo_id: str, db: Session = Depends(get_db), u=Depends(auth)):
     """Drop a work order that was opened from a daily-report line and is not saved on a report yet."""
-    if u.role != 'TECHNICIAN':
+    if not is_technician_account(u):
         raise HTTPException(403, 'Only a technician can release this work order')
     order = db.query(WorkOrder).filter_by(work_order_id=wo_id).first()
     if not order:
@@ -1745,10 +1753,10 @@ def accept_saved_job(db, actor, work_order):
 def update_work_order(wo_id:str,data:WOUpdate,db:Session=Depends(get_db),u=Depends(auth)):
     o=db.query(WorkOrder).filter_by(work_order_id=wo_id).first()
     if not o: raise HTTPException(404,'Work Order not found')
-    if u.role == 'TECHNICIAN' and u.technician_id not in current_assignees(db, o):
+    if is_technician_account(u) and u.technician_id not in current_assignees(db, o):
         raise HTTPException(403, 'This work order is not assigned to you')
     payload=data.model_dump(exclude_unset=True)
-    if u.role=='TECHNICIAN':
+    if is_technician_account(u):
         allowed={'status','start_time','end_time','downtime_h','labor_hours','failure_mode','failure_cause','corrective_action','result','verification','parts_used','closing_date'}
         if set(payload)-allowed: raise HTTPException(403,'Technician cannot modify this field')
         if payload.get('status')=='Closed': raise HTTPException(403,'Technician cannot close Work Order')
@@ -1762,13 +1770,13 @@ def update_work_order(wo_id:str,data:WOUpdate,db:Session=Depends(get_db),u=Depen
     if o.status=='Closed': o.closed_by=u.username; o.closing_date=datetime.utcnow()
     if wanted is not None:
         apply_assignment(db, u, o, wanted, had_assignees)
-    if u.role == 'TECHNICIAN':
+    if is_technician_account(u):
         accept_saved_job(db, u, o)
     audit(db,u,'UPDATE','WorkOrder',wo_id,old=old,new=data.model_dump(exclude_unset=True)); db.commit(); db.refresh(o); return o
 
 @app.post('/work-orders/{wo_id}/respond', response_model=WOOut)
 def respond_work_order(wo_id: str, data: WORespond, db: Session = Depends(get_db), u=Depends(auth)):
-    if u.role != 'TECHNICIAN' or not u.technician_id:
+    if not is_technician_account(u) or not u.technician_id:
         raise HTTPException(403, 'Only the assigned technician can accept or reject this work order')
     expire_pending_assignments(db)
     order = db.query(WorkOrder).filter_by(work_order_id=wo_id).first()
@@ -2165,7 +2173,7 @@ def list_reports(
         q = q.filter(DailyReport.equipment_id == equipment_id)
 
     # A technician sees his own reports. Engineers/developers can see all.
-    if u.role == 'TECHNICIAN':
+    if is_technician_account(u):
         q = q.filter(DailyReport.technician_id == u.technician_id)
     elif technician_id:
         q = q.filter(DailyReport.technician_id == technician_id)
@@ -2186,7 +2194,7 @@ def get_report(
     if not r:
         raise HTTPException(404, 'Daily Report not found')
 
-    if u.role == 'TECHNICIAN' and r.technician_id != u.technician_id:
+    if is_technician_account(u) and r.technician_id != u.technician_id:
         raise HTTPException(403, 'You can only view your own reports')
 
     items = db.query(DailyReportItem).filter_by(report_id=r.id).all()
@@ -2202,7 +2210,7 @@ def create_report(
     # Daily Report creation is a technician workflow.
     # Engineer/developer accounts can still create a report for controlled
     # administrative/testing purposes, but a technician can only create his own.
-    if u.role == 'TECHNICIAN':
+    if is_technician_account(u):
         if not u.technician_id:
             raise HTTPException(400, 'Your account is not linked to a technician')
         technician = provision_technician_profile(db, u)
@@ -2394,7 +2402,7 @@ def update_report(
             f'Report cannot be edited while status is {r.status}'
         )
 
-    if u.role == 'TECHNICIAN' and r.technician_id != u.technician_id:
+    if is_technician_account(u) and r.technician_id != u.technician_id:
         raise HTTPException(403, 'You can only edit your own reports')
 
     old = {
@@ -2403,7 +2411,7 @@ def update_report(
         'shift_engineer': r.shift_engineer,
     }
 
-    header_locked = u.role == 'TECHNICIAN' and r.status == 'Returned'
+    header_locked = is_technician_account(u) and r.status == 'Returned'
     if not header_locked:
         if data.report_date is not None:
             r.report_date = data.report_date
@@ -2431,7 +2439,7 @@ def update_report(
         if header_locked:
             sample = next((row for row in existing_items if row.spare_parts), None)
             kept_parts = sample.spare_parts if sample else None
-        if u.role == 'TECHNICIAN':
+        if is_technician_account(u):
             for existing in existing_items:
                 if existing.wo_id:
                     assigned_rows[existing.wo_id] = {
@@ -2556,7 +2564,7 @@ def submit_report(
     if not r:
         raise HTTPException(404, 'Daily Report not found')
 
-    if u.role == 'TECHNICIAN' and r.technician_id != u.technician_id:
+    if is_technician_account(u) and r.technician_id != u.technician_id:
         raise HTTPException(403, 'You can only submit your own report')
 
     if r.locked_at:
@@ -2568,7 +2576,7 @@ def submit_report(
             f'Report cannot be submitted from status {r.status}'
         )
 
-    if u.role == 'TECHNICIAN':
+    if is_technician_account(u):
         assert_daily_send_window(db, r.technician_id, r.report_id)
 
     items = db.query(DailyReportItem).filter_by(report_id=r.id).all()
@@ -2773,7 +2781,7 @@ def return_report(
 def machine_records(equipment_id:str|None=None,db:Session=Depends(get_db),u=Depends(auth)):
     q=db.query(MachineRecord)
     if equipment_id:q=q.filter(MachineRecord.equipment_id==equipment_id)
-    if u.role == 'TECHNICIAN':
+    if is_technician_account(u):
         if not u.technician_id:
             return []
         wo_ids = [row.work_order_id for row in visible_to_technician(db.query(WorkOrder), u.technician_id).all()]
@@ -2806,7 +2814,7 @@ def run_pm_automation(db:Session=Depends(get_db),u=Depends(role(*ENGINEER))):
         wid=f'WO-{target.year}-{db.query(WorkOrder).count()+1:05d}'
         w=WorkOrder(work_order_id=wid,work_order_type='Preventive',equipment_id=p.equipment_id,component_id=p.component_id,pm_id=p.pm_id,priority=p.priority,status='Open',problem_description='Scheduled PM',work_description=p.task,planned_date=p.next_due_date,created_by='SYSTEM')
         db.add(w); db.flush(); created.append(wid)
-        for tech in db.query(User).filter(User.role=='TECHNICIAN',User.is_active==True).all(): notify(db,tech.id,'PM Work Order Created',f'{wid} for {p.equipment_id} is due tomorrow','pm',wid)
+        for tech in db.query(User).filter(User.role.in_(tuple(TECHNICIAN)), User.is_active==True).all(): notify(db,tech.id,'PM Work Order Created',f'{wid} for {p.equipment_id} is due tomorrow','pm',wid)
     db.commit(); return {'created':created,'due_date':str(target)}
 
 LUBE_SHIFTS = {
@@ -2853,7 +2861,7 @@ def propose_lubrication_equipment(db, report, technician_id, code, name):
 
 def lube_query(db: Session, u):
     query = db.query(LubricationReport)
-    if u.role == 'TECHNICIAN':
+    if is_technician_account(u):
         profile = provision_technician_profile(db, u)
         if not profile:
             return query.filter(LubricationReport.id == -1)
@@ -3036,7 +3044,7 @@ def save_lubrication_report(data: LubricationSave, db: Session = Depends(get_db)
         raise HTTPException(400, 'Choose a shift')
     if len(data.lines) > 40:
         raise HTTPException(400, 'A lubrication report can hold 40 lines')
-    if u.role == 'TECHNICIAN':
+    if is_technician_account(u):
         profile = provision_technician_profile(db, u)
         if not profile:
             raise HTTPException(400, 'Your account is not linked to a technician')

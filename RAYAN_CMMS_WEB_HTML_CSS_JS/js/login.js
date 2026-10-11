@@ -79,7 +79,12 @@ document.addEventListener("DOMContentLoaded", () => {
             /*
              * Go to the separate Dashboard page
              */
-            window.location.href = "index.html#dashboard";
+            const home = user.role === 'LUBRICATION_TECHNICIAN'
+                ? 'lubrication'
+                : user.role === 'TECHNICIAN'
+                    ? 'work-orders'
+                    : 'dashboard';
+            window.location.href = `index.html#${home}`;
 
 
         } catch (error) {

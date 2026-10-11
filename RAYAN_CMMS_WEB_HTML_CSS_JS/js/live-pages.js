@@ -123,8 +123,13 @@ function canMaintain() {
   return Boolean(user && (user.role === 'SYSTEM_DEVELOPER' || user.role === 'MAINTENANCE_ENGINEER'));
 }
 
+function isLubricationTechnician() {
+  return getSavedUser()?.role === 'LUBRICATION_TECHNICIAN';
+}
+
 function isTechnician() {
-  return getSavedUser()?.role === 'TECHNICIAN';
+  const role = getSavedUser()?.role;
+  return role === 'TECHNICIAN' || role === 'LUBRICATION_TECHNICIAN';
 }
 
 function equipmentOf(code) {
@@ -239,7 +244,7 @@ async function loadStore() {
     apiRequest('/sops'),
     apiRequest('/machine-records'),
     apiRequest('/technicians'),
-    canMaintain() ? apiRequest('/pending-equipment') : Promise.resolve([]),
+    (canMaintain() || isLubricationTechnician()) ? apiRequest('/pending-equipment') : Promise.resolve([]),
   ]);
   store = { plants, lines, equipment, orders, plans, sops, records, technicians, pending };
 }
@@ -247,7 +252,10 @@ async function loadStore() {
 function setHeader(page) {
   const spec = pages[page] || pages.dashboard;
   document.getElementById('page-title').textContent = t(spec.title);
-  document.getElementById('page-subtitle').textContent = t(spec.sub);
+  const subtitle = page === 'new-equipment' && !canMaintain()
+    ? 'Equipment waiting for the maintenance engineer to approve.'
+    : spec.sub;
+  document.getElementById('page-subtitle').textContent = t(subtitle);
   const action = document.getElementById('primary-action');
   const draft = document.getElementById('draft-action');
   if (draft) {
@@ -269,7 +277,10 @@ function setHeader(page) {
     action.hidden = false;
     action.textContent = t(page === 'machine-records' ? 'Export' : spec.action);
   }
-  document.querySelectorAll('.engineer-only').forEach((link) => { link.hidden = !canMaintain(); });
+  document.querySelectorAll('.engineer-only').forEach((link) => {
+    const lubricationPage = isLubricationTechnician() && link.dataset.page === 'new-equipment';
+    link.hidden = !canMaintain() && !lubricationPage;
+  });
   document.querySelectorAll('.nav-link').forEach((link) => link.classList.toggle('active', link.dataset.page === page));
   if (location.hash !== `#${page}`) location.hash = page;
 }
@@ -1467,7 +1478,9 @@ function drawNewEquipment() {
     const plant = store.plants.find((item) => item.plant_id === row.plant_id)?.name || row.plant_id || '—';
     return `<tr data-row="${esc(row.id)}" class="${selected && selected.id === row.id ? 'selected' : ''}">${cell(esc(row.equipment_code), true)}${cell(esc(row.equipment_name))}${cell(esc(plant))}${cell(esc(row.line_number || '—'))}${cell(esc(technicianName(row.technician_id)))}</tr>`;
   });
-  const review = selected ? `<form class="live-form" id="pending-review"><label>${esc(t('Equipment name'))}<input id="pending-name" value="${esc(selected.equipment_name || '')}" required></label><label>${esc(t('Plant'))}<select id="pending-plant"><option value="">${esc(t('Select'))}</option>${store.plants.map((plant) => `<option value="${esc(plant.plant_id)}"${plant.plant_id === selected.plant_id ? ' selected' : ''}>${esc(plant.name)}</option>`).join('')}</select></label><label>${esc(t('Line number'))}<select id="pending-line"><option value="">${esc(t('Select'))}</option></select></label><div class="summary-row"><span>${esc(t('Technician'))}</span><b>${esc(technicianName(selected.technician_id))}</b></div><div class="summary-row"><span>${esc(t('Report'))}</span><b>${esc(pendingSource(selected))} ${esc(selected.report_id || '')}</b></div></form><div class="assign-block"><button class="detail-button primary" type="button" id="approve-equipment">${esc(t('Approve'))}</button><button class="detail-button" type="button" id="reject-equipment">${esc(t('Reject'))}</button><p id="pending-error" class="form-error"></p></div>` : `<p class="live-note">${esc(t('No new equipment'))}</p>`;
+  const reviewForm = `<form class="live-form" id="pending-review"><label>${esc(t('Equipment name'))}<input id="pending-name" value="${esc(selected?.equipment_name || '')}" required></label><label>${esc(t('Plant'))}<select id="pending-plant"><option value="">${esc(t('Select'))}</option>${store.plants.map((plant) => `<option value="${esc(plant.plant_id)}"${plant.plant_id === selected?.plant_id ? ' selected' : ''}>${esc(plant.name)}</option>`).join('')}</select></label><label>${esc(t('Line number'))}<select id="pending-line"><option value="">${esc(t('Select'))}</option></select></label><div class="summary-row"><span>${esc(t('Technician'))}</span><b>${esc(technicianName(selected?.technician_id))}</b></div><div class="summary-row"><span>${esc(t('Report'))}</span><b>${esc(pendingSource(selected))} ${esc(selected?.report_id || '')}</b></div></form><div class="assign-block"><button class="detail-button primary" type="button" id="approve-equipment">${esc(t('Approve'))}</button><button class="detail-button" type="button" id="reject-equipment">${esc(t('Reject'))}</button><p id="pending-error" class="form-error"></p></div>`;
+  const reviewView = `<div class="summary-row"><span>${esc(t('Equipment name'))}</span><b>${esc(selected?.equipment_name || '—')}</b></div><div class="summary-row"><span>${esc(t('Technician'))}</span><b>${esc(technicianName(selected?.technician_id))}</b></div><div class="summary-row"><span>${esc(t('Report'))}</span><b>${esc(pendingSource(selected))} ${esc(selected?.report_id || '')}</b></div>`;
+  const review = selected ? (canMaintain() ? reviewForm : reviewView) : `<p class="live-note">${esc(t('No new equipment'))}</p>`;
   const detail = `<aside class="panel detail pending-review"><h2>${esc(t('New equipment'))}</h2><div class="detail-top"><div class="machine">⚙</div>${selected ? liveBadge('Pending') : ''}<h3>${esc(selected?.equipment_code || '—')}</h3></div>${review}</aside>`;
   document.getElementById('workspace').className = 'workspace';
   document.getElementById('workspace').innerHTML = `<section class="panel">${tableShell(['Code', 'Name', 'Plant', 'Line No.', 'Technician'], body, shown(rows.length, rows.length, 'new equipment'))}</section>${detail}`;
@@ -2051,8 +2064,13 @@ render = function liveRender(page) {
     return;
   }
   let name = LIVE_PAGES.has(page) ? page : 'dashboard';
-  if (name === 'new-equipment' && !canMaintain()) name = isTechnician() ? 'work-orders' : 'dashboard';
-  if (isTechnician() && !['work-orders', 'pm-schedule', 'equipment', 'sop', 'lubrication', 'daily-reports'].includes(name)) name = 'work-orders';
+  const lubricationPages = ['lubrication', 'work-orders', 'new-equipment', 'sop', 'pm-schedule'];
+  if (isLubricationTechnician()) {
+    if (!lubricationPages.includes(name)) name = 'lubrication';
+  } else if (name === 'new-equipment' && !canMaintain()) {
+    name = isTechnician() ? 'work-orders' : 'dashboard';
+  }
+  if (!isLubricationTechnician() && isTechnician() && !['work-orders', 'pm-schedule', 'equipment', 'sop', 'lubrication', 'daily-reports'].includes(name)) name = 'work-orders';
   if (name !== ui.page) {
     ui.tab = DEFAULT_TAB[name];
     ui.rowKey = '';

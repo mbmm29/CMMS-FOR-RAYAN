@@ -341,6 +341,10 @@ document.addEventListener('DOMContentLoaded', async () => {
   }
 
   function applyTechnicianInterface() {
+    if (state.user?.role === 'LUBRICATION_TECHNICIAN') {
+      location.replace('index.html#lubrication');
+      return;
+    }
     if (state.user?.role !== 'TECHNICIAN') return;
     location.replace('index.html#daily-reports');
   }

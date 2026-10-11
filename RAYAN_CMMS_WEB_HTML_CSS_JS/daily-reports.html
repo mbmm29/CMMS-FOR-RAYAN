@@ -21,6 +21,7 @@
     <script>
       try {
         const savedUser = JSON.parse(localStorage.getItem('user') || 'null');
+        if (savedUser && savedUser.role === 'LUBRICATION_TECHNICIAN') location.replace('index.html#lubrication');
         if (savedUser && savedUser.role === 'TECHNICIAN') location.replace('index.html#daily-reports');
       } catch (error) {}
     </script>
@@ -736,7 +737,7 @@
 <script src="js/api.js?v=5"></script>
 
 <script src="js/i18n.js?v=29"></script>
-<script src="js/daily-reports.js?v=23"></script>
+<script src="js/daily-reports.js?v=24"></script>
 <script src="js/mobile-shell.js?v=1"></script>
 
 

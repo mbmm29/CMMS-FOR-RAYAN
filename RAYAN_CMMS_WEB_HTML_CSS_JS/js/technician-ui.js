@@ -4,9 +4,15 @@
  */
 (function applyTechnicianShell() {
   const user = typeof getSavedUser === 'function' ? getSavedUser() : null;
-  if (user?.role !== 'TECHNICIAN') return;
+  const pages = {
+    TECHNICIAN: ['work-orders', 'pm-schedule', 'equipment', 'sop', 'daily-reports', 'lubrication'],
+    LUBRICATION_TECHNICIAN: ['lubrication', 'work-orders', 'new-equipment', 'sop', 'pm-schedule'],
+  };
+  const allowed = pages[user?.role];
+  if (!allowed) return;
 
-  const allowedPages = new Set(['work-orders', 'pm-schedule', 'equipment', 'sop', 'daily-reports', 'lubrication']);
+  const allowedPages = new Set(allowed);
+  const home = user.role === 'LUBRICATION_TECHNICIAN' ? 'lubrication' : 'work-orders';
   document.body.classList.add('technician-interface');
 
   document.querySelectorAll('.nav-link').forEach(link => {
@@ -14,5 +20,5 @@
   });
 
   const requestedPage = location.hash.replace('#', '');
-  if (!allowedPages.has(requestedPage)) location.replace('index.html#work-orders');
+  if (!allowedPages.has(requestedPage)) location.replace(`index.html#${home}`);
 })();
