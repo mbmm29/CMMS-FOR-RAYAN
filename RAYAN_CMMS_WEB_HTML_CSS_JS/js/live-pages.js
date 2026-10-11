@@ -1800,11 +1800,19 @@ function fillKnownEquipmentRow(row) {
   if (plant && !plant.value && found.plant_id) plant.value = found.plant_id;
 }
 
+function syncDailyOrder(row) {
+  const type = row.querySelector('[data-field="type"]')?.value || '';
+  if (type === 'Corrective' || type === 'Emergency') return;
+  row.dataset.wo = '';
+  row.querySelector('.lube-order')?.remove();
+}
+
 function bindDailyRow(row) {
   const code = row.querySelector('[data-field="code"]');
   const name = row.querySelector('[data-field="name"]');
   if (code && name) bindEquipmentCode(code, name);
   fillKnownEquipmentRow(row);
+  row.querySelector('[data-field="type"]')?.addEventListener('change', () => syncDailyOrder(row));
 }
 
 async function saveDailyReport(submit) {

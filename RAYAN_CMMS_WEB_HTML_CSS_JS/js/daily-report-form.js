@@ -184,7 +184,14 @@ async function issueHighWorkOrder(row) {
   const typeInput = row.querySelector('[data-field="type"]');
   const type = typeInput.value;
   const workOrder = row.querySelector('[data-field="wo"]');
-  if (type !== 'Corrective' && type !== 'Emergency') return;
+  if (type !== 'Corrective' && type !== 'Emergency') {
+    const current = workOrder?.value.trim() || '';
+    if (workOrder) workOrder.value = '';
+    if (current && row.dataset.assigned !== 'true') {
+      apiRequest(`/work-orders/${encodeURIComponent(current)}/release-activity`, { method: 'POST' }).catch(() => {});
+    }
+    return;
+  }
   if (workOrder.value.trim()) return;
   const code = row.querySelector('[data-field="code"]').value.trim();
   const name = row.querySelector('[data-field="name"]').value.trim();

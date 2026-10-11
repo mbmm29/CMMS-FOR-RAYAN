@@ -1638,6 +1638,28 @@ def issue_activity_work_order(data: ActivityWorkOrderCreate, db: Session = Depen
     db.refresh(work_order)
     return work_order
 
+@app.post('/work-orders/{wo_id}/release-activity')
+def release_activity_work_order(wo_id: str, db: Session = Depends(get_db), u=Depends(auth)):
+    """Drop a work order that was opened from a daily-report line and is not saved on a report yet."""
+    if u.role != 'TECHNICIAN':
+        raise HTTPException(403, 'Only a technician can release this work order')
+    order = db.query(WorkOrder).filter_by(work_order_id=wo_id).first()
+    if not order:
+        return {'released': False}
+    if db.query(DailyReportItem).filter_by(wo_id=wo_id).first():
+        return {'released': False}
+    if not order_born_from_daily_report(db, order):
+        return {'released': False}
+    holder = db.query(DailyReport).filter(
+        DailyReport.technician_id == u.technician_id,
+        DailyReport.status.in_(('Draft', 'Returned')),
+    ).order_by(DailyReport.id.desc()).first()
+    if holder is None:
+        holder = DailyReport(report_id='UNSAVED', report_date=date.today(), technician_id=u.technician_id or '', status='Draft')
+    retire_activity_work_order(db, u, holder, wo_id)
+    db.commit()
+    return {'released': True}
+
 def daily_parts_from_job(text):
     lines = []
     for raw in (text or '').splitlines():
@@ -1938,6 +1960,60 @@ def get_or_create_wo(db,u,item,report):
     w=WorkOrder(work_order_id=wid,work_order_type=item.maintenance_type,equipment_id=None if item.is_manual_entry else item.equipment_id,manual_equipment_code=item.equipment_code if item.is_manual_entry else None,manual_equipment_name=item.equipment_name if item.is_manual_entry else None,manual_plant_id=item.plant_id if item.is_manual_entry else None,manual_line_id=item.line_id if item.is_manual_entry else None,component_id=item.component_id,pm_id=item.pm_id,priority='Medium',status='Open',problem_description=item.failure_reason,work_description=item.action_taken,planned_date=report.report_date,created_by='SYSTEM')
     db.add(w); db.flush(); audit(db,u,'AUTO_CREATE','WorkOrder',wid,new={'source':'Daily Report','report_id':report.report_id})
     return w,'created'
+
+REPORT_ORDER_TYPES = {'Corrective', 'Emergency'}
+
+def order_born_from_daily_report(db, order):
+    """True when this work order was opened because a daily-report line was corrective or emergency."""
+    if not order or order.created_by != 'SYSTEM':
+        return False
+    rows = db.query(AuditTrail).filter(
+        AuditTrail.entity == 'WorkOrder',
+        AuditTrail.entity_id == order.work_order_id,
+        AuditTrail.action == 'AUTO_CREATE',
+    ).all()
+    return any('Daily Report' in (row.new_value or '') for row in rows)
+
+def retire_activity_work_order(db, user, report, order_id, new_type=None):
+    """Remove a report-born work order once the activity no longer needs one."""
+    if not order_id:
+        return False
+    if db.query(DailyReportItem).filter(DailyReportItem.wo_id == order_id).first():
+        return False
+    order = db.query(WorkOrder).filter_by(work_order_id=order_id).first()
+    if not order or not order_born_from_daily_report(db, order):
+        return False
+    db.query(WorkOrderAssignment).filter_by(work_order_id=order_id).delete(synchronize_session=False)
+    db.expire(order, ['assignments'])
+    db.query(Measurement).filter_by(work_order_id=order_id).delete(synchronize_session=False)
+    db.query(PartUsed).filter_by(work_order_id=order_id).delete(synchronize_session=False)
+    db.query(AnnualPMDayTask).filter_by(work_order_id=order_id).update(
+        {AnnualPMDayTask.work_order_id: None}, synchronize_session=False,
+    )
+    db.query(LubricationLine).filter_by(work_order_id=order_id).update(
+        {LubricationLine.work_order_id: None}, synchronize_session=False,
+    )
+    db.query(DailyReport).filter(DailyReport.work_order_id == order_id).update(
+        {DailyReport.work_order_id: None}, synchronize_session=False,
+    )
+    records = db.query(MachineRecord).filter_by(wo_id=order_id).all()
+    for record in records:
+        if record.daily_report_id:
+            record.wo_id = None
+            if new_type and record.daily_report_id == report.id:
+                record.record_type = new_type
+        else:
+            db.delete(record)
+    db.query(Notification).filter(
+        Notification.kind == 'work_order',
+        Notification.related_id == order_id,
+    ).delete(synchronize_session=False)
+    db.delete(order)
+    audit(
+        db, user, 'DELETE', 'WorkOrder', order_id,
+        old={'report_id': report.report_id, 'reason': 'Maintenance type no longer requires a work order'},
+    )
+    return True
 
 # ---------------------------------------------------------------------------
 # Daily Report
@@ -2350,6 +2426,8 @@ def update_report(
         assigned_rows = {}
         kept_parts = None
         existing_items = db.query(DailyReportItem).filter_by(report_id=r.id).all()
+        previous_order_ids = {row.wo_id for row in existing_items if row.wo_id}
+        equipment_by_order = {row.wo_id: row.equipment_id for row in existing_items if row.wo_id}
         if header_locked:
             sample = next((row for row in existing_items if row.spare_parts), None)
             kept_parts = sample.spare_parts if sample else None
@@ -2361,10 +2439,14 @@ def update_report(
                         for column in existing.__table__.columns
                         if column.name != 'id'
                     }
+        for existing in existing_items:
+            db.expunge(existing)
         db.query(DailyReportItem).filter(
             DailyReportItem.report_id == r.id
         ).delete(synchronize_session=False)
+        db.flush()
 
+        saved_rows = []
         for item in data.items:
             validate_report_item(db, item)
             payload = item.model_dump()
@@ -2388,10 +2470,13 @@ def update_report(
                 payload.update(chosen)
             if header_locked:
                 payload['spare_parts'] = kept_parts
+            if payload.get('maintenance_type') not in REPORT_ORDER_TYPES:
+                payload['wo_id'] = None
             payload.pop('report_id', None)
             row = DailyReportItem(report_id=r.id, **payload)
             db.add(row)
             db.flush()
+            saved_rows.append(row)
             propose_unknown_equipment(db, r, row)
             if not row.wo_id and row.maintenance_type in ('Corrective', 'Emergency'):
                 created, _mode = get_or_create_wo(db, u, row, r)
@@ -2409,6 +2494,19 @@ def update_report(
                         order.end_time = datetime.combine(r.report_date, row.maintenance_end)
                     if row.downtime_h is not None:
                         order.downtime_h = row.downtime_h
+                    if order.created_by == 'SYSTEM' and order.work_order_type != row.maintenance_type:
+                        order.work_order_type = row.maintenance_type
+
+        kept_ids = {row.wo_id for row in saved_rows if row.wo_id}
+        for order_id in previous_order_ids - kept_ids:
+            successor = next((
+                row for row in saved_rows
+                if not row.wo_id and row.equipment_id == equipment_by_order.get(order_id)
+            ), None)
+            retire_activity_work_order(
+                db, u, r, order_id,
+                successor.maintenance_type if successor else None,
+            )
 
         first = data.items[0]
         r.equipment_id = first.equipment_id
