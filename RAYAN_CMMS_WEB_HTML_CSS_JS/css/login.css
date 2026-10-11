@@ -92,7 +92,7 @@ select:focus {
        لذلك نرجع مجلد واحد:
     */
 
-    background-image:url("../background.jpeg");    
+    background-image:url("../background.jpg?v=2");    
          
 
     background-size: cover;

@@ -108,11 +108,12 @@ html[dir="rtl"] .details-content dt{float:right}
 html[dir="rtl"] .details-content dd{padding-left:0;padding-right:120px;text-align:start}
 
 .login-page{
-  background-image:none;
-  background:
-    radial-gradient(ellipse 70% 42% at 12% -8%,#1a5ec866,transparent 52%),
-    radial-gradient(ellipse 50% 36% at 90% 10%,#12967a33,transparent 48%),
-    linear-gradient(180deg,#071633,#081428);
+  background-image:
+    linear-gradient(180deg,#07163355,#08142866),
+    url("../background.jpg?v=2");
+  background-size:cover;
+  background-position:center center;
+  background-repeat:no-repeat;
 }
 .login-card{
   color:#e7eefc;border:1px solid #2a4f88;border-radius:18px;
