@@ -2089,12 +2089,14 @@ render = function liveRender(page) {
   }
   let name = LIVE_PAGES.has(page) ? page : 'dashboard';
   const lubricationPages = ['lubrication', 'work-orders', 'new-equipment', 'sop', 'pm-schedule'];
+  const maintenancePages = ['work-orders', 'pm-schedule', 'sop'];
   if (isLubricationTechnician()) {
     if (!lubricationPages.includes(name)) name = 'lubrication';
+  } else if (getSavedUser()?.role === 'TECHNICIAN') {
+    if (!maintenancePages.includes(name)) name = 'work-orders';
   } else if (name === 'new-equipment' && !canMaintain()) {
-    name = isTechnician() ? 'work-orders' : 'dashboard';
+    name = 'dashboard';
   }
-  if (!isLubricationTechnician() && isTechnician() && !['work-orders', 'pm-schedule', 'equipment', 'sop', 'lubrication', 'daily-reports'].includes(name)) name = 'work-orders';
   if (name !== ui.page) {
     ui.tab = DEFAULT_TAB[name];
     ui.rowKey = '';

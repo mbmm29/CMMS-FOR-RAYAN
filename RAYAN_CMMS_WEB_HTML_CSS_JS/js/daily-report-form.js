@@ -495,15 +495,12 @@ async function initializeForm() {
   if (!getSavedUser()) return location.replace('login.html');
   try {
     currentUser = await getCurrentUser();
-    if (currentUser.role !== 'TECHNICIAN') {
-      message('Daily Report entry is available to a Technician account. Select a technician account to submit a report.', true);
-    }
-    document.getElementById('technician-name').value = currentUser.full_name || 'Technician';
     if (currentUser.role === 'TECHNICIAN') {
-      document.querySelector('.tool-bar a[href="daily-reports.html"]')?.setAttribute('hidden', '');
-      const back = document.querySelector('.tool-bar a[href="index.html#daily-reports"]');
-      if (back) back.href = 'index.html#work-orders';
+      location.replace('index.html#work-orders');
+      return;
     }
+    message('Daily Report entry is available to a Technician account. Select a technician account to submit a report.', true);
+    document.getElementById('technician-name').value = currentUser.full_name || 'Technician';
   } catch (_) {
     logout();
     return location.replace('login.html');

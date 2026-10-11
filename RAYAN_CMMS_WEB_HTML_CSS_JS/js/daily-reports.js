@@ -347,7 +347,7 @@ document.addEventListener('DOMContentLoaded', async () => {
       return;
     }
     if (state.user?.role !== 'TECHNICIAN') return;
-    location.replace('index.html#daily-reports');
+    location.replace('index.html#work-orders');
   }
 
   function bindNavigation() {
