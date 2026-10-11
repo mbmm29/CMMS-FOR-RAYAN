@@ -2054,7 +2054,7 @@ document.getElementById('draft-action')?.addEventListener('click', (event) => {
 });
 
 render = function liveRender(page) {
-  if (page === 'users') {
+  if (page === 'users' || page === 'user') {
     document.body.dataset.livePage = '';
     shellRender(page);
     return;
@@ -2081,9 +2081,10 @@ render = function liveRender(page) {
 };
 
 const boot = location.hash.slice(1);
-render(boot === 'users' || boot === 'daily-reports' || LIVE_PAGES.has(boot) ? boot : 'dashboard');
+render(boot === 'users' || boot === 'user' || boot === 'daily-reports' || LIVE_PAGES.has(boot) ? boot : 'dashboard');
 document.addEventListener('cmms-language', () => {
   captureAnnual();
   if (document.body.dataset.livePage) paint(ui.page);
+  else if (location.hash === '#user' && typeof renderMyAccount === 'function') renderMyAccount();
   else if (location.hash === '#users' && typeof renderUsers === 'function') renderUsers();
 });

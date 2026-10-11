@@ -5,8 +5,8 @@
 (function applyTechnicianShell() {
   const user = typeof getSavedUser === 'function' ? getSavedUser() : null;
   const pages = {
-    TECHNICIAN: ['work-orders', 'pm-schedule', 'equipment', 'sop', 'daily-reports', 'lubrication'],
-    LUBRICATION_TECHNICIAN: ['lubrication', 'work-orders', 'new-equipment', 'sop', 'pm-schedule'],
+    TECHNICIAN: ['work-orders', 'pm-schedule', 'equipment', 'sop', 'daily-reports', 'lubrication', 'user'],
+    LUBRICATION_TECHNICIAN: ['lubrication', 'work-orders', 'new-equipment', 'sop', 'pm-schedule', 'user'],
   };
   const allowed = pages[user?.role];
   if (!allowed) return;

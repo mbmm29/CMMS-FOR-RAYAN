@@ -353,6 +353,46 @@ def login(data:LoginRequest,db:Session=Depends(get_db)):
 @app.get('/me',response_model=UserOut)
 def me(u=Depends(auth)): return u
 
+def save_own_profile(db: Session, account: User, data: ProfileUpdate):
+    """A person may change only their own name, username, and password."""
+    full_name = (data.full_name or '').strip()
+    username = (data.username or '').strip()
+    if not full_name:
+        raise HTTPException(400, 'Enter your name')
+    if not username:
+        raise HTTPException(400, 'Enter a username')
+    if len(full_name) > 150 or len(username) > 80:
+        raise HTTPException(400, 'Name or username is too long')
+    taken = db.query(User).filter(func.lower(User.username) == username.lower(), User.id != account.id).first()
+    if taken:
+        raise HTTPException(409, 'Username exists')
+    password = (data.password or '').strip()
+    if password:
+        if len(password) < 8:
+            raise HTTPException(400, 'Password must be at least 8 characters')
+        try:
+            current_ok = bool(data.current_password) and verify_password(data.current_password, account.password_hash)
+        except Exception:
+            current_ok = False
+        if not current_ok:
+            raise HTTPException(400, 'Current password is incorrect')
+        account.password_hash = hash_password(password)
+    old = {'full_name': account.full_name, 'username': account.username}
+    account.full_name = full_name
+    account.username = username
+    if account.technician_id:
+        profile = db.query(Technician).filter(func.lower(Technician.technician_id) == account.technician_id.lower()).first()
+        if profile:
+            profile.name = full_name
+    audit(db, account, 'UPDATE', 'User', account.username, old=old, new={'full_name': full_name, 'username': username, 'password_changed': bool(password)})
+    db.commit()
+    db.refresh(account)
+    return account
+
+@app.put('/me', response_model=UserOut)
+def update_me(data: ProfileUpdate, db: Session = Depends(get_db), u=Depends(auth)):
+    return save_own_profile(db, u, data)
+
 @app.get('/users',response_model=list[UserOut])
 def users(db:Session=Depends(get_db),u=Depends(role(*DEVELOPER))): return db.query(User).order_by(User.username).all()
 

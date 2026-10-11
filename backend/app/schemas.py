@@ -35,6 +35,13 @@ class UserUpdate(BaseModel):
     password: str | None = None
 
 
+class ProfileUpdate(BaseModel):
+    full_name: str
+    username: str
+    password: str | None = None
+    current_password: str | None = None
+
+
 class UserOut(BaseModel):
     id: int
     username: str
