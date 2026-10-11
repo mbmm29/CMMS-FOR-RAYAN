@@ -352,12 +352,13 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   function bindNavigation() {
     const routes = {
-      KPI: 'index.html#dashboard', 'Work Orders': 'index.html#work-orders', 'PM Schedule': 'index.html#pm-schedule',
+      KPI: 'index.html#dashboard', 'Work Orders': 'index.html#work-orders', 'PM Schedule': 'index.html#pm-schedule', 'Motor condition': 'index.html#motor-condition',
       'Daily Reports': 'daily-reports.html', Plants: 'index.html#plants', 'New equipment': 'index.html#equipment',
       Equipment: 'index.html#equipment', SOP: 'index.html#sop', 'Machine Records': 'index.html#machine-records', User: 'index.html#user', Users: 'index.html#users',
     };
     document.querySelectorAll('.developer-only').forEach(link => { link.hidden = state.user.role !== 'SYSTEM_DEVELOPER'; });
     document.querySelectorAll('.engineer-only').forEach(link => { link.hidden = !['SYSTEM_DEVELOPER', 'MAINTENANCE_ENGINEER'].includes(state.user.role); });
+    document.querySelectorAll('.motor-nav').forEach(link => { link.hidden = !['SYSTEM_DEVELOPER', 'MAINTENANCE_ENGINEER', 'LUBRICATION_TECHNICIAN'].includes(state.user.role); });
     document.querySelectorAll('.sidebar-nav a').forEach(link => {
       const key = link.querySelector('[data-i18n]')?.dataset.i18n;
       if (routes[key]) link.href = routes[key];

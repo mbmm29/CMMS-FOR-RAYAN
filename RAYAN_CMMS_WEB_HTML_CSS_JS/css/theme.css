@@ -294,6 +294,11 @@ body .header-actions .ghost{background:transparent;color:#f4f8ff;border:1px soli
 body .daily-paper .lube-table .lube-machine input + input,
 body .daily-paper .lube-table .daily-work input + input{border-top:1px solid #2a5287}
 body .daily-paper .lube-machine input[data-field="line"][data-resolved="1"]{background:#f3f7ff;font-weight:700}
+.motor-table{min-width:760px}
+.motor-table th,.motor-table td{padding:4px 6px;border-bottom:1px solid #d5e2f5}
+.motor-table th{text-align:start;white-space:nowrap}
+body .motor-paper .motor-table input,body .motor-paper .motor-table select{height:32px;width:100%}
+.nav-link.motor-nav[hidden]{display:none!important}
 .daily-parts{margin-top:14px}
 .daily-parts h3{margin:0;color:#102d60;font-size:13px}
 .daily-parts .lube-list-head{margin-bottom:6px}

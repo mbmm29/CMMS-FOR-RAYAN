@@ -1,4 +1,4 @@
-const LIVE_PAGES = new Set(['dashboard', 'work-orders', 'pm-schedule', 'plants', 'new-equipment', 'equipment', 'sop', 'machine-records', 'lubrication', 'daily-reports']);
+const LIVE_PAGES = new Set(['dashboard', 'work-orders', 'pm-schedule', 'plants', 'new-equipment', 'equipment', 'sop', 'machine-records', 'lubrication', 'daily-reports', 'motor-condition']);
 const DEFAULT_TAB = {
   dashboard: 'All',
   'work-orders': 'All Work Orders',
@@ -10,6 +10,7 @@ const DEFAULT_TAB = {
   'machine-records': 'All',
   lubrication: 'Report',
   'daily-reports': 'My Reports',
+  'motor-condition': 'Sheet',
 };
 const shellRender = render;
 const ui = { page: 'dashboard', tab: 'All', rowKey: '', mode: 'view', plantId: '', lineId: '', equipmentId: '', technicianId: '', dateFrom: '', dateTo: '', annualPlant: '', annualYear: new Date().getFullYear(), annualItems: [], annualWeek: '', weekTasks: [], lubeId: '', dailyId: '', dailyFilter: '' };
@@ -129,6 +130,11 @@ function canMaintain() {
 
 function isLubricationTechnician() {
   return getSavedUser()?.role === 'LUBRICATION_TECHNICIAN';
+}
+
+function canSeeMotor() {
+  const role = getSavedUser()?.role;
+  return role === 'SYSTEM_DEVELOPER' || role === 'MAINTENANCE_ENGINEER' || role === 'LUBRICATION_TECHNICIAN';
 }
 
 function isTechnician() {
@@ -270,6 +276,9 @@ function setHeader(page) {
   } else if (page === 'lubrication') {
     action.hidden = getSavedUser()?.role === 'ADMINISTRATOR_VIEWER';
     action.textContent = t('Save report');
+  } else if (page === 'motor-condition') {
+    action.hidden = false;
+    action.textContent = t('Save');
   } else if (isTechnician()) {
     action.hidden = true;
     action.textContent = t('+ Add Equipment');
@@ -279,6 +288,9 @@ function setHeader(page) {
   }
   document.querySelectorAll('.engineer-only').forEach((link) => {
     link.hidden = !canMaintain();
+  });
+  document.querySelectorAll('.motor-nav').forEach((link) => {
+    link.hidden = !canSeeMotor();
   });
   document.querySelectorAll('.nav-link').forEach((link) => link.classList.toggle('active', link.dataset.page === page));
   if (location.hash !== `#${page}`) location.hash = page;
@@ -2094,6 +2106,7 @@ async function draw(page) {
   else if (page === 'new-equipment' || page === 'equipment') drawEquipment();
   else if (page === 'sop') drawSops();
   else if (page === 'lubrication') await drawLubrication();
+  else if (page === 'motor-condition') await drawMotorCondition();
   else if (page === 'daily-reports') await drawDailyReport();
   else drawRecords();
 }
@@ -2142,6 +2155,7 @@ document.getElementById('primary-action').addEventListener('click', (event) => {
   else if (ui.page === 'pm-schedule' && document.getElementById('annual-rows')) saveAnnualPlan();
   else if (ui.page === 'pm-schedule') return;
   else if (ui.page === 'lubrication') saveLubrication();
+  else if (ui.page === 'motor-condition') saveMotorCondition();
   else if (ui.page === 'daily-reports') saveDailyReport(true);
   else openCreate();
 }, true);
@@ -2163,13 +2177,15 @@ render = function liveRender(page) {
     return;
   }
   let name = LIVE_PAGES.has(page) ? page : 'dashboard';
-  const lubricationPages = ['lubrication', 'work-orders', 'sop'];
+  const lubricationPages = ['lubrication', 'work-orders', 'sop', 'motor-condition'];
   const maintenancePages = ['daily-reports', 'work-orders', 'pm-schedule', 'sop'];
   const openReports = name === 'new-equipment' && canMaintain();
   if (isLubricationTechnician()) {
     if (!lubricationPages.includes(name)) name = 'lubrication';
   } else if (getSavedUser()?.role === 'TECHNICIAN') {
     if (!maintenancePages.includes(name)) name = 'work-orders';
+  } else if (name === 'motor-condition' && !canSeeMotor()) {
+    name = 'dashboard';
   } else if (name === 'new-equipment' || name === 'equipment') {
     name = canMaintain() ? 'equipment' : 'dashboard';
   }

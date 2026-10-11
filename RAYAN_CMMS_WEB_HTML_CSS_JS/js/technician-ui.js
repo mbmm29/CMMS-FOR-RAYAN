@@ -6,7 +6,7 @@
   const user = typeof getSavedUser === 'function' ? getSavedUser() : null;
   const pages = {
     TECHNICIAN: ['daily-reports', 'work-orders', 'pm-schedule', 'sop', 'user'],
-    LUBRICATION_TECHNICIAN: ['lubrication', 'work-orders', 'sop', 'user'],
+    LUBRICATION_TECHNICIAN: ['lubrication', 'work-orders', 'sop', 'motor-condition', 'user'],
   };
   const allowed = pages[user?.role];
   if (!allowed) return;

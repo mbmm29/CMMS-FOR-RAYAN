@@ -494,6 +494,37 @@ class LubricationLine(Base):
     work_order_id: Mapped[str | None] = mapped_column(String(60), nullable=True, index=True)
 
 
+class MotorConditionReport(Base):
+    __tablename__ = 'motor_condition_reports'
+    __table_args__ = (UniqueConstraint('group_key', 'place_key', 'report_date', name='uq_motor_sheet'),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    report_id: Mapped[str] = mapped_column(String(60), unique=True, index=True)
+    report_date: Mapped[date] = mapped_column(Date, index=True)
+    inspection_time: Mapped[str] = mapped_column(String(8), default='')
+    inspector_name: Mapped[str] = mapped_column(String(150), default='')
+    group_key: Mapped[str] = mapped_column(String(10), index=True)
+    place_key: Mapped[str] = mapped_column(String(20), index=True)
+    notes: Mapped[str] = mapped_column(Text, default='')
+    created_by: Mapped[str] = mapped_column(String(80), default='')
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+
+class MotorConditionReading(Base):
+    __tablename__ = 'motor_condition_readings'
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    report_id: Mapped[int] = mapped_column(Integer, ForeignKey('motor_condition_reports.id'), index=True)
+    sort_order: Mapped[int] = mapped_column(Integer, default=0)
+    machine: Mapped[str] = mapped_column(String(80))
+    temp_1: Mapped[str] = mapped_column(String(20), default='')
+    temp_2: Mapped[str] = mapped_column(String(20), default='')
+    oil_level: Mapped[str] = mapped_column(String(20), default='')
+    oil_condition: Mapped[str] = mapped_column(String(20), default='')
+    inspection_time: Mapped[str] = mapped_column(String(8), default='')
+
+
 class PartUsed(Base):
     __tablename__='parts_used'
     id: Mapped[int]=mapped_column(Integer,primary_key=True)

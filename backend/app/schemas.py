@@ -463,6 +463,25 @@ class LubricationSave(BaseModel):
     lines: list[LubricationLineIn] = Field(default_factory=list)
 
 
+class MotorReadingIn(BaseModel):
+    machine: str
+    temp_1: str = ''
+    temp_2: str = ''
+    oil_level: str = ''
+    oil_condition: str = ''
+    inspection_time: str = ''
+
+
+class MotorConditionSave(BaseModel):
+    report_date: date
+    inspection_time: str = ''
+    inspector_name: str = ''
+    group_key: str
+    place_key: str
+    notes: str = ''
+    readings: list[MotorReadingIn] = Field(default_factory=list)
+
+
 class ISOCreate(BaseModel):
     document_number: str
     document_title: str

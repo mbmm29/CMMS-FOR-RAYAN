@@ -17,6 +17,7 @@ from .models import *
 from .schemas import *
 from .security import *
 from .kpi import compute_kpi, save_kpi_target
+from .motor_catalog import OIL_CONDITIONS, OIL_LEVELS, motor_catalog_payload, motor_place
 
 Base.metadata.create_all(bind=engine)
 
@@ -238,6 +239,8 @@ def is_technician_account(account) -> bool:
 VIEWER = {
     'ADMINISTRATOR_VIEWER',
 }
+
+MOTOR = ENGINEER | {'LUBRICATION_TECHNICIAN'}
 security = HTTPBearer()
 
 
@@ -3177,6 +3180,132 @@ def save_lubrication_report(data: LubricationSave, db: Session = Depends(get_db)
     payload = lube_payload(db, row)
     payload['new_equipment'] = proposed
     return payload
+
+
+def motor_payload(db, row):
+    readings = db.query(MotorConditionReading).filter(
+        MotorConditionReading.report_id == row.id
+    ).order_by(MotorConditionReading.sort_order, MotorConditionReading.id).all()
+    place = motor_place(row.group_key, row.place_key) or {}
+    return {
+        'report_id': row.report_id,
+        'report_date': row.report_date.isoformat(),
+        'inspection_time': row.inspection_time or '',
+        'inspector_name': row.inspector_name or '',
+        'group_key': row.group_key,
+        'place_key': row.place_key,
+        'place_title': place.get('title', ''),
+        'notes': row.notes or '',
+        'readings': [{
+            'machine': item.machine,
+            'temp_1': item.temp_1 or '',
+            'temp_2': item.temp_2 or '',
+            'oil_level': item.oil_level or '',
+            'oil_condition': item.oil_condition or '',
+            'inspection_time': item.inspection_time or '',
+        } for item in readings],
+    }
+
+
+@app.get('/motor-condition/catalog')
+def motor_catalog(u=Depends(role(*MOTOR))):
+    return motor_catalog_payload()
+
+
+@app.get('/motor-condition')
+def motor_sheets(db: Session = Depends(get_db), u=Depends(role(*MOTOR))):
+    rows = db.query(MotorConditionReport).order_by(
+        MotorConditionReport.report_date.desc(), MotorConditionReport.id.desc()
+    ).limit(80).all()
+    return [{
+        'report_id': row.report_id,
+        'report_date': row.report_date.isoformat(),
+        'inspection_time': row.inspection_time or '',
+        'inspector_name': row.inspector_name or '',
+        'group_key': row.group_key,
+        'place_key': row.place_key,
+    } for row in rows]
+
+
+@app.get('/motor-condition/{report_id}')
+def motor_sheet(report_id: str, db: Session = Depends(get_db), u=Depends(role(*MOTOR))):
+    row = db.query(MotorConditionReport).filter(MotorConditionReport.report_id == report_id).first()
+    if not row:
+        raise HTTPException(404, 'Motor condition sheet not found')
+    return motor_payload(db, row)
+
+
+@app.put('/motor-condition')
+def save_motor_sheet(data: MotorConditionSave, db: Session = Depends(get_db), u=Depends(role(*MOTOR))):
+    place = motor_place(data.group_key, data.place_key)
+    if not place:
+        raise HTTPException(400, 'Choose a group and a location from the form')
+    machines = place['machines']
+    allowed = set(machines)
+    incoming = {}
+    for reading in data.readings:
+        machine = ' '.join((reading.machine or '').split())
+        if machine not in allowed:
+            raise HTTPException(400, 'This machine is not on the selected sheet')
+        if machine in incoming:
+            raise HTTPException(400, 'Each machine is recorded once')
+        temp_1 = (reading.temp_1 or '').strip()[:20]
+        temp_2 = (reading.temp_2 or '').strip()[:20]
+        oil_level = (reading.oil_level or '').strip()
+        oil_condition = (reading.oil_condition or '').strip()
+        if oil_level not in OIL_LEVELS or oil_condition not in OIL_CONDITIONS:
+            raise HTTPException(400, 'Choose an oil level and oil condition from the list')
+        checked_at = (reading.inspection_time or '').strip()[:8]
+        incoming[machine] = (temp_1, temp_2, oil_level, oil_condition, checked_at)
+    clock = (data.inspection_time or '').strip()[:8]
+    inspector = (data.inspector_name or '').strip()[:150] or (u.full_name or u.username)
+    notes = (data.notes or '').strip()[:4000]
+    row = db.query(MotorConditionReport).filter(
+        MotorConditionReport.group_key == data.group_key,
+        MotorConditionReport.place_key == data.place_key,
+        MotorConditionReport.report_date == data.report_date,
+    ).first()
+    created = row is None
+    if created:
+        number = db.query(MotorConditionReport).count() + 1
+        report_id = f'MC-{data.report_date.year}-{number:05d}'
+        while db.query(MotorConditionReport).filter(MotorConditionReport.report_id == report_id).first():
+            number += 1
+            report_id = f'MC-{data.report_date.year}-{number:05d}'
+        row = MotorConditionReport(
+            report_id=report_id,
+            report_date=data.report_date,
+            group_key=data.group_key,
+            place_key=data.place_key,
+            created_by=u.username,
+        )
+        db.add(row)
+        db.flush()
+    row.inspection_time = clock
+    row.inspector_name = inspector
+    row.notes = notes
+    db.query(MotorConditionReading).filter(MotorConditionReading.report_id == row.id).delete()
+    for index, machine in enumerate(machines):
+        temp_1, temp_2, oil_level, oil_condition, checked_at = incoming.get(machine, ('', '', '', '', ''))
+        db.add(MotorConditionReading(
+            report_id=row.id,
+            sort_order=index,
+            machine=machine,
+            temp_1=temp_1,
+            temp_2=temp_2,
+            oil_level=oil_level,
+            oil_condition=oil_condition,
+            inspection_time=checked_at,
+        ))
+    audit(db, u, 'CREATE' if created else 'UPDATE', 'MotorConditionReport', row.report_id, new={
+        'date': str(data.report_date),
+        'group': data.group_key,
+        'place': data.place_key,
+        'readings': len(incoming),
+    })
+    db.commit()
+    db.refresh(row)
+    return motor_payload(db, row)
 
 
 @app.get('/dashboard')
