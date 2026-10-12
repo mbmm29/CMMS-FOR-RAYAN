@@ -592,6 +592,10 @@ const CMMS_AR = {
   'Delete': 'حذف',
   'Delete this record? This cannot be undone.': 'حذف هذا السجل؟ لا يمكن التراجع عن الحذف.',
   'Deleted.': 'تم الحذف.',
+  'Choose a group from the form': 'اختر المجموعة من النموذج',
+  'Enter the equipment': 'أدخل المعدة',
+  'The sheet holds 40 equipment rows': 'تتسع الورقة لأربعين معدة',
+  'Choose an oil level and oil condition from the list': 'اختر مستوى الزيت وحالة الزيت من القائمة',
 };
 
 function currentLang() {

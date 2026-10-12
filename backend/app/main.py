@@ -17,7 +17,7 @@ from .models import *
 from .schemas import *
 from .security import *
 from .kpi import compute_kpi, save_kpi_target
-from .motor_catalog import OIL_CONDITIONS, OIL_LEVELS, motor_catalog_payload, motor_place
+from .motor_catalog import OIL_CONDITIONS, OIL_LEVELS, motor_catalog_payload, motor_place, motor_sheet_allowed
 
 Base.metadata.create_all(bind=engine)
 
@@ -169,6 +169,21 @@ def ensure_additive_columns():
                 for name, sql_type in additions.items():
                     if name not in existing:
                         conn.execute(text(f'ALTER TABLE lubrication_lines ADD COLUMN {name} {sql_type}'))
+        if 'motor_condition_readings' in tables:
+            existing = {c['name']: c for c in inspector.get_columns('motor_condition_readings')}
+            additions = {
+                'plant': "VARCHAR(80) DEFAULT ''",
+                'line_number': "VARCHAR(40) DEFAULT ''",
+            }
+            with engine.begin() as conn:
+                for name, sql_type in additions.items():
+                    if name not in existing:
+                        conn.execute(text(f'ALTER TABLE motor_condition_readings ADD COLUMN {name} {sql_type}'))
+                machine = existing.get('machine') or {}
+                column_type = machine.get('type') if isinstance(machine, dict) else None
+                length = getattr(column_type, 'length', None)
+                if machine and (length is None or length < 150):
+                    conn.execute(text('ALTER TABLE motor_condition_readings ALTER COLUMN machine TYPE VARCHAR(150)'))
     except Exception:
         # Do not prevent the API from starting because of an optional migration.
         # The error will be visible in the application logs.
@@ -3335,7 +3350,9 @@ def motor_payload(db, row):
         'place_title': place.get('title', ''),
         'notes': row.notes or '',
         'readings': [{
-            'machine': item.machine,
+            'machine': item.machine or '',
+            'plant': item.plant or '',
+            'line_number': item.line_number or '',
             'temp_1': item.temp_1 or '',
             'temp_2': item.temp_2 or '',
             'oil_level': item.oil_level or '',
@@ -3375,26 +3392,27 @@ def motor_sheet(report_id: str, db: Session = Depends(get_db), u=Depends(role(*M
 
 @app.put('/motor-condition')
 def save_motor_sheet(data: MotorConditionSave, db: Session = Depends(get_db), u=Depends(role(*MOTOR))):
-    place = motor_place(data.group_key, data.place_key)
-    if not place:
-        raise HTTPException(400, 'Choose a group and a location from the form')
-    machines = place['machines']
-    allowed = set(machines)
-    incoming = {}
+    if not motor_sheet_allowed(data.group_key, data.place_key):
+        raise HTTPException(400, 'Choose a group from the form')
+    incoming = []
     for reading in data.readings:
-        machine = ' '.join((reading.machine or '').split())
-        if machine not in allowed:
-            raise HTTPException(400, 'This machine is not on the selected sheet')
-        if machine in incoming:
-            raise HTTPException(400, 'Each machine is recorded once')
+        machine = ' '.join((reading.machine or '').split())[:150]
+        plant = ' '.join((reading.plant or '').split())[:80]
+        line_number = ' '.join((reading.line_number or '').split())[:40]
         temp_1 = (reading.temp_1 or '').strip()[:20]
         temp_2 = (reading.temp_2 or '').strip()[:20]
         oil_level = (reading.oil_level or '').strip()
         oil_condition = (reading.oil_condition or '').strip()
+        checked_at = (reading.inspection_time or '').strip()[:8]
+        if not any((machine, plant, line_number, temp_1, temp_2, oil_level, oil_condition, checked_at)):
+            continue
+        if not machine:
+            raise HTTPException(400, 'Enter the equipment')
         if oil_level not in OIL_LEVELS or oil_condition not in OIL_CONDITIONS:
             raise HTTPException(400, 'Choose an oil level and oil condition from the list')
-        checked_at = (reading.inspection_time or '').strip()[:8]
-        incoming[machine] = (temp_1, temp_2, oil_level, oil_condition, checked_at)
+        incoming.append((machine, plant, line_number, temp_1, temp_2, oil_level, oil_condition, checked_at))
+    if len(incoming) > 40:
+        raise HTTPException(400, 'The sheet holds 40 equipment rows')
     clock = (data.inspection_time or '').strip()[:8]
     inspector = (data.inspector_name or '').strip()[:150] or (u.full_name or u.username)
     notes = (data.notes or '').strip()[:4000]
@@ -3423,12 +3441,14 @@ def save_motor_sheet(data: MotorConditionSave, db: Session = Depends(get_db), u=
     row.inspector_name = inspector
     row.notes = notes
     db.query(MotorConditionReading).filter(MotorConditionReading.report_id == row.id).delete()
-    for index, machine in enumerate(machines):
-        temp_1, temp_2, oil_level, oil_condition, checked_at = incoming.get(machine, ('', '', '', '', ''))
+    for index, item in enumerate(incoming):
+        machine, plant, line_number, temp_1, temp_2, oil_level, oil_condition, checked_at = item
         db.add(MotorConditionReading(
             report_id=row.id,
             sort_order=index,
             machine=machine,
+            plant=plant,
+            line_number=line_number,
             temp_1=temp_1,
             temp_2=temp_2,
             oil_level=oil_level,

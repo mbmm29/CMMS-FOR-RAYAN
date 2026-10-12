@@ -86,11 +86,22 @@ OIL_LEVELS = {'', 'good', 'add'}
 OIL_CONDITIONS = {'', 'good', 'critical', 'change'}
 
 
+SHEET_PLACE = 'sheet'
+
+
 def motor_place(group_key: str, place_key: str):
     group = MOTOR_GROUPS.get(group_key)
     if not group:
         return None
     return group['places'].get(place_key)
+
+
+def motor_sheet_allowed(group_key: str, place_key: str) -> bool:
+    if group_key not in MOTOR_GROUPS:
+        return False
+    if place_key == SHEET_PLACE:
+        return True
+    return place_key in MOTOR_GROUPS[group_key]['places']
 
 
 def motor_catalog_payload():
