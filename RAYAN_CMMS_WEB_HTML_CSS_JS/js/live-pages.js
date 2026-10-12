@@ -486,7 +486,7 @@ function areaChart(series, unit = 'h', options = {}) {
   return `<svg class="area-chart" viewBox="0 0 ${width} ${height}" role="img" aria-label="${esc(settings.label || 'Downtime trend')}"><defs>${gradients}</defs><g class="area-grid">${grid}</g>${limitLine}${shapes}${labels}</svg><ul class="area-legend">${legend}</ul>`;
 }
 
-function donut(parts, total) {
+function donut(parts, total, digits = 1) {
   const active = parts.filter((part) => part.value > 0);
   let cursor = 0;
   const stops = active.map((part) => {
@@ -495,8 +495,8 @@ function donut(parts, total) {
     return `${part.color} ${start}% ${cursor}%`;
   });
   const style = total ? `background:conic-gradient(${stops.join(',')})` : 'background:#e7ebf3';
-  const legend = active.map((part) => `<li><i style="background:${part.color}"></i><span>${esc(t(part.name))}</span></li>`).join('');
-  return `<div class="donut live" data-label="${esc(numberText(total, 1))}&#10;${esc(t('Total'))}" style="${style}"></div><ul class="area-legend">${legend}</ul>`;
+  const legend = active.map((part) => `<li><i style="background:${part.color}"></i><span>${esc(t(part.name))}${digits ? '' : ` ${esc(numberText(part.value, 0))}`}</span></li>`).join('');
+  return `<div class="donut live" data-label="${esc(numberText(total, digits))}&#10;${esc(t('Total'))}" style="${style}"></div><ul class="area-legend">${legend}</ul>`;
 }
 
 function bumpChart(series, title) {
@@ -629,6 +629,16 @@ async function drawDashboard() {
     { name: 'Routine', value: hours.Routine || 0, color: '#7439f5' },
     { name: 'Inspection', value: hours.Inspection || 0, color: '#009c63' },
   ];
+  const counts = kpi.order_counts || {};
+  const orderParts = [
+    { name: 'Preventive', value: counts.Preventive || 0, color: '#1269f3' },
+    { name: 'Corrective', value: counts.Corrective || 0, color: '#ff710d' },
+    { name: 'Emergency', value: counts.Emergency || 0, color: '#fa3038' },
+    { name: 'Routine', value: counts.Routine || 0, color: '#7439f5' },
+    { name: 'Inspection', value: counts.Inspection || 0, color: '#009c63' },
+    { name: 'Lubrication', value: counts.Lubrication || 0, color: '#008d9c' },
+  ];
+  const orderTotal = orderParts.reduce((sum, part) => sum + part.value, 0);
   const technicianOptions = store.technicians.map((row) => `<option value="${esc(row.technician_id)}"${ui.technicianId === row.technician_id ? ' selected' : ''}>${esc(row.name)}</option>`).join('');
   const extraFilters = `<label>${t('Technician')}<select data-filter="technician"><option value="">${esc(t('All technicians'))}</option>${technicianOptions}</select></label><label>${t('From')}<input data-filter="from" type="date" value="${esc(ui.dateFrom)}"></label><label>${t('To')}<input data-filter="to" type="date" value="${esc(ui.dateTo)}"></label>`;
   const card = (title, value, detail, note) => `<article class="kpi-card"><h3>${esc(t(title))}</h3><b>${value}</b><small>${esc(detail)}</small><small>${esc(note)}</small></article>`;
@@ -650,7 +660,10 @@ async function drawDashboard() {
       ${card('Failure count', String(kpi.failures ?? 0), t('Corrective and emergency events only'), t('PM, inspection and lubrication are not counted'))}
       ${card('Failure rate', kpiText(kpi.failure_rate_1000h, 2), kpiTargetText(kpi.failure_rate_1000h, targets.failure_rate_1000h, false), t('Failures per 1,000 operating hours'))}
     </section>
+    <div class="kpi-pair">
     <section class="panel chart-panel"><h2>${esc(t('Maintenance hours'))}</h2><p class="kpi-note">${esc(t('Total'))} ${kpiText(kpi.total_hours, 1)} ${esc(t('from daily reports and work orders.'))}</p>${kpi.total_hours ? donut(hourParts, kpi.total_hours) : `<p class="chart-empty">${esc(t('No maintenance hours yet'))}</p>`}</section>
+    <section class="panel chart-panel"><h2>${esc(t('Work orders by type'))}</h2><p class="kpi-note">${esc(t('Total'))} ${numberText(orderTotal, 0)} ${esc(t('work orders in this period.'))}</p>${orderTotal ? donut(orderParts, orderTotal, 0) : `<p class="chart-empty">${esc(t('No work orders in this period'))}</p>`}</section>
+    </div>
     <section class="panel chart-panel chart-wide"><h2>${esc(t('Downtime trend'))}</h2><p class="kpi-note">${esc(t(kpi.trend_by === 'line' ? 'Each line' : kpi.trend_by === 'equipment' ? 'Selected equipment' : 'Each plant'))} · ${esc(t('scheduled'))} ${kpiText(kpi.scheduled_downtime_h, 1)} · ${esc(t('unscheduled'))} ${kpiText(kpi.unscheduled_downtime_h, 1)}</p>${kpi.trend_series?.length ? areaChart(kpi.trend_series) : `<p class="chart-empty">${esc(t('No downtime in this period'))}</p>`}</section>
     <section class="panel chart-panel chart-wide"><h2>${esc(t('Motor temperature'))}</h2><p class="kpi-note">${esc(t(ui.equipmentId ? 'Temperature of the selected equipment.' : 'Average of the recorded readings on each measurement day.'))}</p>${(kpi.motor?.temperature || []).some((row) => (row.points || []).some((point) => point.hours != null)) ? areaChart(kpi.motor.temperature, '°C') : `<p class="chart-empty">${esc(t('No motor readings in this period.'))}</p>`}</section>
     <section class="panel chart-panel chart-wide"><h2>${esc(t('Oil level'))}</h2><p class="kpi-note">${esc(t(motorScopeNote()))} · ${esc(t('Rank 1 is the best reading on that day.'))}</p>${bumpChart(kpi.motor?.oil_level, 'Oil level') || `<p class="chart-empty">${esc(t('No motor readings in this period.'))}</p>`}</section>

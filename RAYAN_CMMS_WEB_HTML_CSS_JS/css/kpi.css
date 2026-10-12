@@ -35,7 +35,9 @@ body .metric .glyph{position:static;grid-area:icon;justify-self:end;width:42px;h
 body .metric .trend{grid-area:trend;min-width:0;margin:2px 0 0;color:#8ee0c2;font-size:11px;line-height:1.35;overflow-wrap:anywhere}
 
 body .kpi-layout{grid-template-columns:repeat(auto-fit,minmax(min(100%,300px),1fr));gap:12px}
-body .chart-wide{grid-column:1 / -1}
+body .chart-wide,
+body .kpi-pair{grid-column:1 / -1}
+body .kpi-pair{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
 body .live-filters,
 body .kpi-period,
 body .kpi-board{grid-column:1 / -1}
@@ -94,6 +96,7 @@ body .kpi-target input{width:100%;min-width:0;color:#f4f8ff;background:#071428;b
 body .detail-button.primary{width:100%}
 
 @media(max-width:760px){
+  body .kpi-pair{grid-template-columns:1fr}
   html body .shell .content,
   html[dir="rtl"] body .shell .content{margin-inline-start:0;padding:76px 13px 28px}
   body .metric{min-height:0}

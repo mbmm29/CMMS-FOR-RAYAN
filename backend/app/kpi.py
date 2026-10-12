@@ -181,6 +181,10 @@ def compute_kpi(db: Session, plant_id=None, line_id=None, equipment_id=None, tec
         for name in hours:
             hours[name] = round(hours[name], 2)
         total_hours = round(sum(hours.values()), 2)
+        order_counts = {name: 0 for name in HOUR_TYPES}
+        for order in window_orders:
+            kind = order.work_order_type if order.work_order_type in order_counts else 'Routine'
+            order_counts[kind] += 1
         scheduled_down = hours['Preventive']
         unscheduled_down = round(hours['Corrective'] + hours['Emergency'], 2)
         total_down = round(scheduled_down + unscheduled_down, 2)
@@ -356,6 +360,7 @@ def compute_kpi(db: Session, plant_id=None, line_id=None, equipment_id=None, tec
             'unplanned_pm_pct': _pct(unplanned, planned + unplanned),
             'hours': hours,
             'total_hours': total_hours,
+            'order_counts': order_counts,
             'corrective_pct': _pct(hours['Corrective'], total_hours),
             'preventive_pct': _pct(hours['Preventive'], total_hours),
             'wo_schedule': _pct(len(scheduled_done), len(scheduled_orders)),
