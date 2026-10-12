@@ -13,7 +13,7 @@ const DEFAULT_TAB = {
   'motor-condition': 'Sheet',
 };
 const shellRender = render;
-const ui = { page: 'dashboard', tab: 'All', rowKey: '', mode: 'view', plantId: '', lineId: '', equipmentId: '', technicianId: '', dateFrom: '', dateTo: '', annualPlant: '', annualYear: new Date().getFullYear(), annualItems: [], annualWeek: '', weekTasks: [], lubeId: '', dailyId: '', dailyFilter: '' };
+const ui = { page: 'dashboard', tab: 'All', rowKey: '', mode: 'view', plantId: '', lineId: '', sectionId: '', equipmentId: '', technicianId: '', dateFrom: '', dateTo: '', annualPlant: '', annualYear: new Date().getFullYear(), annualItems: [], annualWeek: '', weekTasks: [], lubeId: '', dailyId: '', dailyFilter: '' };
 const ANNUAL_MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 const WEEKDAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 const DAY_MAINTENANCE_TYPES = ['Preventive', 'Corrective', 'Emergency', 'Routine', 'Inspection', 'Lubrication'];
@@ -184,11 +184,24 @@ function lineText(line) {
   return line.name || line.line_id || '';
 }
 
+function lineSections(lineId) {
+  return (store.sections || []).filter((section) => section.line_id === lineId).sort((a, b) => Number(a.sort_order) - Number(b.sort_order) || String(a.name).localeCompare(String(b.name)));
+}
+
+function sectionName(sectionId) {
+  return (store.sections || []).find((section) => section.section_id === sectionId)?.name || '';
+}
+
+function sectionOptions(lineId, selected = '', emptyLabel = 'No section') {
+  return `<option value="">${esc(t(emptyLabel))}</option>${lineSections(lineId).map((section) => `<option value="${esc(section.section_id)}"${section.section_id === selected ? ' selected' : ''}>${esc(section.name)}</option>`).join('')}`;
+}
+
 function placeOf(item) {
   if (!item) return '—';
   const plant = store.plants.find((row) => row.plant_id === item.plant_id)?.name || item.plant_id;
   const line = lineText(store.lines.find((row) => row.line_id === item.line_id));
-  return [plant, line].filter(Boolean).join(' / ') || '—';
+  const section = sectionName(item.section_id);
+  return [plant, line, section].filter(Boolean).join(' / ') || '—';
 }
 
 function equipmentText(row) {
@@ -203,13 +216,14 @@ function visibleEquipment() {
   return store.equipment.filter((item) => {
     if (ui.plantId && item.plant_id !== ui.plantId) return false;
     if (ui.lineId && item.line_id !== ui.lineId) return false;
+    if (ui.sectionId && item.section_id !== ui.sectionId) return false;
     if (ui.equipmentId && item.equipment_id !== ui.equipmentId) return false;
     return true;
   });
 }
 
 function scoped(rows) {
-  if (!ui.plantId && !ui.lineId && !ui.equipmentId) return rows;
+  if (!ui.plantId && !ui.lineId && !ui.sectionId && !ui.equipmentId) return rows;
   const ids = new Set(visibleEquipment().map((item) => item.equipment_id));
   return rows.filter((row) => ids.has(row.equipment_id || row.manual_equipment_code));
 }
@@ -245,9 +259,10 @@ function sum(rows, field) {
 }
 
 async function loadStore() {
-  const [plants, lines, equipment, orders, plans, sops, records, technicians, pending] = await Promise.all([
+  const [plants, lines, sections, equipment, orders, plans, sops, records, technicians, pending] = await Promise.all([
     apiRequest('/plants'),
     apiRequest('/lines'),
+    apiRequest('/sections'),
     apiRequest('/equipment'),
     apiRequest('/work-orders'),
     apiRequest('/pm'),
@@ -256,7 +271,7 @@ async function loadStore() {
     apiRequest('/technicians'),
     canMaintain() ? apiRequest('/pending-equipment') : Promise.resolve([]),
   ]);
-  store = { plants, lines, equipment, orders, plans, sops, records, technicians, pending };
+  store = { plants, lines, sections, equipment, orders, plans, sops, records, technicians, pending };
 }
 
 function setHeader(page) {
@@ -312,14 +327,19 @@ function filtersHtml() {
   if (ui.plantId && !openIds.has(ui.plantId)) {
     ui.plantId = '';
     ui.lineId = '';
+    ui.sectionId = '';
     ui.equipmentId = '';
   }
   const lines = store.lines.filter((line) => openIds.has(line.plant_id) && (!ui.plantId || line.plant_id === ui.plantId));
-  const equipment = store.equipment.filter((item) => (!item.plant_id || openIds.has(item.plant_id)) && (!ui.plantId || item.plant_id === ui.plantId) && (!ui.lineId || item.line_id === ui.lineId));
+  const lineIds = new Set(lines.map((line) => line.line_id));
+  const sections = (store.sections || []).filter((section) => lineIds.has(section.line_id) && (!ui.lineId || section.line_id === ui.lineId));
+  if (ui.sectionId && !sections.some((section) => section.section_id === ui.sectionId)) ui.sectionId = '';
+  const equipment = store.equipment.filter((item) => (!item.plant_id || openIds.has(item.plant_id)) && (!ui.plantId || item.plant_id === ui.plantId) && (!ui.lineId || item.line_id === ui.lineId) && (!ui.sectionId || item.section_id === ui.sectionId));
   const option = (value, label, selected) => `<option value="${esc(value)}"${selected === value ? ' selected' : ''}>${esc(label)}</option>`;
   return `<div class="live-filters">
     <label>${t('Plant')}<select data-filter="plant">${option('', t('All plants'), ui.plantId)}${openPlants().map((plant) => option(plant.plant_id, plant.name, ui.plantId)).join('')}</select></label>
     <label>${t('Line')}<select data-filter="line">${option('', t('All lines'), ui.lineId)}${lines.map((line) => option(line.line_id, line.name, ui.lineId)).join('')}</select></label>
+    <label>${t('Section')}<select data-filter="section">${option('', t('All sections'), ui.sectionId)}${sections.map((section) => option(section.section_id, section.name, ui.sectionId)).join('')}</select></label>
     <label>${t('Equipment')}<select data-filter="equipment">${option('', t('All equipment'), ui.equipmentId)}${equipment.map((item) => option(item.equipment_id, `${item.equipment_id} — ${item.name}`, ui.equipmentId)).join('')}</select></label>
   </div>`;
 }
@@ -1172,7 +1192,16 @@ function drawPlants() {
     const count = store.lines.filter((line) => line.plant_id === plant.plant_id).length;
     return `<tr data-row="${esc(plant.plant_id)}" class="${selected && selected.plant_id === plant.plant_id ? 'selected' : ''}">${cell(esc(plant.plant_id), true)}${cell(esc(plant.name))}${cell(String(count))}${cell(liveBadge(plant.active === false ? 'Inactive' : 'Active'))}</tr>`;
   });
-  const lineRows = plantLines.map((line) => `<div class="summary-row"><span>${esc(t('Line'))} ${esc(line.line_number ?? '—')}</span><b>${esc(line.name || '')}</b>${canMaintain() ? `<button type="button" class="detail-button danger" data-delete="/lines" data-delete-id="${esc(line.line_id)}" data-delete-keep="1">${esc(t('Delete'))}</button>` : ''}</div>`).join('') || `<p class="live-note">${esc(t('No records yet'))}</p>`;
+  const lineRows = plantLines.map((line) => {
+    const sections = lineSections(line.line_id);
+    const chips = sections.map((section) => {
+      const count = store.equipment.filter((item) => item.section_id === section.section_id).length;
+      const remove = canMaintain() ? `<button type="button" class="detail-button danger" data-delete="/sections" data-delete-id="${esc(section.section_id)}" data-delete-keep="1" data-delete-note="Delete this section? Equipment stays on the line.">${esc(t('Delete'))}</button>` : '';
+      return `<span class="section-chip"><b>${esc(section.name)}</b><small>${count}</small>${remove}</span>`;
+    }).join('') || `<p class="live-note">${esc(t('No sections on this line yet.'))}</p>`;
+    const add = canMaintain() ? `<form class="section-form" data-line="${esc(line.line_id)}"><input name="name" required placeholder="${esc(t('Section name'))}"><button class="detail-button primary" type="submit">${esc(t('Add section'))}</button><p class="form-error section-error"></p></form>` : '';
+    return `<div class="line-block"><div class="summary-row"><span>${esc(t('Line'))} ${esc(line.line_number ?? '—')}</span><b>${esc(line.name || '')}</b>${canMaintain() ? `<button type="button" class="detail-button danger" data-delete="/lines" data-delete-id="${esc(line.line_id)}" data-delete-keep="1">${esc(t('Delete'))}</button>` : ''}</div><div class="section-list">${chips}</div>${add}</div>`;
+  }).join('') || `<p class="live-note">${esc(t('No records yet'))}</p>`;
   const lineForm = selected && canMaintain() ? `<form id="line-form" class="live-form"><div class="assign-block"><b>Add production line</b></div><label>Line number<input name="line_number" type="number" min="1" step="1" required></label><label>Name<input name="name" placeholder="Optional"></label><button class="detail-button primary" type="submit">Add line</button><p id="line-error" class="form-error"></p></form>` : '';
   const statusForm = selected && canMaintain() ? `<form id="plant-status" class="live-form"><label>${esc(t('Status'))}<select name="active">${plantStatusOptions(selected.active)}</select></label><button class="detail-button primary" type="submit">${esc(t('Save'))}</button><p id="plant-status-error" class="form-error"></p></form>` : '';
   const detail = ui.mode === 'create' ? plantForm() : `<aside class="panel detail"><h2>Plant Details</h2><div class="detail-top"><div class="machine">▣</div>${liveBadge(selected?.active === false ? 'Inactive' : 'Active')}<h3>${esc(selected?.plant_id || '—')}</h3><p>${esc(selected?.name || '')}</p></div><div class="detail-list">${lineRows}</div>${lineForm}${statusForm}</aside>`;
@@ -1193,12 +1222,27 @@ function drawPlants() {
       store = null;
       ui.rowKey = selected.plant_id;
       ui.mode = 'view';
-      toast('Production line added.');
+      toast(t('Production line added.'));
       await paint('plants');
     } catch (exception) {
-      error.textContent = exception.message;
+      error.textContent = t(exception.message);
     }
   });
+  document.querySelectorAll('.section-form').forEach((form) => form.addEventListener('submit', async (event) => {
+    event.preventDefault();
+    const error = form.querySelector('.section-error');
+    const name = String(new FormData(form).get('name') || '').trim();
+    try {
+      await apiRequest('/sections', { method: 'POST', body: JSON.stringify({ line_id: form.dataset.line, name }) });
+      store = null;
+      ui.rowKey = selected.plant_id;
+      ui.mode = 'view';
+      toast(t('Section added.'));
+      await paint('plants');
+    } catch (exception) {
+      if (error) error.textContent = t(exception.message);
+    }
+  }));
   document.getElementById('plant-status')?.addEventListener('submit', async (event) => {
     event.preventDefault();
     const error = document.getElementById('plant-status-error');
@@ -1241,7 +1285,7 @@ function equipmentTabs() {
 function equipmentDetail(selected) {
   const capacity = selected?.capacity == null ? '—' : `${selected.capacity}${selected.capacity_unit ? ` ${selected.capacity_unit}` : ''}`;
   return detailPanel('Equipment Details', selected?.status || '—', selected?.equipment_id || '—', selected?.name || '', [
-    ['Category', selected?.equipment_type], ['Location', placeOf(selected)], ['Area', selected?.area],
+    ['Category', selected?.equipment_type], ['Location', placeOf(selected)], ['Section', sectionName(selected?.section_id) || '—'], ['Area', selected?.area],
     ['Manufacturer', selected?.manufacturer], ['Model', selected?.model], ['Serial number', selected?.serial_number],
     ['Criticality', selected?.criticality], ['Condition', selected?.condition], ['Capacity', capacity],
     ['Motor power (kW)', selected?.motor_power_kw ?? '—'], ['Operating hours', selected?.operating_hours ?? '—'],
@@ -1275,12 +1319,27 @@ function drawEquipment() {
   document.getElementById('workspace').className = 'workspace';
   document.getElementById('workspace').innerHTML = `<section class="panel">${filtersHtml()}${equipmentTabs()}${tableShell(['Equipment Code', 'Equipment Name', 'Category', 'Location (Plant / Line)', 'Status', 'Condition', 'Criticality'], body, shown(rows.length, all.length, 'equipment'))}</section>${detail}`;
   if (selected && canMaintain() && ui.mode !== 'create') {
-    document.querySelector('.detail')?.insertAdjacentHTML('beforeend', `<button type="button" class="detail-button danger" data-delete="/equipment" data-delete-id="${esc(selected.equipment_id)}" data-delete-note="Delete this equipment? Its maintenance history and KPI charts will be removed.">${esc(t('Delete'))}</button>`);
+    const sectionForm = lineSections(selected.line_id).length ? `<form id="equipment-section" class="live-form"><label>${esc(t('Section'))}<select name="section_id">${sectionOptions(selected.line_id, selected.section_id || '')}</select></label><button class="detail-button primary" type="submit">${esc(t('Save'))}</button><p id="equipment-section-error" class="form-error"></p></form>` : `<p class="live-note">${esc(t('No sections on this line yet.'))}</p>`;
+    document.querySelector('.detail')?.insertAdjacentHTML('beforeend', `${sectionForm}<button type="button" class="detail-button danger" data-delete="/equipment" data-delete-id="${esc(selected.equipment_id)}" data-delete-note="Delete this equipment? Its maintenance history and KPI charts will be removed.">${esc(t('Delete'))}</button>`);
   }
   bindFilters();
   bindRows();
   bindForm();
   bindDeletes();
+  document.getElementById('equipment-section')?.addEventListener('submit', async (event) => {
+    event.preventDefault();
+    const error = document.getElementById('equipment-section-error');
+    const sectionId = new FormData(event.currentTarget).get('section_id') || null;
+    try {
+      await apiRequest(`/equipment/${encodeURIComponent(selected.equipment_id)}/section`, { method: 'PUT', body: JSON.stringify({ section_id: sectionId || null }) });
+      store = null;
+      ui.rowKey = selected.equipment_id;
+      toast(t('Saved.'));
+      await paint('equipment');
+    } catch (exception) {
+      if (error) error.textContent = t(exception.message);
+    }
+  });
 }
 
 function drawSops() {
@@ -1393,7 +1452,8 @@ function machinePlace(equipment) {
   const plant = store.plants.find((row) => row.plant_id === equipment.plant_id)?.name || '';
   const line = store.lines.find((row) => row.line_id === equipment.line_id);
   const lineLabel = line?.name || (line?.line_number != null && line.line_number !== '' ? `${t('Line')} ${line.line_number}` : '');
-  return [plant, lineLabel, equipment.area].filter(Boolean).join(' / ') || '—';
+  const section = sectionName(equipment.section_id);
+  return [plant, lineLabel, section, equipment.area].filter(Boolean).join(' / ') || '—';
 }
 
 function machineLogPaper(equipment, rows) {
@@ -1480,6 +1540,7 @@ function equipmentForm() {
     field('Category', '<input name="equipment_type" required>'),
     field('Plant', selectField('plant_id', plants, true)),
     field('Line number', '<select name="line_id" required><option value=""></option></select>'),
+    field('Section', '<select name="section_id"><option value=""></option></select>'),
     field('Area', '<input name="area">'),
     field('Manufacturer', '<input name="manufacturer">'),
     field('Model', '<input name="model">'),
@@ -1498,7 +1559,12 @@ function equipmentForm() {
 function bindEquipmentLines(form) {
   const plantSelect = form.querySelector('[name="plant_id"]');
   const lineSelect = form.querySelector('[name="line_id"]');
+  const sectionSelect = form.querySelector('[name="section_id"]');
   if (!plantSelect || !lineSelect) return;
+  const fillSections = () => {
+    if (!sectionSelect) return;
+    sectionSelect.innerHTML = sectionOptions(lineSelect.value, '', lineSelect.value ? 'No section' : 'Select a line first');
+  };
   const fill = () => {
     const lines = store.lines.filter((line) => line.plant_id === plantSelect.value).sort((a, b) => Number(a.line_number) - Number(b.line_number));
     lineSelect.innerHTML = `<option value="">${esc(t(plantSelect.value ? 'Select line number' : 'Select a plant first'))}</option>${lines.map((line) => {
@@ -1506,8 +1572,10 @@ function bindEquipmentLines(form) {
       const extra = line.name && line.name !== label ? ` — ${line.name}` : '';
       return `<option value="${esc(line.line_id)}">${esc(label + extra)}</option>`;
     }).join('')}`;
+    fillSections();
   };
   plantSelect.addEventListener('change', fill);
+  lineSelect.addEventListener('change', fillSections);
   fill();
 }
 
@@ -1522,11 +1590,12 @@ function sopForm() {
 }
 
 function bindFilters() {
-  const fields = { plant: 'plantId', line: 'lineId', equipment: 'equipmentId', technician: 'technicianId', from: 'dateFrom', to: 'dateTo' };
+  const fields = { plant: 'plantId', line: 'lineId', section: 'sectionId', equipment: 'equipmentId', technician: 'technicianId', from: 'dateFrom', to: 'dateTo' };
   document.querySelectorAll('[data-filter]').forEach((select) => select.addEventListener('change', () => {
     ui[fields[select.dataset.filter] || 'equipmentId'] = select.value;
-    if (select.dataset.filter === 'plant') { ui.lineId = ''; ui.equipmentId = ''; }
-    if (select.dataset.filter === 'line') ui.equipmentId = '';
+    if (select.dataset.filter === 'plant') { ui.lineId = ''; ui.sectionId = ''; ui.equipmentId = ''; }
+    if (select.dataset.filter === 'line') { ui.sectionId = ''; ui.equipmentId = ''; }
+    if (select.dataset.filter === 'section') ui.equipmentId = '';
     ui.rowKey = '';
     draw(ui.page);
   }));
@@ -1690,7 +1759,7 @@ function drawEquipmentFromReports() {
     const plant = store.plants.find((item) => item.plant_id === row.plant_id)?.name || row.plant_id || '—';
     return `<tr data-row="${esc(row.id)}" class="${selected && selected.id === row.id ? 'selected' : ''}">${cell(esc(row.equipment_code), true)}${cell(esc(row.equipment_name))}${cell(esc(plant))}${cell(esc(row.line_number || '—'))}${cell(esc(technicianName(row.technician_id)))}</tr>`;
   });
-  const reviewForm = `<form class="live-form" id="pending-review"><label>${esc(t('Equipment name'))}<input id="pending-name" value="${esc(selected?.equipment_name || '')}" required></label><label>${esc(t('Plant'))}<select id="pending-plant"><option value="">${esc(t('Select'))}</option>${openPlants().map((plant) => `<option value="${esc(plant.plant_id)}"${plant.plant_id === selected?.plant_id ? ' selected' : ''}>${esc(plant.name)}</option>`).join('')}</select></label><label>${esc(t('Line number'))}<select id="pending-line"><option value="">${esc(t('Select'))}</option></select></label><div class="summary-row"><span>${esc(t('Technician'))}</span><b>${esc(technicianName(selected?.technician_id))}</b></div><div class="summary-row"><span>${esc(t('Report'))}</span><b>${esc(pendingSource(selected))} ${esc(selected?.report_id || '')}</b></div></form><div class="assign-block"><button class="detail-button primary" type="button" id="approve-equipment">${esc(t('Approve'))}</button><button class="detail-button" type="button" id="reject-equipment">${esc(t('Reject'))}</button><p id="pending-error" class="form-error"></p></div>`;
+  const reviewForm = `<form class="live-form" id="pending-review"><label>${esc(t('Equipment name'))}<input id="pending-name" value="${esc(selected?.equipment_name || '')}" required></label><label>${esc(t('Plant'))}<select id="pending-plant"><option value="">${esc(t('Select'))}</option>${openPlants().map((plant) => `<option value="${esc(plant.plant_id)}"${plant.plant_id === selected?.plant_id ? ' selected' : ''}>${esc(plant.name)}</option>`).join('')}</select></label><label>${esc(t('Line number'))}<select id="pending-line"><option value="">${esc(t('Select'))}</option></select></label><label>${esc(t('Section'))}<select id="pending-section"><option value="">${esc(t('No section'))}</option></select></label><div class="summary-row"><span>${esc(t('Technician'))}</span><b>${esc(technicianName(selected?.technician_id))}</b></div><div class="summary-row"><span>${esc(t('Report'))}</span><b>${esc(pendingSource(selected))} ${esc(selected?.report_id || '')}</b></div></form><div class="assign-block"><button class="detail-button primary" type="button" id="approve-equipment">${esc(t('Approve'))}</button><button class="detail-button" type="button" id="reject-equipment">${esc(t('Reject'))}</button><p id="pending-error" class="form-error"></p></div>`;
   const review = selected ? reviewForm : `<p class="live-note">${esc(t('No new equipment'))}</p>`;
   const detail = ui.mode === 'create' ? equipmentForm() : `<aside class="panel detail pending-review"><h2>${esc(t('From reports'))}</h2><div class="detail-top"><div class="machine">⚙</div>${selected ? liveBadge('Pending') : ''}<h3>${esc(selected?.equipment_code || '—')}</h3></div>${review}</aside>`;
   document.getElementById('workspace').className = 'workspace';
@@ -1699,12 +1768,19 @@ function drawEquipmentFromReports() {
   bindForm();
   const pendingPlant = document.getElementById('pending-plant');
   const pendingLine = document.getElementById('pending-line');
+  const pendingSection = document.getElementById('pending-section');
+  const fillPendingSections = () => {
+    if (!pendingSection) return;
+    pendingSection.innerHTML = sectionOptions(pendingLine?.value || '', selected?.section_id || '');
+  };
   const fillPendingLines = () => {
     if (!pendingLine) return;
     const lines = store.lines.filter((line) => line.plant_id === pendingPlant.value);
     pendingLine.innerHTML = `<option value="">${esc(t('Select'))}</option>${lines.map((line) => `<option value="${esc(line.line_id)}"${line.line_id === selected?.line_id ? ' selected' : ''}>${esc(line.line_number ?? '')} — ${esc(line.name || '')}</option>`).join('')}`;
+    fillPendingSections();
   };
   pendingPlant?.addEventListener('change', fillPendingLines);
+  pendingLine?.addEventListener('change', fillPendingSections);
   fillPendingLines();
   document.getElementById('pending-review')?.addEventListener('submit', (event) => {
     event.preventDefault();
@@ -1721,12 +1797,14 @@ async function decidePending(row, decision) {
     if (decision === 'approve') {
       const plant = document.getElementById('pending-plant')?.value || '';
       const line = document.getElementById('pending-line')?.value || '';
+      const section = document.getElementById('pending-section')?.value || '';
       const name = document.getElementById('pending-name')?.value.trim() || '';
       if (!name || !plant || !line) {
         if (error) error.textContent = t('Enter the name, plant, and line before approving this equipment.');
         return;
       }
       const params = new URLSearchParams({ plant_id: plant, line_id: line, name });
+      if (section) params.set('section_id', section);
       path += `?${params}`;
     }
     await apiRequest(path, { method: 'POST' });

@@ -617,6 +617,21 @@ const CMMS_AR = {
   'No reports yet.': 'لا توجد تقارير بعد.',
   'No matching reports.': 'لا توجد تقارير مطابقة.',
   'Motor report saved.': 'تم حفظ تقرير حالة المحرك.',
+  'Add section': 'إضافة قسم',
+  'Section name': 'اسم القسم',
+  'No section': 'بدون قسم',
+  'All sections': 'كل الأقسام',
+  'Sections': 'الأقسام',
+  'Section added.': 'تمت إضافة القسم.',
+  'Production line added.': 'تمت إضافة خط الإنتاج.',
+  'Select a line first': 'اختر الخط أولاً',
+  'The section does not belong to the selected line': 'القسم لا يتبع الخط المحدد',
+  'This section already exists on the line': 'هذا القسم موجود على الخط',
+  'Enter a section name': 'أدخل اسم القسم',
+  'Section not found': 'القسم غير موجود',
+  'Delete this section? Equipment stays on the line.': 'حذف هذا القسم؟ تبقى المعدات على الخط.',
+  'No sections on this line yet.': 'لا توجد أقسام على هذا الخط بعد.',
+  'Choose a line before assigning a section': 'اختر خطاً قبل تعيين القسم',
 };
 
 function currentLang() {

@@ -446,3 +446,14 @@ button.job-open:hover{filter:brightness(1.12)}
   .sheet-scroll{max-width:100%;overflow-x:auto;-webkit-overflow-scrolling:touch}
   .sheet-scroll .lube-table{min-width:680px;table-layout:auto}
 }
+
+.line-block{padding:8px 0 2px;border-bottom:1px solid #23406e}
+.line-block .summary-row{border-bottom:0;padding-bottom:4px}
+.section-list{display:flex;flex-wrap:wrap;gap:6px;margin:0 0 8px}
+.section-chip{display:inline-flex;align-items:center;gap:6px;padding:3px 8px;border:1px solid #23406e;border-radius:999px;background:#0d2244;color:#e7eefc;font-size:12px}
+.section-chip small{color:#9eb4d6}
+body .section-chip .detail-button{width:auto;height:22px;margin:0;padding:0 6px}
+.section-form{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin:0 0 8px}
+.section-form input{flex:1 1 120px;min-width:0;height:34px;padding:0 8px}
+body .section-form .detail-button{width:auto;height:34px;margin:0;padding:0 12px}
+.section-form .section-error{flex-basis:100%;margin:0}

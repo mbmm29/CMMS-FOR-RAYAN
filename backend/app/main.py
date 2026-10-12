@@ -185,6 +185,11 @@ def ensure_additive_columns():
                 length = getattr(column_type, 'length', None)
                 if machine and (length is None or length < 150):
                     conn.execute(text('ALTER TABLE motor_condition_readings ALTER COLUMN machine TYPE VARCHAR(150)'))
+        if 'equipment' in tables:
+            existing = {c['name'] for c in inspector.get_columns('equipment')}
+            if 'section_id' not in existing:
+                with engine.begin() as conn:
+                    conn.execute(text('ALTER TABLE equipment ADD COLUMN section_id VARCHAR(80)'))
     except Exception:
         # Do not prevent the API from starting because of an optional migration.
         # The error will be visible in the application logs.
@@ -517,6 +522,59 @@ def create_line(data:LineCreate,db:Session=Depends(get_db),u=Depends(role(*ENGIN
     o=PlantLine(line_id=line_id, plant_id=data.plant_id, line_number=data.line_number, name=name, active=data.active)
     db.add(o); audit(db,u,'CREATE','Line',line_id,new=data.model_dump()); db.commit(); db.refresh(o); return as_dict(o)
 
+def section_for_line(db, line_id: str, section_id: str | None):
+    clean = (section_id or '').strip()
+    if not clean:
+        return None
+    section = db.query(LineSection).filter_by(section_id=clean, line_id=line_id).first()
+    if not section:
+        raise HTTPException(400, 'The section does not belong to the selected line')
+    return section
+
+@app.get('/sections')
+def sections(line_id: str | None = None, db: Session = Depends(get_db), u=Depends(auth)):
+    query = db.query(LineSection)
+    if line_id:
+        query = query.filter(LineSection.line_id == line_id)
+    return [as_dict(row) for row in query.order_by(LineSection.sort_order, LineSection.name).all()]
+
+@app.post('/sections')
+def create_section(data: SectionCreate, db: Session = Depends(get_db), u=Depends(role(*ENGINEER))):
+    line = db.query(PlantLine).filter_by(line_id=(data.line_id or '').strip()).first()
+    if not line:
+        raise HTTPException(404, 'Line not found')
+    name = (data.name or '').strip()
+    if not name:
+        raise HTTPException(400, 'Enter a section name')
+    name = name[:150]
+    existing = db.query(LineSection).filter_by(line_id=line.line_id).all()
+    if any(row.name.casefold() == name.casefold() for row in existing):
+        raise HTTPException(409, 'This section already exists on the line')
+    order = max((row.sort_order or 0) for row in existing) + 1 if existing else 1
+    section_id = f'{line.line_id}-S{order}'
+    while db.query(LineSection).filter_by(section_id=section_id).first():
+        order += 1
+        section_id = f'{line.line_id}-S{order}'
+    section = LineSection(section_id=section_id, line_id=line.line_id, name=name, sort_order=order)
+    db.add(section)
+    audit(db, u, 'CREATE', 'LineSection', section_id, new={'line_id': line.line_id, 'name': name})
+    db.commit()
+    db.refresh(section)
+    return as_dict(section)
+
+@app.delete('/sections/{section_id}')
+def delete_section(section_id: str, db: Session = Depends(get_db), u=Depends(role(*ENGINEER))):
+    section = db.query(LineSection).filter_by(section_id=section_id).first()
+    if not section:
+        raise HTTPException(404, 'Section not found')
+    db.query(Equipment).filter(Equipment.section_id == section_id).update(
+        {Equipment.section_id: None}, synchronize_session=False,
+    )
+    db.delete(section)
+    audit(db, u, 'DELETE', 'LineSection', section_id)
+    db.commit()
+    return {'ok': True}
+
 @app.get('/equipment',response_model=list[EquipmentOut])
 def list_equipment(line_id:str|None=None,db:Session=Depends(get_db),u=Depends(auth)):
     q=db.query(Equipment)
@@ -582,17 +640,39 @@ def create_equipment(data:EquipmentCreate,db:Session=Depends(get_db),u=Depends(a
     active_plant_or_404(db, data.plant_id)
     if not db.query(PlantLine).filter_by(line_id=data.line_id, plant_id=data.plant_id).first():
         raise HTTPException(400, 'The line number does not belong to the selected plant')
+    section = section_for_line(db, data.line_id, data.section_id)
     if data.status not in EQUIPMENT_STATUSES: raise HTTPException(400,'Invalid equipment status')
     if db.query(Equipment).filter_by(equipment_id=data.equipment_id).first(): raise HTTPException(409,'Equipment ID already exists')
-    o=Equipment(**data.model_dump()); db.add(o); audit(db,u,'CREATE','Equipment',data.equipment_id,new=data.model_dump()); db.commit(); db.refresh(o); return o
+    payload = data.model_dump()
+    payload['section_id'] = section.section_id if section else None
+    o=Equipment(**payload); db.add(o); audit(db,u,'CREATE','Equipment',data.equipment_id,new=payload); db.commit(); db.refresh(o); return o
 @app.put('/equipment/{equipment_id}',response_model=EquipmentOut)
 def update_equipment(equipment_id:str,data:EquipmentCreate,db:Session=Depends(get_db),u=Depends(role(*ENGINEER))):
     o=db.query(Equipment).filter_by(equipment_id=equipment_id).first()
     if not o: raise HTTPException(404,'Equipment not found')
-    old={k:getattr(o,k) for k in data.model_dump()}
-    for k,v in data.model_dump().items():
+    payload = data.model_dump()
+    line_id = payload.get('line_id') or o.line_id
+    section = section_for_line(db, line_id, payload.get('section_id'))
+    payload['section_id'] = section.section_id if section else None
+    old={k:getattr(o,k) for k in payload}
+    for k,v in payload.items():
         if k!='equipment_id': setattr(o,k,v)
-    audit(db,u,'UPDATE','Equipment',equipment_id,old=old,new=data.model_dump()); db.commit(); db.refresh(o); return o
+    audit(db,u,'UPDATE','Equipment',equipment_id,old=old,new=payload); db.commit(); db.refresh(o); return o
+
+@app.put('/equipment/{equipment_id}/section', response_model=EquipmentOut)
+def assign_equipment_section(equipment_id: str, data: EquipmentSectionUpdate, db: Session = Depends(get_db), u=Depends(role(*ENGINEER))):
+    equipment = db.query(Equipment).filter_by(equipment_id=equipment_id).first()
+    if not equipment:
+        raise HTTPException(404, 'Equipment not found')
+    if not equipment.line_id:
+        raise HTTPException(400, 'Choose a line before assigning a section')
+    section = section_for_line(db, equipment.line_id, data.section_id)
+    old = equipment.section_id
+    equipment.section_id = section.section_id if section else None
+    audit(db, u, 'UPDATE', 'Equipment', equipment_id, old={'section_id': old}, new={'section_id': equipment.section_id})
+    db.commit()
+    db.refresh(equipment)
+    return equipment
 
 @app.get('/pending-equipment')
 def pending_equipment(db: Session = Depends(get_db), u=Depends(auth)):
@@ -602,7 +682,7 @@ def pending_equipment(db: Session = Depends(get_db), u=Depends(auth)):
     return [as_dict(row) for row in rows]
 
 @app.post('/pending-equipment/{item_id}/approve')
-def approve_pending_equipment(item_id: int, plant_id: str | None = None, line_id: str | None = None, name: str | None = None, db: Session = Depends(get_db), u=Depends(role(*ENGINEER))):
+def approve_pending_equipment(item_id: int, plant_id: str | None = None, line_id: str | None = None, name: str | None = None, section_id: str | None = None, db: Session = Depends(get_db), u=Depends(role(*ENGINEER))):
     row = db.get(PendingEquipment, item_id)
     if not row or row.status != 'Pending':
         raise HTTPException(404, 'Pending equipment was not found')
@@ -627,12 +707,14 @@ def approve_pending_equipment(item_id: int, plant_id: str | None = None, line_id
     if not row.plant_id or line is None:
         raise HTTPException(400, 'Select a plant and a line before approving this equipment.')
     active_plant_or_404(db, row.plant_id)
+    section = section_for_line(db, line.line_id, section_id)
     equipment = Equipment(
         equipment_id=row.equipment_code,
         name=row.equipment_name,
         equipment_type='Reported',
         plant_id=row.plant_id,
         line_id=line.line_id,
+        section_id=section.section_id if section else None,
         status='Running',
         criticality='B',
     )
@@ -2961,6 +3043,8 @@ def delete_plant(plant_id: str, db: Session = Depends(get_db), u=Depends(role(*E
         db.query(AnnualPMItem).filter(AnnualPMItem.plan_id.in_(plan_ids)).delete(synchronize_session=False)
         db.query(AnnualPMPlan).filter(AnnualPMPlan.id.in_(plan_ids)).delete(synchronize_session=False)
     line_ids = [row.line_id for row in db.query(PlantLine).filter_by(plant_id=plant_id).all()]
+    if line_ids:
+        db.query(LineSection).filter(LineSection.line_id.in_(line_ids)).delete(synchronize_session=False)
     equipment_ids = [
         row.equipment_id for row in db.query(Equipment).filter(Equipment.plant_id == plant_id).all()
     ]
@@ -2981,8 +3065,9 @@ def delete_line(line_id: str, db: Session = Depends(get_db), u=Depends(role(*ENG
     if not line:
         raise HTTPException(404, 'Line not found')
     db.query(Equipment).filter(Equipment.line_id == line_id).update(
-        {Equipment.line_id: None}, synchronize_session=False,
+        {Equipment.line_id: None, Equipment.section_id: None}, synchronize_session=False,
     )
+    db.query(LineSection).filter(LineSection.line_id == line_id).delete(synchronize_session=False)
     db.query(KpiTarget).filter(KpiTarget.line_id == line_id).delete(synchronize_session=False)
     db.delete(line)
     audit(db, u, 'DELETE', 'PlantLine', line_id)

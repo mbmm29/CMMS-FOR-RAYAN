@@ -32,6 +32,14 @@ class PlantLine(Base):
     active: Mapped[bool]=mapped_column(Boolean,default=True)
     __table_args__=(UniqueConstraint('plant_id','line_number',name='uq_plant_line_number'),)
 
+class LineSection(Base):
+    __tablename__='line_sections'
+    id: Mapped[int]=mapped_column(Integer,primary_key=True)
+    section_id: Mapped[str]=mapped_column(String(80),unique=True,index=True)
+    line_id: Mapped[str]=mapped_column(String(50),ForeignKey('plant_lines.line_id'),index=True)
+    name: Mapped[str]=mapped_column(String(150))
+    sort_order: Mapped[int]=mapped_column(Integer,default=1)
+
 class Equipment(Base):
     __tablename__='equipment'
     id: Mapped[int]=mapped_column(Integer,primary_key=True)
@@ -40,6 +48,7 @@ class Equipment(Base):
     equipment_type: Mapped[str]=mapped_column(String(100))
     plant_id: Mapped[str|None]=mapped_column(String(50),nullable=True)
     line_id: Mapped[str|None]=mapped_column(String(50),nullable=True)
+    section_id: Mapped[str|None]=mapped_column(String(80),nullable=True)
     area: Mapped[str|None]=mapped_column(String(100),nullable=True)
     manufacturer: Mapped[str|None]=mapped_column(String(100),nullable=True)
     model: Mapped[str|None]=mapped_column(String(100),nullable=True)

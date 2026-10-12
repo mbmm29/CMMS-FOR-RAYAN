@@ -73,12 +73,22 @@ class LineCreate(BaseModel):
     active: bool = True
 
 
+class SectionCreate(BaseModel):
+    line_id: str
+    name: str
+
+
+class EquipmentSectionUpdate(BaseModel):
+    section_id: str | None = None
+
+
 class EquipmentBase(BaseModel):
     equipment_id: str
     name: str
     equipment_type: str
     plant_id: str | None = None
     line_id: str | None = None
+    section_id: str | None = None
     area: str | None = None
     manufacturer: str | None = None
     model: str | None = None
