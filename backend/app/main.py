@@ -3616,11 +3616,24 @@ def motor_chart(db, plant_id, line_id, equipment_id, start, end):
         MotorConditionReport.report_date >= start,
         MotorConditionReport.report_date <= end,
     ).all()
-    by_code, _details = motor_equipment_index(db)
+    by_code, details = motor_equipment_index(db)
     temp_1 = {}
     temp_2 = {}
-    oil_level = {'good': 0, 'add': 0}
-    oil_condition = {'good': 0, 'critical': 0, 'change': 0}
+    level_scores = {'good': 2, 'add': 1}
+    level_labels = {'good': 'Oil good', 'add': 'Needs adding'}
+    condition_scores = {'good': 3, 'critical': 2, 'change': 1}
+    condition_labels = {'good': 'Oil good', 'critical': 'Oil critical', 'change': 'Needs replacement'}
+    level_bucket = {}
+    condition_bucket = {}
+    names = {}
+    if equipment_id:
+        grouped_by = 'equipment'
+    elif line_id:
+        grouped_by = 'equipment'
+    elif plant_id:
+        grouped_by = 'line'
+    else:
+        grouped_by = 'plant'
     recorded = 0
     for reading, report in rows:
         code = (reading.equipment_id or (reading.machine or '').split('—')[0]).strip().lower()
@@ -3639,10 +3652,23 @@ def motor_chart(db, plant_id, line_id, equipment_id, start, end):
             temp_1.setdefault(day, []).append(first)
         if second is not None:
             temp_2.setdefault(day, []).append(second)
-        if reading.oil_level in oil_level:
-            oil_level[reading.oil_level] += 1
-        if reading.oil_condition in oil_condition:
-            oil_condition[reading.oil_condition] += 1
+        if not found:
+            continue
+        detail = details.get(found.equipment_id) or {}
+        if grouped_by == 'equipment':
+            key = found.equipment_id
+            label = detail.get('label') or found.equipment_id
+        elif grouped_by == 'line':
+            key = found.line_id or 'unassigned'
+            label = detail.get('line_name') or 'Unassigned'
+        else:
+            key = found.plant_id or 'unassigned'
+            label = detail.get('plant_name') or 'Unassigned'
+        names[key] = label or key
+        if reading.oil_level in level_scores:
+            level_bucket.setdefault(key, {}).setdefault(day, []).append((level_scores[reading.oil_level], level_labels[reading.oil_level]))
+        if reading.oil_condition in condition_scores:
+            condition_bucket.setdefault(key, {}).setdefault(day, []).append((condition_scores[reading.oil_condition], condition_labels[reading.oil_condition]))
     days = sorted(set(temp_1) | set(temp_2))[-12:]
 
     def series(bucket, key, name):
@@ -3655,16 +3681,31 @@ def motor_chart(db, plant_id, line_id, equipment_id, start, end):
             } for day in days],
         }
 
-    level_names = [('good', 'Oil good'), ('add', 'Needs adding')]
-    condition_names = [('good', 'Oil good'), ('critical', 'Oil critical'), ('change', 'Needs replacement')]
+    def bump_series(bucket):
+        used_days = sorted({day for values in bucket.values() for day in values})[-12:]
+        chosen = sorted(bucket, key=lambda key: (-len(bucket[key]), str(names.get(key, key)).lower()))[:8]
+        built = []
+        for key in chosen:
+            points = []
+            for day in used_days:
+                samples = bucket.get(key, {}).get(day) or []
+                if not samples:
+                    points.append({'date': day, 'score': None, 'status': ''})
+                    continue
+                score, status = min(samples, key=lambda item: item[0])
+                points.append({'date': day, 'score': score, 'status': status})
+            built.append({'id': key, 'name': names.get(key, key), 'points': points})
+        return built
+
     return {
         'readings': recorded,
+        'by': grouped_by,
         'temperature': [
             series(temp_1, 'temp_1', 'Temperature 1'),
             series(temp_2, 'temp_2', 'Temperature 2'),
         ],
-        'oil_level': [{'name': label, 'value': oil_level[key]} for key, label in level_names if oil_level[key]],
-        'oil_condition': [{'name': label, 'value': oil_condition[key]} for key, label in condition_names if oil_condition[key]],
+        'oil_level': bump_series(level_bucket),
+        'oil_condition': bump_series(condition_bucket),
     }
 
 

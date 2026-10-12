@@ -460,12 +460,83 @@ function donut(parts, total) {
   return `<div class="donut live" data-label="${esc(numberText(total, 1))}&#10;${esc(t('Total'))}" style="${style}"></div><ul class="area-legend">${legend}</ul>`;
 }
 
-function motorDonut(parts) {
-  const colors = ['#009c63', '#ff710d', '#fa3038', '#075cf5'];
-  const colored = (parts || []).filter((part) => part.value > 0).map((part, index) => ({ name: part.name, value: part.value, color: colors[index % colors.length] }));
-  const total = colored.reduce((sum, part) => sum + part.value, 0);
-  if (!total) return `<p class="chart-empty">${esc(t('No motor readings in this period.'))}</p>`;
-  return donut(colored, total);
+function bumpChart(series, title) {
+  const rows = (series || []).filter((row) => (row.points || []).some((point) => point.score != null));
+  if (!rows.length) return '';
+  const dates = rows[0].points.map((point) => point.date);
+  const count = dates.length;
+  const ranks = dates.map(() => ({}));
+  dates.forEach((day, index) => {
+    rows
+      .map((row) => ({ name: row.name, score: row.points[index]?.score }))
+      .filter((item) => item.score != null)
+      .sort((left, right) => right.score - left.score || String(left.name).localeCompare(String(right.name)))
+      .forEach((item, order) => { ranks[index][item.name] = order + 1; });
+  });
+  const maxRank = Math.max(1, ...ranks.flatMap((day) => Object.values(day)));
+  const width = 640;
+  const rowH = 28;
+  const pad = { left: 132, right: 148, top: 14, bottom: 28 };
+  const innerW = width - pad.left - pad.right;
+  const innerH = maxRank * rowH;
+  const height = pad.top + innerH + pad.bottom;
+  const xAt = (index) => pad.left + (count === 1 ? innerW / 2 : (index / (count - 1)) * innerW);
+  const yAt = (rank) => pad.top + (rank - 0.5) * rowH;
+  const shortName = (value) => {
+    const text = String(value || '');
+    return text.length > 18 ? `${text.slice(0, 17)}…` : text;
+  };
+  const lastRank = rows.map((row) => {
+    let rank = 0;
+    row.points.forEach((point, index) => {
+      if (ranks[index][row.name]) rank = ranks[index][row.name];
+    });
+    return { name: row.name, rank };
+  }).sort((left, right) => right.rank - left.rank || String(left.name).localeCompare(String(right.name)));
+  const focus = lastRank[0]?.name || '';
+  const grid = Array.from({ length: maxRank }, (_, index) => {
+    const y = yAt(index + 1);
+    const badge = width - 22;
+    return `<line x1="${pad.left}" y1="${y}" x2="${width - pad.right}" y2="${y}"></line><circle cx="${badge}" cy="${y}" r="9"></circle><text class="bump-rank" x="${badge}" y="${y + 3}" text-anchor="middle">${index + 1}</text>`;
+  }).join('');
+  const labels = dates.map((day, index) => {
+    if (count > 6 && index !== 0 && index !== count - 1 && index !== Math.floor((count - 1) / 2)) return '';
+    return `<text class="bump-date" x="${xAt(index)}" y="${height - 8}" text-anchor="middle">${esc(fmtDate(day).slice(0, 5))}</text>`;
+  }).join('');
+  const shapes = rows.map((row) => {
+    const coords = row.points.map((point, index) => {
+      const rank = ranks[index][row.name];
+      return rank ? [xAt(index), yAt(rank), rank, point] : null;
+    });
+    let line = '';
+    let drawing = false;
+    coords.forEach((coord) => {
+      if (!coord) {
+        drawing = false;
+        return;
+      }
+      line += `${drawing ? 'L' : 'M'}${coord[0].toFixed(1)},${coord[1].toFixed(1)}`;
+      drawing = true;
+    });
+    const dots = coords.map((coord) => {
+      if (!coord) return '';
+      const point = coord[3];
+      return `<circle cx="${coord[0].toFixed(1)}" cy="${coord[1].toFixed(1)}" r="4.5"><title>${esc(t(row.name))} · ${esc(fmtDate(point.date))}: ${esc(t(point.status || ''))} · ${coord[2]}</title></circle>`;
+    }).join('');
+    const left = coords[0];
+    const right = coords[count - 1];
+    const start = left ? `<text class="bump-name" x="${pad.left - 12}" y="${(left[1] + 4).toFixed(1)}" text-anchor="end">${esc(shortName(t(row.name)))}</text>` : '';
+    const end = right ? `<text class="bump-name" x="${width - pad.right + 12}" y="${(right[1] + 4).toFixed(1)}" text-anchor="start">${esc(shortName(t(row.name)))}</text>` : '';
+    return `<g class="bump-series${row.name === focus ? ' focus' : ''}">${line ? `<path d="${line}"></path>` : ''}${dots}${start}${end}</g>`;
+  }).join('');
+  return `<svg class="bump-chart" viewBox="0 0 ${width} ${height}" role="img" aria-label="${esc(t(title || 'Oil level'))}"><g class="bump-grid">${grid}</g>${labels}${shapes}</svg>`;
+}
+
+function motorScopeNote() {
+  if (ui.equipmentId) return 'Selected equipment';
+  if (ui.lineId) return 'Each equipment';
+  if (ui.plantId) return 'Each line';
+  return 'Each plant';
 }
 
 function kpiText(value, digits = 1, suffix = '') {
@@ -543,8 +614,8 @@ async function drawDashboard() {
     <section class="panel chart-panel"><h2>${esc(t('Maintenance hours'))}</h2><p class="kpi-note">${esc(t('Total'))} ${kpiText(kpi.total_hours, 1)} ${esc(t('from daily reports and work orders.'))}</p>${kpi.total_hours ? donut(hourParts, kpi.total_hours) : `<p class="chart-empty">${esc(t('No maintenance hours yet'))}</p>`}</section>
     <section class="panel chart-panel chart-wide"><h2>${esc(t('Downtime trend'))}</h2><p class="kpi-note">${esc(t(kpi.trend_by === 'line' ? 'Each line' : kpi.trend_by === 'equipment' ? 'Selected equipment' : 'Each plant'))} · ${esc(t('scheduled'))} ${kpiText(kpi.scheduled_downtime_h, 1)} · ${esc(t('unscheduled'))} ${kpiText(kpi.unscheduled_downtime_h, 1)}</p>${kpi.trend_series?.length ? areaChart(kpi.trend_series) : `<p class="chart-empty">${esc(t('No downtime in this period'))}</p>`}</section>
     <section class="panel chart-panel chart-wide"><h2>${esc(t('Motor temperature'))}</h2><p class="kpi-note">${esc(t(ui.equipmentId ? 'Temperature of the selected equipment.' : 'Average of the recorded readings on each measurement day.'))}</p>${(kpi.motor?.temperature || []).some((row) => (row.points || []).some((point) => point.hours != null)) ? areaChart(kpi.motor.temperature, '°C') : `<p class="chart-empty">${esc(t('No motor readings in this period.'))}</p>`}</section>
-    <section class="panel chart-panel"><h2>${esc(t('Oil level'))}</h2>${motorDonut(kpi.motor?.oil_level)}</section>
-    <section class="panel chart-panel"><h2>${esc(t('Oil condition'))}</h2>${motorDonut(kpi.motor?.oil_condition)}</section>
+    <section class="panel chart-panel chart-wide"><h2>${esc(t('Oil level'))}</h2><p class="kpi-note">${esc(t(motorScopeNote()))} · ${esc(t('Rank 1 is the best reading on that day.'))}</p>${bumpChart(kpi.motor?.oil_level, 'Oil level') || `<p class="chart-empty">${esc(t('No motor readings in this period.'))}</p>`}</section>
+    <section class="panel chart-panel chart-wide"><h2>${esc(t('Oil condition'))}</h2><p class="kpi-note">${esc(t(motorScopeNote()))} · ${esc(t('Rank 1 is the best reading on that day.'))}</p>${bumpChart(kpi.motor?.oil_condition, 'Oil condition') || `<p class="chart-empty">${esc(t('No motor readings in this period.'))}</p>`}</section>
     <section class="panel chart-panel"><h2>${esc(t('Availability basis'))}</h2><div class="summary-row"><span>${esc(t('Uptime'))}</span><b>${kpiText(kpi.uptime_h, 1)} ${esc(t('h'))}</b></div><div class="summary-row"><span>${esc(t('Available time'))}</span><b>${kpiText(kpi.available_h, 1)} ${esc(t('h'))}</b></div><div class="summary-row"><span>${esc(t('Idle time'))}</span><b>${kpiText(kpi.idle_h, 1)} ${esc(t('h'))}</b></div><div class="summary-row"><span>${esc(t('Operating time'))}</span><b>${kpiText(kpi.operating_h, 1)} ${esc(t('h'))}</b></div><small class="kpi-note">${esc(t('Availability = uptime ÷ (available − idle). MTBF = operating time ÷ failures. MTTR = corrective hours ÷ corrective events.'))}</small></section>
     <section class="panel chart-panel"><h2>${esc(t('Work orders and PM'))}</h2><div class="summary-row"><span>${esc(t('Issued / completed'))}</span><b>${kpi.wo_issued || 0} / ${kpi.wo_completed || 0}</b></div><div class="summary-row"><span>${esc(t('PM due / on time'))}</span><b>${kpi.pm_due || 0} / ${kpi.pm_on_time || 0}</b></div><div class="summary-row"><span>${esc(t('Corrective events'))}</span><b>${kpi.corrective_events || 0}</b></div><div class="summary-row"><span>${esc(kpiTargetText(kpi.availability, targets.availability, true))}</span><b>${esc(t('Availability'))}</b></div><div class="summary-row"><span>${esc(kpiTargetText(kpi.mtbf, targets.mtbf, true))}</span><b>${esc(t('MTBF'))}</b></div><div class="summary-row"><span>${esc(kpiTargetText(kpi.mttr, targets.mttr, false))}</span><b>${esc(t('MTTR'))}</b></div>${targetForm}</section>
     <section class="panel chart-panel"><h2>${esc(t('Component life'))}</h2><p class="kpi-note">${esc(t('Removal date − installation date. In-service components use today.'))}</p>${components}<div class="summary-row"><span>${esc(t('Average life'))}</span><b>${kpi.component_life_avg == null ? '—' : `${kpi.component_life_avg} ${t('days')}`}</b></div></section>`;

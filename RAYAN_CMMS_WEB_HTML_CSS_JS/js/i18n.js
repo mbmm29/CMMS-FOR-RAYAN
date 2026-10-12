@@ -318,6 +318,8 @@ const CMMS_AR = {
   'Each line': 'كل خط',
   'Selected equipment': 'المعدة المختارة',
   'Each plant': 'كل مصنع',
+  'Each equipment': 'كل معدة',
+  'Rank 1 is the best reading on that day.': 'الترتيب 1 هو أفضل قراءة في ذلك اليوم.',
   'scheduled': 'مجدول',
   'unscheduled': 'غير مجدول',
   'No downtime in this period': 'لا يوجد توقف في هذه الفترة',

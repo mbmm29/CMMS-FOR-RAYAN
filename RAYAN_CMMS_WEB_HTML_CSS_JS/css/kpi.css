@@ -70,6 +70,18 @@ body .summary-row b{flex:0 0 auto;color:#f7fbff;text-align:end;font-variant-nume
 body .area-chart{direction:ltr;height:220px}
 body .area-chart .area-grid line{stroke:#23406e}
 body .area-chart text{fill:#9eb4d6}
+body .bump-chart{width:100%;height:auto;display:block;direction:ltr}
+body .bump-chart .bump-grid line{stroke:#23406e}
+body .bump-chart .bump-grid circle{fill:none;stroke:#9eb4d6}
+body .bump-chart text{fill:#9eb4d6;font-size:11px;font-family:Tahoma,Arial,sans-serif}
+body .bump-chart .bump-rank{fill:#d5e4fb;font-size:10px}
+body .bump-chart .bump-series path{fill:none;stroke:#8ea4c4;stroke-width:1.6;stroke-linejoin:round;stroke-linecap:round}
+body .bump-chart .bump-series circle{fill:#c5d4ea;stroke:#0e2144;stroke-width:1}
+body .bump-chart .bump-series.focus path{stroke:#c4b5fd;stroke-width:2.4}
+body .bump-chart .bump-series.focus circle{fill:#7439f5;stroke:#efe7ff}
+body .bump-chart .bump-series.focus text{fill:#d8c9ff;font-weight:700}
+body .bump-chart:hover .bump-series{opacity:.28}
+body .bump-chart:hover .bump-series:hover{opacity:1}
 body .area-legend li{color:#c5d6f4;min-width:0}
 body .area-legend span{overflow-wrap:anywhere}
 body .donut:after{background:#0e2144;color:#f7fbff;font-size:13px;line-height:1.25;padding:6px;overflow-wrap:anywhere}
