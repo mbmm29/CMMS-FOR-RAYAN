@@ -248,6 +248,7 @@ def compute_kpi(db: Session, plant_id=None, line_id=None, equipment_id=None, tec
         scheduled_done = [row for row in scheduled_orders if row.status in CLOSED]
         issued = window_orders
         completed = [row for row in issued if row.status in CLOSED]
+        open_orders = [row for row in issued if row.status not in CLOSED]
         overdue_orders = []
         aging = {'1-7': 0, '8-30': 0, '31+': 0}
         for order in issued:
@@ -369,6 +370,8 @@ def compute_kpi(db: Session, plant_id=None, line_id=None, equipment_id=None, tec
             'wo_completion': _pct(len(completed), len(issued)),
             'wo_issued': len(issued),
             'wo_completed': len(completed),
+            'wo_open': len(open_orders),
+            'backlog': _pct(len(open_orders), len(issued)),
             'wo_overdue': len(overdue_orders),
             'wo_overdue_pct': _pct(len(overdue_orders), len(issued)),
             'wo_aging': aging,

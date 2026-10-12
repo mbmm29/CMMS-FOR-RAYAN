@@ -1689,7 +1689,7 @@ def update_kpi_target(data: KpiTargetIn, db: Session = Depends(get_db), u=Depend
     allowed = {
         'availability', 'mtbf', 'mttr', 'pm_compliance', 'downtime_h', 'pm_overdue',
         'planned_pm_pct', 'corrective_pct', 'preventive_pct', 'wo_schedule', 'wo_completion',
-        'wo_overdue', 'failure_rate_1000h',
+        'wo_overdue', 'failure_rate_1000h', 'backlog',
     }
     if metric not in allowed:
         raise HTTPException(400, 'Unknown KPI')
