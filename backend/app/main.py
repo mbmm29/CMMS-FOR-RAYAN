@@ -2365,8 +2365,8 @@ def create_report(
                 rid,
             )
 
-        # Automatic Machine Record from every equipment mentioned in the report.
-        if not (row.wo_id and db.query(MachineRecord).filter_by(wo_id=row.wo_id).first()):
+        # The machine log keeps corrective and emergency work only. Oil changes are recorded from the lubrication report.
+        if row.maintenance_type in ('Corrective', 'Emergency') and not (row.wo_id and db.query(MachineRecord).filter_by(wo_id=row.wo_id).first()):
             machine_record = MachineRecord(
                 equipment_id=row.equipment_id,
                 record_date=r.report_date,

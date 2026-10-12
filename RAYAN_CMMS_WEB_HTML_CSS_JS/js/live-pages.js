@@ -1254,44 +1254,102 @@ function workOrderFor(row) {
 }
 
 function workOrderNumber(row) {
-  return workOrderFor(row)?.work_order_id || row?.wo_id || '';
+  return row?.wo_id || workOrderFor(row)?.work_order_id || '';
 }
 
 function maintenanceKind(row) {
   const type = row?.record_type || workOrderFor(row)?.work_order_type || '';
   if (/Emergency/i.test(type)) return 'Emergency';
+  if (/Oil change/i.test(type)) return 'Oil change';
   if (/Corrective/i.test(type)) return 'Corrective';
   return '';
 }
 
-function isHighMaintenance(row) {
-  const kind = maintenanceKind(row);
-  return (kind === 'Corrective' || kind === 'Emergency') && workOrderFor(row)?.priority === 'High';
+function isLogEntry(row) {
+  return Boolean(maintenanceKind(row));
+}
+
+function logCode(kind) {
+  if (kind === 'Emergency') return 'EM';
+  if (kind === 'Oil change') return 'OC';
+  if (kind === 'Corrective') return 'CM';
+  return '';
+}
+
+function logParts(text) {
+  const names = [];
+  const numbers = [];
+  String(text || '').split('\n').map((line) => line.trim()).filter(Boolean).forEach((line) => {
+    const match = line.match(/^\d+ \| (.*?) \| No: (.*)$/);
+    if (!match) {
+      names.push(line);
+      return;
+    }
+    if (match[1] && match[1] !== '—') names.push(match[1]);
+    if (match[2] && match[2] !== '—') numbers.push(match[2]);
+  });
+  return {
+    names: names.join('، ') || '—',
+    numbers: numbers.join('، ') || '—',
+  };
+}
+
+function oilChangeParts(row) {
+  const text = String(row?.description || row?.action || '').replace(/^Oil change:\s*/, '');
+  const bits = text.split(' — ').map((part) => part.trim()).filter(Boolean);
+  return {
+    names: bits[0] || '—',
+    numbers: '—',
+    quantity: bits[1] || '—',
+    work: bits[3] || bits[2] || t('Oil change'),
+  };
+}
+
+function pmPeriod(equipment) {
+  const plans = (store.plans || []).filter((plan) => plan.active !== false && plan.equipment_id === equipment?.equipment_id);
+  if (!plans.length) return '—';
+  const plan = plans.slice().sort((a, b) => String(a.next_due_date || '').localeCompare(String(b.next_due_date || '')))[0];
+  const count = Number(plan.frequency_value) > 1 ? `${plan.frequency_value} × ` : '';
+  return `${count}${t(plan.frequency || '')}`;
+}
+
+function machinePlace(equipment) {
+  if (!equipment) return '—';
+  const plant = store.plants.find((row) => row.plant_id === equipment.plant_id)?.name || '';
+  const line = store.lines.find((row) => row.line_id === equipment.line_id);
+  const lineLabel = line?.name || (line?.line_number != null && line.line_number !== '' ? `${t('Line')} ${line.line_number}` : '');
+  return [plant, lineLabel, equipment.area].filter(Boolean).join(' / ') || '—';
+}
+
+function machineLogPaper(equipment, rows) {
+  const body = rows.map((row, index) => {
+    const kind = maintenanceKind(row);
+    const parts = kind === 'Oil change' ? oilChangeParts(row) : { ...logParts(row.spare_parts), quantity: '—', work: row.action || row.description || '—' };
+    const reason = kind === 'Oil change' ? t('Oil change') : (row.cause || '—');
+    const downtime = row.downtime_h == null || row.downtime_h === '' ? '—' : numberText(row.downtime_h, 2);
+    return `<tr><td>${index + 1}</td><td>${esc(fmtDate(row.record_date))}</td><td>${esc(logCode(kind))}</td><td>${esc(reason)}</td><td>${esc(parts.work)}</td><td>${esc(workOrderNumber(row) || '—')}</td><td>${esc(parts.names)}</td><td>${esc(parts.numbers)}</td><td>${esc(parts.quantity)}</td><td>${esc(downtime)}</td><td>${esc(technicianName(row.technician_id) || '—')}</td></tr>`;
+  }).join('') || `<tr><td colspan="11">${esc(t('No log lines for this machine yet.'))}</td></tr>`;
+  return `<form class="lube-paper machine-log"><header class="lube-head"><img src="logo-rayan.png?v=2" alt="Rayan"><div><h2>${esc(t('Equipment maintenance log'))}</h2><p>${esc(t('Mechanical Maintenance Department'))}</p></div><dl><div><dt>${esc(t('Document no.'))}</dt><dd>${esc(equipment?.equipment_id || '—')}</dd></div><div><dt>${esc(t('Revision no.'))}</dt><dd>00</dd></div><div><dt>${esc(t('Issue date'))}</dt><dd>${esc(fmtDate(rows[0]?.record_date) || '—')}</dd></div></dl></header><p class="log-approve">${esc(t('Approved according to'))}: ${esc(t('Mechanical Maintenance Department'))}</p><div class="log-facts"><section><h3>${esc(t('Equipment data'))}</h3><dl><div><dt>${esc(t('Log machine name'))}</dt><dd>${esc(equipment?.name || '—')}</dd></div><div><dt>${esc(t('Machine number'))}</dt><dd>${esc(equipment?.equipment_id || '—')}</dd></div><div><dt>${esc(t('Location / section'))}</dt><dd>${esc(machinePlace(equipment))}</dd></div><div><dt>${esc(t('Commissioning date'))}</dt><dd>—</dd></div><div><dt>${esc(t('Manufacturer'))}</dt><dd>${esc(equipment?.manufacturer || '—')}</dd></div><div><dt>${esc(t('Preventive maintenance period'))}</dt><dd>${esc(pmPeriod(equipment))}</dd></div></dl></section><section><h3>${esc(t('Maintenance type key'))}</h3><table class="lube-table"><thead><tr><th>${esc(t('Maintenance type'))}</th><th>${esc(t('Symbol'))}</th></tr></thead><tbody><tr><td>${esc(t('Corrective'))}</td><td>CM</td></tr><tr><td>${esc(t('Emergency'))}</td><td>EM</td></tr><tr><td>${esc(t('Oil change'))}</td><td>OC</td></tr></tbody></table></section></div><h3 class="log-table-title">${esc(t('Maintenance work and details'))}</h3><div class="sheet-scroll"><table class="lube-table log-table"><thead><tr><th>${esc(t('No.'))}</th><th>${esc(t('Maintenance date'))}</th><th>${esc(t('Maintenance type'))}</th><th>${esc(t('Reason for maintenance'))}</th><th>${esc(t('Work performed'))}</th><th>${esc(t('Work order no.'))}</th><th>${esc(t('Parts used'))}</th><th>${esc(t('Part No.'))}</th><th>${esc(t('Quantity'))}</th><th>${esc(t('Downtime time'))}</th><th>${esc(t('Technician name'))}</th></tr></thead><tbody>${body}</tbody></table></div></form>`;
 }
 
 function drawRecords() {
   const chosen = ui.equipmentId;
-  const listed = scoped(store.records).filter(isHighMaintenance);
-  const rows = listed.filter((row) => ui.tab === 'All' || maintenanceKind(row) === ui.tab);
-  const selected = rows.find((row) => String(row.id) === ui.rowKey) || rows[0];
-  document.getElementById('page-subtitle').textContent = 'Corrective and emergency maintenance classified as High';
+  const equipment = store.equipment.find((item) => item.equipment_id === chosen) || null;
+  const listed = scoped(store.records).filter(isLogEntry).filter((row) => !chosen || row.equipment_id === chosen);
+  const rows = listed.filter((row) => ui.tab === 'All' || maintenanceKind(row) === ui.tab)
+    .slice()
+    .sort((a, b) => String(a.record_date || '').localeCompare(String(b.record_date || '')) || a.id - b.id);
   document.getElementById('metric-grid').innerHTML = metrics([
     ['Total', String(listed.length), '▤', 'blue', ''],
     ['Corrective', String(listed.filter((row) => maintenanceKind(row) === 'Corrective').length), '⚒', 'orange', ''],
     ['Emergency', String(listed.filter((row) => maintenanceKind(row) === 'Emergency').length), '◉', 'red', ''],
-    ['High', String(listed.length), '◈', 'red', ''],
-    ['Equipment', String(new Set(listed.map((row) => row.equipment_id).filter(Boolean)).size), '⚙', 'purple', ''],
+    ['Oil changes', String(listed.filter((row) => maintenanceKind(row) === 'Oil change').length), '◉', 'purple', ''],
+    ['Equipment', String(new Set(listed.map((row) => row.equipment_id).filter(Boolean)).size), '⚙', 'blue', ''],
     ['Total Downtime (hrs)', numberText(sum(listed, 'downtime_h'), 1), '◷', 'green', ''],
   ]);
   dateLabel(listed.map((row) => row.record_date));
-  const body = rows.map((row) => `<tr data-row="${esc(row.id)}" class="${selected && selected.id === row.id ? 'selected' : ''}">${cell(esc(workOrderNumber(row) || '—'), true)}${cell(`${fmtDate(row.record_date)}${row.start_time ? `<br>${esc(String(row.start_time).slice(0, 5))}` : ''}`)}${cell(liveBadge(maintenanceKind(row)))}${cell(liveBadge('High'))}${cell(esc(row.description || row.action || row.cause || '—'))}${cell(esc(technicianName(row.technician_id)))}${cell(numberText(row.downtime_h, 2))}</tr>`);
-  const detail = detailPanel('Machine Details', 'High', workOrderNumber(selected) || '—', equipmentText(selected || {}), [
-    ['Type', maintenanceKind(selected)], ['Priority', 'High'], ['Date', fmtDate(selected?.record_date)],
-    ['Work order', workOrderNumber(selected)], ['Technician', technicianName(selected?.technician_id)], ['Cause', selected?.cause],
-    ['Action', selected?.action], ['Downtime (h)', selected?.downtime_h ?? '—'], ['Spare parts', selected?.spare_parts],
-  ]);
   document.getElementById('workspace').className = 'workspace';
-  document.getElementById('workspace').innerHTML = `<section class="panel"><div class="split">${assetList(chosen)}<div class="asset-view">${tabsHtml(['All', 'Corrective', 'Emergency'])}${tableShell(['WO No.', 'Date & Time', 'Type', 'Priority', 'Description', 'Performed By', 'Downtime (hrs)'], body, shown(rows.length, listed.length, 'high corrective and emergency records'))}</div></div></section>${detail}`;
+  document.getElementById('workspace').innerHTML = `<section class="panel"><div class="split">${assetList(chosen)}<div class="asset-view">${tabsHtml(['All', 'Corrective', 'Emergency', 'Oil change'])}${chosen ? machineLogPaper(equipment, rows) : `<p class="live-note">${esc(t('Select a machine to open its maintenance log.'))}</p>`}</div></div></section>`;
   bindAssets();
   bindRows();
 }
@@ -1496,9 +1554,14 @@ function bindForm() {
 }
 
 function exportRecords() {
-  const rows = scoped(store.records).filter(isHighMaintenance);
-  const header = ['WO No.', 'Date', 'Type', 'Equipment', 'Description', 'Technician', 'Downtime hours'];
-  const lines = rows.map((row) => [workOrderNumber(row), row.record_date, row.record_type, row.equipment_id, row.description || row.action || '', technicianName(row.technician_id), row.downtime_h ?? '']);
+  const chosen = ui.equipmentId;
+  const rows = scoped(store.records).filter(isLogEntry).filter((row) => !chosen || row.equipment_id === chosen);
+  const header = ['No.', 'Date', 'Type', 'Reason', 'Work performed', 'Work order', 'Parts', 'Part No.', 'Quantity', 'Downtime', 'Technician', 'Equipment'];
+  const lines = rows.map((row, index) => {
+    const kind = maintenanceKind(row);
+    const parts = kind === 'Oil change' ? oilChangeParts(row) : { ...logParts(row.spare_parts), quantity: '', work: row.action || row.description || '' };
+    return [index + 1, row.record_date, logCode(kind), kind === 'Oil change' ? 'Oil change' : (row.cause || ''), parts.work, workOrderNumber(row), parts.names, parts.numbers, parts.quantity, row.downtime_h ?? '', technicianName(row.technician_id), row.equipment_id];
+  });
   const csv = [header, ...lines].map((line) => line.map((value) => `"${String(value ?? '').replaceAll('"', '""')}"`).join(',')).join('\n');
   const blob = new Blob([csv], { type: 'text/csv' });
   const link = document.createElement('a');
