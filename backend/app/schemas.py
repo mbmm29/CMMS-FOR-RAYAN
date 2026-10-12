@@ -91,6 +91,15 @@ class EquipmentTempLimit(BaseModel):
     temp_limit_c: float | None = None
 
 
+class SparePartIn(BaseModel):
+    part_number: str
+    name: str
+    stock_qty: float | None = None
+    unit: str = "pcs"
+    equipment_ids: list[str] = Field(default_factory=list)
+    notes: str | None = None
+
+
 class EquipmentBase(BaseModel):
     equipment_id: str
     name: str
@@ -371,7 +380,7 @@ class ReportItemCreate(BaseModel):
     failure_reason: str | None = None
     action_taken: str | None = None
 
-    # Text only for now; this is not the inventory system.
+    # "Name | No: number | Qty: quantity". A numeric quantity reduces warehouse stock when that part has a balance.
     spare_parts: str | None = None
 
     maintenance_completed: bool = False

@@ -555,3 +555,20 @@ class PartUsed(Base):
     description: Mapped[str|None]=mapped_column(String(200),nullable=True)
     quantity: Mapped[float]=mapped_column(Float,default=1)
     unit: Mapped[str|None]=mapped_column(String(30),nullable=True)
+
+class SparePart(Base):
+    __tablename__ = 'spare_parts'
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    part_id: Mapped[str] = mapped_column(String(60), unique=True, index=True)
+    part_number: Mapped[str] = mapped_column(String(100), index=True)
+    name: Mapped[str] = mapped_column(String(200))
+    stock_qty: Mapped[float | None] = mapped_column(Float, nullable=True)
+    unit: Mapped[str] = mapped_column(String(30), default='pcs')
+    notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+class SparePartEquipment(Base):
+    __tablename__ = 'spare_part_equipment'
+    __table_args__ = (UniqueConstraint('part_id', 'equipment_id', name='uq_spare_part_equipment'),)
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    part_id: Mapped[str] = mapped_column(String(60), index=True)
+    equipment_id: Mapped[str] = mapped_column(String(50), index=True)

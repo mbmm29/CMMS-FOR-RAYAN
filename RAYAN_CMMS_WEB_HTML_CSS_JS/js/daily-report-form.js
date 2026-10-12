@@ -23,8 +23,35 @@ function activityPage(pageNumber) {
   return `<section class="activity-page" data-page="${pageNumber}"><div class="activity-page-label"><strong data-i18n="DAILY MAINTENANCE REPORT">DAILY MAINTENANCE REPORT</strong><span>${t('Activity page')} ${pageNumber}</span></div><table class="activity-table">${activityHeader()}<tbody>${rows}</tbody></table></section>`;
 }
 
+function fillSpareLists() {
+  let numbers = document.getElementById('spare-part-numbers');
+  let names = document.getElementById('spare-part-names');
+  if (!numbers) {
+    numbers = document.createElement('datalist');
+    numbers.id = 'spare-part-numbers';
+    document.body.append(numbers);
+  }
+  if (!names) {
+    names = document.createElement('datalist');
+    names.id = 'spare-part-names';
+    document.body.append(names);
+  }
+  numbers.replaceChildren();
+  names.replaceChildren();
+  (catalog.parts || []).forEach((part) => {
+    const number = document.createElement('option');
+    number.value = part.part_number || '';
+    number.label = part.name || '';
+    numbers.append(number);
+    const name = document.createElement('option');
+    name.value = part.name || '';
+    name.label = part.part_number || '';
+    names.append(name);
+  });
+}
+
 function partRow(number) {
-  return `<tr><td class="row-number">${number}</td><td><input data-part="description" aria-label="Part description ${number}"></td><td><input data-part="number" aria-label="Part number ${number}"></td><td><input data-part="quantity" aria-label="Part quantity ${number}" type="number" min="0" step="any"></td><td><input data-part="remarks" aria-label="Part remarks ${number}"></td></tr>`;
+  return `<tr><td class="row-number">${number}</td><td><input data-part="description" list="spare-part-names" aria-label="Part description ${number}"></td><td><input data-part="number" list="spare-part-numbers" aria-label="Part number ${number}"></td><td><input data-part="quantity" aria-label="Part quantity ${number}" type="number" min="0" step="any"></td><td><input data-part="remarks" aria-label="Part remarks ${number}"></td></tr>`;
 }
 
 function message(text, isError = false) {
@@ -508,6 +535,12 @@ async function initializeForm() {
 
   catalog.plants = await apiRequest('/plants');
   catalog.lines = await apiRequest('/lines');
+  try {
+    catalog.parts = await apiRequest('/spare-parts/catalog');
+  } catch (_) {
+    catalog.parts = [];
+  }
+  fillSpareLists();
   fillPlantSelect('');
   document.getElementById('plant-summary').addEventListener('change', () => {
     document.querySelectorAll('#activity-pages tr[data-row]').forEach((row) => resolveLine(row));

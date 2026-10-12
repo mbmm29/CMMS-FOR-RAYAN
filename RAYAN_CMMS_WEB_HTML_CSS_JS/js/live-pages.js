@@ -1,4 +1,4 @@
-const LIVE_PAGES = new Set(['dashboard', 'work-orders', 'pm-schedule', 'plants', 'new-equipment', 'equipment', 'sop', 'machine-records', 'lubrication', 'daily-reports', 'motor-condition', 'iso']);
+const LIVE_PAGES = new Set(['dashboard', 'work-orders', 'pm-schedule', 'plants', 'new-equipment', 'equipment', 'sop', 'machine-records', 'lubrication', 'daily-reports', 'motor-condition', 'iso', 'spare-parts']);
 const DEFAULT_TAB = {
   dashboard: 'All',
   'work-orders': 'All Work Orders',
@@ -12,9 +12,10 @@ const DEFAULT_TAB = {
   'daily-reports': 'My Reports',
   'motor-condition': 'Sheet',
   iso: 'All',
+  'spare-parts': 'All',
 };
 const shellRender = render;
-const ui = { page: 'dashboard', tab: 'All', rowKey: '', mode: 'view', plantId: '', lineId: '', sectionId: '', equipmentId: '', technicianId: '', dateFrom: '', dateTo: '', annualPlant: '', annualYear: new Date().getFullYear(), annualItems: [], annualWeek: '', annualCopy: null, weekTasks: [], lubeId: '', dailyId: '', dailyFilter: '' };
+const ui = { page: 'dashboard', tab: 'All', rowKey: '', mode: 'view', plantId: '', lineId: '', sectionId: '', equipmentId: '', spareEquipment: '', technicianId: '', dateFrom: '', dateTo: '', annualPlant: '', annualYear: new Date().getFullYear(), annualItems: [], annualWeek: '', annualCopy: null, weekTasks: [], lubeId: '', dailyId: '', dailyFilter: '' };
 const ANNUAL_MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 const WEEKDAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 const DAY_MAINTENANCE_TYPES = ['Preventive', 'Corrective', 'Emergency', 'Routine', 'Inspection', 'Lubrication'];
@@ -1586,6 +1587,8 @@ function drawEquipment() {
     loadEquipmentMotor(selected);
   }
   if (selected && canMaintain() && ui.mode !== 'create') {
+    document.querySelector('.detail')?.insertAdjacentHTML('beforeend', '<div id="equipment-parts" class="equipment-parts"></div>');
+    loadEquipmentParts(selected);
     const sectionForm = lineSections(selected.line_id).length ? `<form id="equipment-section" class="live-form"><label>${esc(t('Section'))}<select name="section_id">${sectionOptions(selected.line_id, selected.section_id || '')}</select></label><button class="detail-button primary" type="submit">${esc(t('Save'))}</button><p id="equipment-section-error" class="form-error"></p></form>` : `<p class="live-note">${esc(t('No sections on this line yet.'))}</p>`;
     document.querySelector('.detail')?.insertAdjacentHTML('beforeend', `${sectionForm}<button type="button" class="detail-button danger" data-delete="/equipment" data-delete-id="${esc(selected.equipment_id)}" data-delete-note="Delete this equipment? Its maintenance history and KPI charts will be removed.">${esc(t('Delete'))}</button>`);
   }
@@ -2247,7 +2250,15 @@ function dailyPartsFromText(text) {
 }
 
 function dailyPartRow(part, index) {
-  return `<tr><td class="lube-no">${index + 1}</td><td><input data-part="description" value="${esc(part.description || '')}" placeholder="${esc(t('Part'))}"></td><td><input data-part="number" value="${esc(part.number || '')}" placeholder="${esc(t('Part No.'))}"></td><td><input data-part="quantity" value="${esc(part.quantity || '')}" placeholder="${esc(t('Qty'))}"></td></tr>`;
+  return `<tr><td class="lube-no">${index + 1}</td><td><input data-part="description" list="spare-part-names" value="${esc(part.description || '')}" placeholder="${esc(t('Part'))}"></td><td><input data-part="number" list="spare-part-numbers" value="${esc(part.number || '')}" placeholder="${esc(t('Part No.'))}"></td><td><input data-part="quantity" value="${esc(part.quantity || '')}" placeholder="${esc(t('Qty'))}"></td></tr>`;
+}
+
+let spareCatalog = [];
+
+function spareDataLists() {
+  const numbers = (spareCatalog || []).map((part) => `<option value="${esc(part.part_number)}">${esc(part.name)}</option>`).join('');
+  const names = (spareCatalog || []).map((part) => `<option value="${esc(part.name)}">${esc(part.part_number)}</option>`).join('');
+  return `<datalist id="spare-part-numbers">${numbers}</datalist><datalist id="spare-part-names">${names}</datalist>`;
 }
 
 function dailyPartsFromForm() {
@@ -2509,6 +2520,11 @@ async function saveDailyReport(submit) {
 
 async function drawDailyReport() {
   dailyCache = await apiRequest('/daily-reports');
+  try {
+    spareCatalog = await apiRequest('/spare-parts/catalog');
+  } catch (_) {
+    spareCatalog = [];
+  }
   const missingReason = dailyCache.filter((row) => row.status === 'Returned' && (row.return_reason == null || row.returned_at == null));
   await Promise.all(missingReason.map(async (row) => {
     const detail = await apiRequest(`/daily-reports/${encodeURIComponent(row.report_id)}`);
@@ -2564,6 +2580,7 @@ async function drawDailyReport() {
   const workspace = document.getElementById('workspace');
   workspace.className = 'workspace lube-board';
   workspace.innerHTML = `<aside class="panel lube-list"><div class="lube-list-head"><b>${esc(t('Reports'))}</b><button type="button" class="detail-button" id="daily-new">${esc(t('New report'))}</button></div><label class="daily-filter"><span>${esc(t('Date'))}</span><input id="daily-filter" type="date" value="${esc(ui.dailyFilter || '')}"></label>${rejectedFieldHtml(dailyCache, report?.report_id || '')}${windowLock ? `<p class="daily-window no-print">${esc(t('You can send one report a day. A new report opens 24 hours after the last one was sent.'))}</p>` : ''}<div id="daily-report-list">${list}</div></aside><form id="daily-form" class="lube-paper daily-paper" data-report-id="${esc(report?.report_id || '')}" data-status="${esc(report?.status || 'Draft')}"><header class="lube-head"><img src="logo-rayan.png?v=2" alt="Rayan"><div><h2>${esc(t('DAILY MAINTENANCE REPORT'))}</h2><p>${esc(t(report?.status || 'Draft report'))}</p><small>${esc(t('Mechanical Maintenance Department'))}</small></div><dl><div><dt>${esc(t('Form No.:'))}</dt><dd>${esc(formNo('daily'))}</dd></div><div><dt>${esc(t('Approved by'))}</dt><dd>${esc(report?.approved_by || '—')}</dd></div></dl></header><div class="lube-meta"><label><span>${esc(t('Shift'))}</span><select id="daily-shift">${LUBE_SHIFTS.map((shift) => `<option value="${esc(shift)}"${shift === (report?.shift || LUBE_SHIFTS[0]) ? ' selected' : ''}>${esc(t(shift))}</option>`).join('')}</select></label><label><span>${esc(t("Technician's name"))}</span><input id="daily-tech" value="${esc(techName)}" readonly></label><label><span>${esc(t('Plant'))}</span><select id="daily-plant">${plants}</select></label><label><span>${esc(t('Date'))}</span><input id="daily-date" type="date" value="${esc(reportDate)}" required></label></div><div class="sheet-scroll"><table class="lube-table"><thead><tr><th>${esc(t('Seq.'))}</th><th>${esc(t('Machine'))}</th><th>${esc(t('Maintenance Type'))}</th><th>${esc(t('Repair Actions'))}</th><th>${esc(t('Start Time'))}</th><th>${esc(t('End Time'))}</th><th>${esc(t('Downtime (hrs)'))}</th></tr></thead><tbody id="daily-rows">${items.map(dailyRow).join('')}</tbody></table></div><section class="daily-parts"><div class="lube-list-head"><h3>${esc(t('SPARE PARTS USED'))}</h3><button type="button" class="no-print" id="daily-add-part">${esc(t('Add part'))}</button></div><div class="sheet-scroll"><table class="lube-table"><thead><tr><th>${esc(t('No.'))}</th><th>${esc(t('Part'))}</th><th>${esc(t('Part No.'))}</th><th>${esc(t('Qty'))}</th></tr></thead><tbody id="daily-parts">${parts.map(dailyPartRow).join('')}</tbody></table></div></section><label class="daily-notes"><span>${esc(t('GENERAL NOTES'))}</span><div class="daily-note-box"><textarea id="daily-notes">${esc(report?.general_notes || '')}</textarea><b class="daily-tdt">TDT: <span id="daily-total">0.00</span></b></div></label><p id="daily-error" class="form-error"></p><div class="lube-actions no-print"><button type="button" id="daily-add">${esc(t('Add row'))}</button>${returned ? `<button type="button" id="daily-resend">${esc(t('Resend the report'))}</button>` : ''}<button type="button" id="daily-print">${esc(t('Print'))}</button></div></form>`;
+  workspace.insertAdjacentHTML('beforeend', spareDataLists());
   if (locked) document.querySelectorAll('#daily-form input, #daily-form select, #daily-form textarea, #daily-add, #daily-add-part').forEach((node) => { node.disabled = true; });
   if (returned) {
     ['daily-shift', 'daily-plant', 'daily-date', 'daily-notes'].forEach((id) => {
@@ -2631,6 +2648,159 @@ const ISO_DOCUMENTS = [
   ['annual_plan', 'Annual preventive maintenance plan'],
 ];
 
+function stockAmount(value) {
+  const amount = Number(value);
+  if (!Number.isFinite(amount)) return '';
+  return String(Math.round(amount * 1000) / 1000);
+}
+
+let equipmentPartsToken = 0;
+
+async function loadEquipmentParts(selected) {
+  const token = ++equipmentPartsToken;
+  const box = document.getElementById('equipment-parts');
+  if (!box || !selected?.equipment_id) return;
+  try {
+    const parts = await apiRequest(`/spare-parts?equipment_id=${encodeURIComponent(selected.equipment_id)}`);
+    if (token !== equipmentPartsToken || !box.isConnected) return;
+    const rows = (parts || []).map((part) => {
+      const stock = part.stock_qty == null ? t('No warehouse balance') : stockAmount(part.stock_qty);
+      const tone = part.stock_qty != null && Number(part.stock_qty) <= 0 ? ' class="stock-out"' : '';
+      return `<li><b>${esc(part.part_number)}</b><span>${esc(part.name)}</span><em${tone}>${esc(stock)}</em></li>`;
+    }).join('');
+    box.innerHTML = `<h3>${esc(t('Spare parts'))}</h3>${rows ? `<ul class="spare-links">${rows}</ul>` : `<p class="live-note">${esc(t('No spare parts linked to this machine.'))}</p>`}<button type="button" class="detail-button" id="open-spare">${esc(t('Spare parts'))}</button>`;
+    document.getElementById('open-spare')?.addEventListener('click', () => {
+      ui.spareEquipment = selected.equipment_id;
+      ui.mode = 'view';
+      ui.rowKey = '';
+      render('spare-parts');
+    });
+  } catch (exception) {
+    if (token === equipmentPartsToken && box.isConnected) box.innerHTML = `<p class="form-error">${esc(t(exception.message || ''))}</p>`;
+  }
+}
+
+function spareEquipmentIds(form) {
+  return String(form.querySelector('[name="equipment_ids"]')?.value || '').split(',').map((item) => item.trim()).filter(Boolean);
+}
+
+function spareLinkHtml(ids) {
+  const items = ids.map((id) => {
+    const equipment = (store.equipment || []).find((row) => row.equipment_id === id);
+    return `<li><b>${esc(id)}</b><span>${esc(equipment?.name || '')}</span><button type="button" data-remove-equipment="${esc(id)}">${esc(t('Remove'))}</button></li>`;
+  }).join('');
+  const remaining = (store.equipment || [])
+    .filter((row) => !ids.includes(row.equipment_id))
+    .sort((a, b) => String(a.equipment_id).localeCompare(String(b.equipment_id)));
+  const options = remaining.map((row) => `<option value="${esc(row.equipment_id)}">${esc(row.equipment_id)} — ${esc(row.name)}</option>`).join('');
+  return `<ul class="spare-links">${items || `<li class="live-note">${esc(t('Choose the equipment for this part'))}</li>`}</ul><label>${esc(t('Linked equipment'))}<select id="spare-add-equipment"><option value="">${esc(t('Select'))}</option>${options}</select></label>`;
+}
+
+function paintSpareEquipment(form) {
+  const box = form.querySelector('#spare-equipment-box');
+  if (!box) return;
+  box.innerHTML = spareLinkHtml(spareEquipmentIds(form));
+  box.querySelector('#spare-add-equipment')?.addEventListener('change', (event) => {
+    const id = event.target.value;
+    if (!id) return;
+    const hidden = form.querySelector('[name="equipment_ids"]');
+    hidden.value = [...spareEquipmentIds(form), id].join(',');
+    paintSpareEquipment(form);
+  });
+  box.querySelectorAll('[data-remove-equipment]').forEach((button) => {
+    button.addEventListener('click', () => {
+      const hidden = form.querySelector('[name="equipment_ids"]');
+      hidden.value = spareEquipmentIds(form).filter((id) => id !== button.dataset.removeEquipment).join(',');
+      paintSpareEquipment(form);
+    });
+  });
+}
+
+function spareForm(part) {
+  const ids = part?.equipment?.map((row) => row.equipment_id) || (ui.spareEquipment ? [ui.spareEquipment] : []);
+  const stock = part?.stock_qty == null ? '' : stockAmount(part.stock_qty);
+  return `<aside class="panel detail"><h2>${esc(t(part ? 'Spare parts' : '+ Add part'))}</h2><form id="spare-form" class="live-form spare-form"><label>${esc(t('Part No.'))}<input name="part_number" required maxlength="100" value="${esc(part?.part_number || '')}"></label><label>${esc(t('Part name'))}<input name="name" required maxlength="200" value="${esc(part?.name || '')}"></label><label>${esc(t('Stock'))}<input name="stock_qty" type="number" step="0.001" value="${esc(stock)}"></label><p class="live-note">${esc(t('Leave empty when this part has no warehouse balance.'))}</p><p class="live-note">${esc(t('A daily report quantity reduces this balance when the part number matches.'))}</p><label>${esc(t('Unit'))}<input name="unit" maxlength="30" value="${esc(part?.unit || 'pcs')}"></label><input type="hidden" name="equipment_ids" value="${esc(ids.join(','))}"><div id="spare-equipment-box"></div><button class="detail-button primary" type="submit">${esc(t('Save'))}</button>${part ? `<button type="button" class="detail-button danger" data-delete="/spare-parts" data-delete-id="${esc(part.part_id)}" data-delete-note="Delete this spare part?">${esc(t('Delete'))}</button>` : ''}<p id="spare-error" class="form-error"></p></form></aside>`;
+}
+
+async function saveSparePart(event, partId) {
+  event.preventDefault();
+  const form = event.currentTarget;
+  const error = document.getElementById('spare-error');
+  const data = new FormData(form);
+  const stockText = String(data.get('stock_qty') || '').trim().replace(',', '.');
+  const stock = stockText === '' ? null : Number(stockText);
+  if (stock !== null && !Number.isFinite(stock)) {
+    if (error) error.textContent = t('Enter a warehouse balance');
+    return;
+  }
+  const equipmentIds = spareEquipmentIds(form);
+  if (!equipmentIds.length) {
+    if (error) error.textContent = t('Choose the equipment for this part');
+    return;
+  }
+  const payload = {
+    part_number: String(data.get('part_number') || '').trim(),
+    name: String(data.get('name') || '').trim(),
+    stock_qty: stock,
+    unit: String(data.get('unit') || '').trim() || 'pcs',
+    equipment_ids: equipmentIds,
+  };
+  try {
+    const saved = await apiRequest(partId ? `/spare-parts/${encodeURIComponent(partId)}` : '/spare-parts', {
+      method: partId ? 'PUT' : 'POST',
+      body: JSON.stringify(payload),
+    });
+    ui.mode = 'view';
+    ui.rowKey = saved.part_id;
+    toast(t('Saved.'));
+    await drawSpareParts();
+  } catch (exception) {
+    if (error) error.textContent = t(exception.message);
+  }
+}
+
+async function drawSpareParts() {
+  const query = ui.spareEquipment ? `?equipment_id=${encodeURIComponent(ui.spareEquipment)}` : '';
+  const parts = await apiRequest(`/spare-parts${query}`);
+  const selected = ui.mode === 'create' ? null : (parts.find((item) => item.part_id === ui.rowKey) || parts[0]);
+  if (selected) ui.rowKey = selected.part_id;
+  const tracked = parts.filter((item) => item.stock_qty != null).length;
+  const empty = parts.filter((item) => item.stock_qty != null && Number(item.stock_qty) <= 0).length;
+  document.getElementById('metric-grid').innerHTML = metrics([
+    ['Spare parts', String(parts.length), '□', 'blue', ''],
+    ['With a balance', String(tracked), '▣', 'green', ''],
+    ['Out of stock', String(empty), '×', 'red', ''],
+    ['Linked equipment', String(new Set(parts.flatMap((item) => (item.equipment || []).map((row) => row.equipment_id))).size), '⚙', 'orange', ''],
+  ]);
+  const equipmentOptions = [`<option value="">${esc(t('All equipment'))}</option>`].concat(
+    (store.equipment || [])
+      .slice()
+      .sort((a, b) => String(a.equipment_id).localeCompare(String(b.equipment_id)))
+      .map((item) => `<option value="${esc(item.equipment_id)}"${item.equipment_id === ui.spareEquipment ? ' selected' : ''}>${esc(item.equipment_id)} — ${esc(item.name)}</option>`),
+  );
+  const body = parts.map((item) => {
+    const machines = (item.equipment || []).map((row) => row.equipment_id).join(', ') || '—';
+    const stock = item.stock_qty == null ? t('No warehouse balance') : stockAmount(item.stock_qty);
+    const stockCell = item.stock_qty != null && Number(item.stock_qty) <= 0 ? `<span class="stock-out">${esc(stock)}</span>` : esc(stock);
+    return `<tr data-row="${esc(item.part_id)}" class="${selected && selected.part_id === item.part_id ? 'selected' : ''}">${cell(esc(item.part_number), true)}${cell(esc(item.name))}${cell(esc(machines))}${cell(stockCell)}${cell(esc(item.unit || 'pcs'))}</tr>`;
+  });
+  document.getElementById('workspace').className = 'workspace';
+  document.getElementById('workspace').innerHTML = `<section class="panel"><label class="spare-filter">${esc(t('Linked equipment'))}<select id="spare-equipment">${equipmentOptions.join('')}</select></label>${tableShell(['Part No.', 'Part name', 'Linked equipment', 'Stock', 'Unit'], body.length ? body : [`<tr><td colspan="5">${esc(t('No spare parts yet.'))}</td></tr>`], shown(parts.length, parts.length, 'parts'))}</section>${ui.mode === 'create' ? spareForm(null) : (selected ? spareForm(selected) : `<aside class="panel detail"><h2>${esc(t('Spare parts'))}</h2><p class="live-note">${esc(t('No spare parts yet.'))}</p></aside>`)}`;
+  document.getElementById('spare-equipment')?.addEventListener('change', (event) => {
+    ui.spareEquipment = event.target.value;
+    ui.rowKey = '';
+    ui.mode = 'view';
+    drawSpareParts();
+  });
+  const form = document.getElementById('spare-form');
+  if (form) {
+    paintSpareEquipment(form);
+    form.addEventListener('submit', (event) => saveSparePart(event, ui.mode === 'create' ? '' : (selected?.part_id || '')));
+  }
+  bindRows();
+  bindDeletes();
+}
+
 function drawIso() {
   document.getElementById('metric-grid').innerHTML = '';
   document.getElementById('workspace').className = 'workspace';
@@ -2668,6 +2838,7 @@ async function draw(page) {
   else if (page === 'motor-condition') await drawMotorCondition();
   else if (page === 'daily-reports') await drawDailyReport();
   else if (page === 'iso') drawIso();
+  else if (page === 'spare-parts') await drawSpareParts();
   else drawRecords();
 }
 
@@ -2750,6 +2921,8 @@ render = function liveRender(page) {
   } else if (name === 'new-equipment' || name === 'equipment') {
     name = canMaintain() ? 'equipment' : 'dashboard';
   } else if (name === 'iso' && !canMaintain()) {
+    name = 'dashboard';
+  } else if (name === 'spare-parts' && !canMaintain()) {
     name = 'dashboard';
   }
   if (name !== ui.page) {

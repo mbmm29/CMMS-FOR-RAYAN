@@ -11,7 +11,7 @@
 .assignee-list{display:flex;flex-direction:column;gap:6px;max-height:180px;overflow:auto;margin-top:6px;padding:8px;border:1px solid #e7ebf3;border-radius:6px;background:#fff}
 .assignee-list label{display:flex;align-items:center;gap:8px;margin:0;font-size:13px}
 .assignee-list input{width:auto;margin:0}
-@media(max-width:1200px){body[data-live-page="work-orders"] .detail,body[data-live-page="plants"] .detail,body[data-live-page="equipment"] .detail,body[data-live-page="new-equipment"] .detail{display:block}}
+@media(max-width:1200px){body[data-live-page="work-orders"] .detail,body[data-live-page="plants"] .detail,body[data-live-page="equipment"] .detail,body[data-live-page="new-equipment"] .detail,body[data-live-page="spare-parts"] .detail{display:block}}
 .live-note{padding:28px 16px;text-align:center;color:#64738e}
 .data-table tr.selected{background:#eef4ff}
 .chart-empty{padding:48px 8px;text-align:center;color:#64738e}

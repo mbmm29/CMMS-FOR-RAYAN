@@ -729,6 +729,209 @@ def update_equipment_temp_limit(equipment_id: str, data: EquipmentTempLimit, db:
     db.commit()
     return {'equipment_id': equipment.equipment_id, 'temp_limit_c': equipment.temp_limit_c}
 
+def _clean_part_text(value, empty_message, limit):
+    text = ' '.join((value or '').split())
+    if not text or len(text) > limit or any(ord(ch) < 32 for ch in text):
+        raise HTTPException(400, empty_message)
+    return text
+
+def _clean_stock(value):
+    if value is None:
+        return None
+    number = float(value)
+    if number != number or number in (float('inf'), float('-inf')) or number < -1000000 or number > 1000000:
+        raise HTTPException(400, 'Enter a warehouse balance')
+    return round(number, 3)
+
+def _clean_part_equipment(db, equipment_ids):
+    chosen = []
+    for raw in equipment_ids or []:
+        code = (raw or '').strip()
+        if not code or code in chosen:
+            continue
+        if not db.query(Equipment).filter_by(equipment_id=code).first():
+            raise HTTPException(400, 'Equipment not found')
+        chosen.append(code)
+    if not chosen:
+        raise HTTPException(400, 'Choose the equipment for this part')
+    return chosen
+
+def _next_part_id(db):
+    numbers = []
+    for (value,) in db.query(SparePart.part_id).all():
+        if value and value.startswith('SP-') and value[3:].isdigit():
+            numbers.append(int(value[3:]))
+    return f'SP-{(max(numbers) if numbers else 0) + 1:05d}'
+
+def spare_part_payload(db, part):
+    links = db.query(SparePartEquipment).filter_by(part_id=part.part_id).all()
+    equipment = []
+    for link in links:
+        row = db.query(Equipment).filter_by(equipment_id=link.equipment_id).first()
+        equipment.append({'equipment_id': link.equipment_id, 'name': row.name if row else ''})
+    equipment.sort(key=lambda item: item['equipment_id'])
+    return {
+        'part_id': part.part_id,
+        'part_number': part.part_number,
+        'name': part.name,
+        'stock_qty': part.stock_qty,
+        'unit': part.unit or 'pcs',
+        'notes': part.notes or '',
+        'equipment': equipment,
+    }
+
+def _replace_part_links(db, part_id, equipment_ids):
+    db.query(SparePartEquipment).filter_by(part_id=part_id).delete(synchronize_session=False)
+    for equipment_id in equipment_ids:
+        db.add(SparePartEquipment(part_id=part_id, equipment_id=equipment_id))
+
+def spare_quantities(text):
+    totals = {}
+    for raw in (text or '').splitlines():
+        pieces = [part.strip() for part in raw.split('|')]
+        if len(pieces) < 3:
+            continue
+        if not pieces[1].lower().startswith('no:') or not pieces[2].lower().startswith('qty:'):
+            continue
+        name = '' if pieces[0].lower() == 'part' else pieces[0]
+        number = pieces[1][3:].strip()
+        if number in ('', '—', '-'):
+            number = ''
+        qty_text = pieces[2][4:].strip().replace(',', '.')
+        if qty_text in ('', '—', '-'):
+            continue
+        try:
+            qty = float(qty_text.split()[0])
+        except (ValueError, IndexError):
+            continue
+        if qty <= 0:
+            continue
+        key = ('no', number.lower()) if number else ('name', name.lower())
+        if not key[1]:
+            continue
+        totals[key] = totals.get(key, 0) + qty
+    return totals
+
+def spare_text_from_items(items):
+    texts = []
+    for item in items or []:
+        text = (getattr(item, 'spare_parts', None) or '').strip()
+        if text and text not in texts:
+            texts.append(text)
+    if not texts:
+        return ''
+    return max(texts, key=len)
+
+def apply_spare_stock(db, before_text, after_text):
+    """Reduce a part's warehouse balance by the quantity written on a daily report.
+
+    The same spare-part text is stored on every activity row, so the report is
+    counted once. A part with no warehouse balance is left unchanged.
+    """
+    before = spare_quantities(before_text)
+    after = spare_quantities(after_text)
+    if before == after:
+        return
+    parts = db.query(SparePart).all()
+    by_number = {(part.part_number or '').strip().lower(): part for part in parts}
+    by_name = {}
+    for part in parts:
+        by_name.setdefault((part.name or '').strip().lower(), []).append(part)
+    for key in set(before) | set(after):
+        delta = after.get(key, 0) - before.get(key, 0)
+        if not delta:
+            continue
+        if key[0] == 'no':
+            part = by_number.get(key[1])
+        else:
+            found = by_name.get(key[1]) or []
+            part = found[0] if len(found) == 1 else None
+        if part is None or part.stock_qty is None:
+            continue
+        part.stock_qty = round(float(part.stock_qty) - delta, 3)
+
+@app.get('/spare-parts/catalog')
+def spare_part_catalog(db: Session = Depends(get_db), u=Depends(auth)):
+    links = {}
+    for row in db.query(SparePartEquipment).all():
+        links.setdefault(row.part_id, []).append(row.equipment_id)
+    return [
+        {
+            'part_number': part.part_number,
+            'name': part.name,
+            'equipment_ids': links.get(part.part_id, []),
+        }
+        for part in db.query(SparePart).order_by(SparePart.part_number).all()
+    ]
+
+@app.get('/spare-parts')
+def list_spare_parts(equipment_id: str | None = None, db: Session = Depends(get_db), u=Depends(role(*ENGINEER))):
+    parts = db.query(SparePart).order_by(SparePart.part_number).all()
+    if equipment_id:
+        linked = {
+            row.part_id
+            for row in db.query(SparePartEquipment).filter_by(equipment_id=equipment_id.strip()).all()
+        }
+        parts = [part for part in parts if part.part_id in linked]
+    return [spare_part_payload(db, part) for part in parts]
+
+@app.post('/spare-parts')
+def create_spare_part(data: SparePartIn, db: Session = Depends(get_db), u=Depends(role(*ENGINEER))):
+    number = _clean_part_text(data.part_number, 'Enter the part number', 100)
+    name = _clean_part_text(data.name, 'Enter the part name', 200)
+    if db.query(SparePart).filter(func.lower(SparePart.part_number) == number.lower()).first():
+        raise HTTPException(409, 'This part number is already in the store.')
+    equipment_ids = _clean_part_equipment(db, data.equipment_ids)
+    unit = (data.unit or '').strip()[:30] or 'pcs'
+    part = SparePart(
+        part_id=_next_part_id(db),
+        part_number=number,
+        name=name,
+        stock_qty=_clean_stock(data.stock_qty),
+        unit=unit,
+        notes=(data.notes or '').strip() or None,
+    )
+    db.add(part)
+    db.flush()
+    _replace_part_links(db, part.part_id, equipment_ids)
+    audit(db, u, 'CREATE', 'SparePart', part.part_id, new={'part_number': number, 'stock_qty': part.stock_qty, 'equipment_ids': equipment_ids})
+    db.commit()
+    db.refresh(part)
+    return spare_part_payload(db, part)
+
+@app.put('/spare-parts/{part_id}')
+def update_spare_part(part_id: str, data: SparePartIn, db: Session = Depends(get_db), u=Depends(role(*ENGINEER))):
+    part = db.query(SparePart).filter_by(part_id=part_id).first()
+    if not part:
+        raise HTTPException(404, 'Spare part not found')
+    number = _clean_part_text(data.part_number, 'Enter the part number', 100)
+    name = _clean_part_text(data.name, 'Enter the part name', 200)
+    taken = db.query(SparePart).filter(func.lower(SparePart.part_number) == number.lower(), SparePart.part_id != part.part_id).first()
+    if taken:
+        raise HTTPException(409, 'This part number is already in the store.')
+    equipment_ids = _clean_part_equipment(db, data.equipment_ids)
+    part.part_number = number
+    part.name = name
+    part.stock_qty = _clean_stock(data.stock_qty)
+    part.unit = (data.unit or '').strip()[:30] or 'pcs'
+    part.notes = (data.notes or '').strip() or None
+    _replace_part_links(db, part.part_id, equipment_ids)
+    audit(db, u, 'UPDATE', 'SparePart', part.part_id, new={'part_number': number, 'stock_qty': part.stock_qty, 'equipment_ids': equipment_ids})
+    db.commit()
+    db.refresh(part)
+    return spare_part_payload(db, part)
+
+@app.delete('/spare-parts/{part_id}')
+def delete_spare_part(part_id: str, db: Session = Depends(get_db), u=Depends(role(*ENGINEER))):
+    part = db.query(SparePart).filter_by(part_id=part_id).first()
+    if not part:
+        raise HTTPException(404, 'Spare part not found')
+    db.query(SparePartEquipment).filter_by(part_id=part.part_id).delete(synchronize_session=False)
+    db.delete(part)
+    audit(db, u, 'DELETE', 'SparePart', part_id)
+    db.commit()
+    return {'ok': True}
+
 @app.get('/pending-equipment')
 def pending_equipment(db: Session = Depends(get_db), u=Depends(auth)):
     if u.role not in ENGINEER and u.role != 'LUBRICATION_TECHNICIAN':
@@ -1938,6 +2141,7 @@ def sync_job_to_daily_report(db, actor, work_order, technician_id):
     parts = daily_parts_from_job(work_order.parts_used)
     if not parts:
         return
+    before_parts = spare_text_from_items(db.query(DailyReportItem).filter_by(report_id=report.id).all())
     item.spare_parts = parts
     rows = db.query(DailyReportItem).filter_by(report_id=report.id).order_by(DailyReportItem.id).all()
     holder = next((row for row in rows if row.spare_parts), item)
@@ -1947,6 +2151,7 @@ def sync_job_to_daily_report(db, actor, work_order, technician_id):
         holder.spare_parts = ('\n'.join(extra) if not current else current + '\n' + '\n'.join(extra)).strip()
     if holder is not item:
         item.spare_parts = holder.spare_parts
+    apply_spare_stock(db, before_parts, spare_text_from_items(db.query(DailyReportItem).filter_by(report_id=report.id).all()))
 
 def accept_saved_job(db, actor, work_order):
     """Saving the job form accepts it for this technician and drops the other assignees."""
@@ -2590,6 +2795,8 @@ def create_report(
     r.general_notes = data.general_notes
     r.labor_hours = None
 
+    apply_spare_stock(db, '', spare_text_from_items(db.query(DailyReportItem).filter_by(report_id=r.id).all()))
+
     audit(
         db,
         u,
@@ -2662,6 +2869,7 @@ def update_report(
         assigned_rows = {}
         kept_parts = None
         existing_items = db.query(DailyReportItem).filter_by(report_id=r.id).all()
+        previous_parts = spare_text_from_items(existing_items)
         previous_order_ids = {row.wo_id for row in existing_items if row.wo_id}
         equipment_by_order = {row.wo_id: row.equipment_id for row in existing_items if row.wo_id}
         if header_locked:
@@ -2749,6 +2957,7 @@ def update_report(
         r.work_summary = first.action_taken
         r.finding = first.failure_reason
         r.action_taken = first.action_taken
+        apply_spare_stock(db, previous_parts, spare_text_from_items(saved_rows))
 
     audit(
         db,
@@ -3144,6 +3353,7 @@ def delete_equipment(equipment_id: str, db: Session = Depends(get_db), u=Depends
         raise HTTPException(404, 'Equipment not found')
     purge_kpi_history(db, [equipment.equipment_id])
     db.flush()
+    db.query(SparePartEquipment).filter_by(equipment_id=equipment.equipment_id).delete(synchronize_session=False)
     db.delete(equipment)
     audit(db, u, 'DELETE', 'Equipment', equipment_id)
     db.commit()
@@ -3155,6 +3365,8 @@ def delete_daily_report(report_id: str, db: Session = Depends(get_db), u=Depends
     report = db.query(DailyReport).filter_by(report_id=report_id).first()
     if not report:
         raise HTTPException(404, 'Daily report not found')
+    previous_parts = spare_text_from_items(db.query(DailyReportItem).filter_by(report_id=report.id).all())
+    apply_spare_stock(db, previous_parts, '')
     db.query(DailyReportItem).filter_by(report_id=report.id).delete(synchronize_session=False)
     db.query(MachineRecord).filter_by(daily_report_id=report.id).delete(synchronize_session=False)
     db.delete(report)
