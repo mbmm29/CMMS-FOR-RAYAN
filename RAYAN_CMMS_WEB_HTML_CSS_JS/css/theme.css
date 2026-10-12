@@ -299,18 +299,42 @@ body .daily-paper .lube-machine input[data-field="line"][data-resolved="1"]{back
 .motor-table th{text-align:start;white-space:nowrap}
 body .motor-paper .motor-table input,body .motor-paper .motor-table select{height:32px;width:100%}
 .nav-link.motor-nav[hidden]{display:none!important}
-.machine-log{max-width:none}
+.workspace.log-board .split{display:grid;grid-template-columns:220px minmax(0,1fr);align-items:start}
+.workspace.log-board .asset-view{min-width:0;overflow-x:auto}
+.machine-log{width:100%;min-width:1120px;max-width:none;box-sizing:border-box;page:logsheet}
+.machine-log .lube-head{display:grid;grid-template-columns:210px minmax(240px,1fr) 260px;gap:16px;align-items:center}
+.machine-log .lube-head > div{min-width:0}
+.machine-log .lube-head h2{font-size:22px;line-height:1.25}
+.machine-log .lube-head dl{width:100%}
+.machine-log .lube-head dl div{grid-template-columns:1.2fr .8fr}
 .log-approve,.log-approved{margin:8px 0 12px;font-weight:800;text-align:center}
-.log-facts{display:grid;grid-template-columns:minmax(0,1.4fr) minmax(180px,.6fr);gap:12px;margin-bottom:12px}
+.log-facts{display:grid;grid-template-columns:minmax(0,1.35fr) minmax(280px,.65fr);gap:18px;align-items:start;margin-bottom:12px}
 .log-facts h3,.log-table-title{margin:0 0 8px;font-size:14px}
 .log-facts dl{display:grid;gap:6px;margin:0}
-.log-facts dl div{display:grid;grid-template-columns:minmax(120px,.8fr) minmax(0,1.2fr);gap:8px;border-bottom:1px solid #d5e2f5}
+.log-facts dl div{display:grid;grid-template-columns:minmax(140px,.9fr) minmax(0,1.1fr);gap:8px;border-bottom:1px solid #d5e2f5}
 .log-facts dt{font-weight:800}
 .log-facts dd{margin:0}
-.log-grid,.log-table{min-width:980px;border-collapse:collapse}
-.log-grid th,.log-grid td,.log-table th,.log-table td{border:1px solid #c5d7ef;padding:6px;vertical-align:top;font-size:12px}
+.log-key{width:100%;border-collapse:collapse;table-layout:auto}
+.log-key th,.log-key td{border:1px solid #2a5287;padding:6px 10px;height:auto;font-size:13px;white-space:nowrap;text-align:start}
+.log-key th{background:#e7f0ff}
+.log-table{width:100%;min-width:0;border-collapse:collapse;table-layout:fixed}
+.log-table th,.log-table td{border:1px solid #2a5287;padding:5px 4px;height:auto;vertical-align:top;font-size:11px;overflow-wrap:anywhere;white-space:normal}
+.log-table th{background:#e7f0ff}
+.log-table .c-no{width:4%}.log-table .c-date{width:9%}.log-table .c-type{width:6%}.log-table .c-reason{width:13%}.log-table .c-work{width:16%}.log-table .c-order{width:11%}.log-table .c-parts{width:12%}.log-table .c-partno{width:8%}.log-table .c-qty{width:6%}.log-table .c-down{width:8%}.log-table .c-tech{width:7%}.log-table .c-remove{width:64px}
+.machine-log .log-table th:nth-child(1){width:4%}
+.machine-log .log-table th:nth-child(2){width:9%}
+.machine-log .log-table th:nth-child(3){width:6%}
+.machine-log .log-table th:nth-child(4){width:13%}
+.machine-log .log-table th:nth-child(5){width:16%}
+.machine-log .log-table th:nth-child(6){width:11%}
+.machine-log .log-table th:nth-child(7){width:12%}
+.machine-log .log-table th:nth-child(8){width:8%}
+.machine-log .log-table th:nth-child(9){width:6%}
+.machine-log .log-table th:nth-child(10){width:8%}
+.machine-log .log-table th:nth-child(11){width:7%}
+.machine-log .log-table th:nth-child(12){width:64px}
 .log-table .log-delete{padding:4px 8px;font-size:12px;white-space:nowrap}
-@media(max-width:900px){.log-facts{grid-template-columns:1fr}}
+@page logsheet{size:A4 landscape;margin:7mm}
 .daily-parts{margin-top:14px}
 .daily-parts h3{margin:0;color:#102d60;font-size:13px}
 .daily-parts .lube-list-head{margin-bottom:6px}
@@ -340,7 +364,7 @@ body .job-order textarea{width:100%;min-height:88px;border:1px solid #8eabda;bor
 button.job-open{border:0;cursor:pointer}
 button.job-open:hover{filter:brightness(1.12)}
 .lube-paper .form-error{color:#b42318}
-@media(max-width:900px){body .workspace.lube-board{grid-template-columns:minmax(0,1fr)}.lube-head{grid-template-columns:1fr}.lube-meta{grid-template-columns:1fr}}
+@media(max-width:900px){body .workspace.lube-board{grid-template-columns:minmax(0,1fr)}.lube-head{grid-template-columns:1fr}.machine-log .lube-head{grid-template-columns:180px minmax(180px,1fr) 220px}.lube-meta{grid-template-columns:1fr}}
 @media(max-width:760px){
   html body .app .main-content,
   html[dir="rtl"] body .app .main-content{margin-inline-start:0}
@@ -362,6 +386,13 @@ button.job-open:hover{filter:brightness(1.12)}
   body:has(.lube-paper) .content,
   body:has(.lube-paper) .workspace{display:block!important;margin:0!important;padding:0!important;min-height:0!important;height:auto!important;background:#fff!important;width:auto!important}
   body:has(.lube-paper) .lube-paper{margin:8mm!important;padding:0!important;border:0!important;box-shadow:none!important}
+  body:has(.machine-log) .equipment-list,
+  body:has(.machine-log) .tabs,
+  body:has(.machine-log) .metric-grid{display:none!important}
+  body:has(.machine-log) .machine-log{width:auto!important}
+  body:has(.machine-log) .log-table{font-size:8pt}
+  body:has(.machine-log) .log-table th,
+  body:has(.machine-log) .log-table td{font-size:8pt;padding:3px}
   body:has(.daily-paper) .lube-head,
   body:has(.daily-paper) .lube-meta{direction:ltr}
   body:has(.daily-paper) .lube-head{display:grid!important;grid-template-columns:220px minmax(0,1fr) 160px!important;gap:12px;align-items:center}
@@ -375,6 +406,7 @@ button.job-open:hover{filter:brightness(1.12)}
 @media(max-width:980px){
   body .workspace.lube-board{grid-template-columns:minmax(0,1fr)}
   .lube-head{grid-template-columns:1fr;justify-items:center;text-align:center}
+  .machine-log .lube-head{grid-template-columns:180px minmax(180px,1fr) 220px!important;justify-items:stretch;text-align:initial}
   .lube-head{min-width:0}.lube-head img{width:100%;max-width:100%;height:auto}
   .lube-head dl{width:100%}
   .lube-head h2{font-size:clamp(16px,4.6vw,22px);line-height:1.25;overflow-wrap:anywhere}
