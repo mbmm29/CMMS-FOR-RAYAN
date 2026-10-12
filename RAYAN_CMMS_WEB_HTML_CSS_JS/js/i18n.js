@@ -198,6 +198,7 @@ const CMMS_AR = {
   'This report can be updated until midnight. A new form opens at 12:00 AM.': 'يمكن تحديث هذا التقرير حتى منتصف الليل. يفتح نموذج جديد عند الساعة 12 صباحاً.',
   "This day's report is closed. A new form opens at 12:00 AM.": 'تقرير هذا اليوم مغلق. يفتح نموذج جديد عند الساعة 12 صباحاً.',
   'No equipment matches this filter.': 'لا توجد معدات مطابقة لهذا الفلتر.',
+  'Temperature was not recorded': 'لم تُسجل درجة الحرارة',
   'times': 'مرات',
   'Weekly motor temperature, oil level and oil condition': 'قياس أسبوعي لحرارة المحركات ومستوى الزيت وحالته',
   'Motor temperature, oil level and oil condition': 'حرارة المحركات ومستوى الزيت وحالته',

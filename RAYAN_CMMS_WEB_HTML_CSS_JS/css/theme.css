@@ -209,6 +209,11 @@ body .workspace.lube-board > .live-filters{margin:0 0 12px}
 .motor-delete:hover{background:#5a2028}
 body .motor-table tr.motor-kept{display:none}
 .motor-day{margin:8px 0 0;color:#8a4b00;font-size:12px;font-weight:700;line-height:1.45}
+.motor-id{display:flex;align-items:center;gap:6px;min-width:0}
+.motor-id input{flex:1 1 auto;min-width:0}
+.temp-missing{display:none;width:22px;height:22px;flex:0 0 22px;align-items:center;justify-content:center;border-radius:50%;background:#ff710d;color:#fff}
+.temp-missing svg{width:14px;height:14px;display:block}
+html body .motor-paper .motor-table tr.needs-temp .temp-missing{display:inline-flex}
 body .lube-actions .detail-button.danger{width:auto;height:36px;margin:0;padding:0 14px}
 .lube-list-head{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:8px}
 .daily-filter{display:grid;gap:4px;margin:0 0 8px;color:#c5d6f4;font-size:12px;font-weight:700}

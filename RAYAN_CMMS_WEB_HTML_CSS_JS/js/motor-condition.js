@@ -238,10 +238,35 @@ function motorHighlights(data) {
   return `<section class="motor-highlights"><article class="motor-spot hot"><h3>${esc(t('Hottest machine'))}</h3><b>${esc(hottest ? motorTempText(hottest.temperature) : '—')}</b><span>${esc(hottest ? motorMachineLabel(hottest) : t('No temperature readings yet.'))}</span></article><article class="motor-rank"><h3>${esc(t('Top 5 hottest machines'))}</h3><ol>${list}</ol></article>${motorUseCard('Most oil used', data?.most_oil, 'No oil changes yet.', 'oil')}${motorUseCard('Most grease used', data?.most_grease, 'No grease changes yet.', 'grease')}</section>`;
 }
 
-function motorTableRow(row, index) {
+function motorTempsMissing(row) {
+  return !String(row?.temp_1 || '').trim() && !String(row?.temp_2 || '').trim();
+}
+
+function motorTempMark() {
+  const label = t('Temperature was not recorded');
+  return `<span class="temp-missing no-print" title="${esc(label)}" aria-label="${esc(label)}"><svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M12 2.5a3.2 3.2 0 0 0-3.2 3.2v7.2a5 5 0 1 0 6.4 0V5.7A3.2 3.2 0 0 0 12 2.5zm0 2.2a1 1 0 0 1 1 1v7.7l.5.4a2.8 2.8 0 1 1-3 0l.5-.4V5.7a1 1 0 0 1 1-1z"/></svg></span>`;
+}
+
+function refreshMotorTempIcon(row) {
+  if (!row) return;
+  const first = row.querySelector('[data-motor="temp_1"]')?.value.trim() || '';
+  const second = row.querySelector('[data-motor="temp_2"]')?.value.trim() || '';
+  row.classList.toggle('needs-temp', !first && !second);
+}
+
+function bindMotorTempIcons(form) {
+  form?.addEventListener('input', (event) => {
+    const name = event.target?.dataset?.motor;
+    if (name === 'temp_1' || name === 'temp_2') refreshMotorTempIcon(event.target.closest('tr'));
+  });
+}
+
+function motorTableRow(row, index, extraClass) {
   const cell = (label, inner) => `<td data-label="${esc(t(label))}">${inner}</td>`;
   const identity = `<input type="hidden" data-motor="equipment_id" value="${esc(row.equipment_id || '')}">`;
-  return `<tr>${cell('Equipment number', `${identity}${motorLocked('equipment_code', index, row.equipment_id)}`)}${cell('Equipment name', motorLocked('machine', index, row.name))}${cell('Plant', motorLocked('plant', index, row.plant))}${cell('Line', motorLocked('line_number', index, row.line_number))}${cell('Temperature 1', motorField('temp_1', index, row.temp_1, 'inputmode="decimal"'))}${cell('Temperature 2', motorField('temp_2', index, row.temp_2, 'inputmode="decimal"'))}${cell('Oil level', motorChoice('oil_level', row.oil_level || '', [['good', 'Oil good'], ['add', 'Needs adding']]))}${cell('Oil condition', motorChoice('oil_condition', row.oil_condition || '', [['good', 'Oil good'], ['critical', 'Oil critical'], ['change', 'Needs replacement']]))}${cell('Inspection time', motorField('inspection_time', index, row.inspection_time, 'type="time"'))}</tr>`;
+  const classes = [extraClass, motorTempsMissing(row) ? 'needs-temp' : ''].filter(Boolean).join(' ');
+  const number = `<span class="motor-id">${motorTempMark()}${identity}${motorLocked('equipment_code', index, row.equipment_id)}</span>`;
+  return `<tr${classes ? ` class="${classes}"` : ''}>${cell('Equipment number', number)}${cell('Equipment name', motorLocked('machine', index, row.name))}${cell('Plant', motorLocked('plant', index, row.plant))}${cell('Line', motorLocked('line_number', index, row.line_number))}${cell('Temperature 1', motorField('temp_1', index, row.temp_1, 'inputmode="decimal"'))}${cell('Temperature 2', motorField('temp_2', index, row.temp_2, 'inputmode="decimal"'))}${cell('Oil level', motorChoice('oil_level', row.oil_level || '', [['good', 'Oil good'], ['add', 'Needs adding']]))}${cell('Oil condition', motorChoice('oil_condition', row.oil_condition || '', [['good', 'Oil good'], ['critical', 'Oil critical'], ['change', 'Needs replacement']]))}${cell('Inspection time', motorField('inspection_time', index, row.inspection_time, 'type="time"'))}</tr>`;
 }
 
 async function drawMotorCondition() {
@@ -284,7 +309,7 @@ async function drawMotorCondition() {
     ['Reports', String(motorVisibleSheets().length), '▤', 'purple', ''],
   ])}${motorHighlights(highlights)}`;
   const emptyNote = ready.length ? 'No equipment matches this filter.' : 'No equipment is scheduled from preventive maintenance for this day.';
-  const rows = `${matched.length ? matched.map(motorTableRow).join('') : `<tr><td class="live-note" colspan="9">${esc(t(emptyNote))}</td></tr>`}${kept.map((row, index) => motorTableRow(row, index + 1000).replace('<tr>', '<tr class="motor-kept">')).join('')}`;
+  const rows = `${matched.length ? matched.map(motorTableRow).join('') : `<tr><td class="live-note" colspan="9">${esc(t(emptyNote))}</td></tr>`}${kept.map((row, index) => motorTableRow(row, index + 1000, 'motor-kept')).join('')}`;
   const openToday = motorUi.date === plantToday();
   const dayNote = openToday
     ? 'This report can be updated until midnight. A new form opens at 12:00 AM.'
@@ -318,7 +343,9 @@ async function drawMotorCondition() {
     motorUi.query = event.target.value;
     paintMotorReports(current?.report_id || '');
   });
-  document.getElementById('motor-form').addEventListener('submit', (event) => {
+  const motorForm = document.getElementById('motor-form');
+  bindMotorTempIcons(motorForm);
+  motorForm.addEventListener('submit', (event) => {
     event.preventDefault();
     saveMotorCondition();
   });
