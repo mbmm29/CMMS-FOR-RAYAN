@@ -322,6 +322,7 @@ const CMMS_AR = {
   'Rank 1 is the best reading on that day.': 'الترتيب 1 هو أفضل قراءة في ذلك اليوم.',
   'Write the form number for each document.': 'اكتب رقم النموذج لكل وثيقة.',
   'ISO': 'ISO',
+  'Document': 'الوثيقة',
   'Unknown document': 'وثيقة غير معروفة',
   'Form number is too long': 'رقم النموذج طويل',
   'scheduled': 'مجدول',

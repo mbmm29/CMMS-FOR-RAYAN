@@ -2466,7 +2466,7 @@ const ISO_DOCUMENTS = [
 function drawIso() {
   document.getElementById('metric-grid').innerHTML = '';
   document.getElementById('workspace').className = 'workspace';
-  document.getElementById('workspace').innerHTML = `<form id="iso-form" class="panel iso-form">${ISO_DOCUMENTS.map(([key, label]) => `<label><span>${esc(t(label))}</span><input name="${esc(key)}" maxlength="80" value="${esc(formNo(key))}" autocomplete="off"></label>`).join('')}</form>`;
+  document.getElementById('workspace').innerHTML = `<form id="iso-form" class="panel iso-form"><div class="iso-head"><span>${esc(t('Document'))}</span><span>${esc(t('Form No.:'))}</span></div>${ISO_DOCUMENTS.map(([key, label]) => `<label class="iso-row"><span>${esc(t(label))}</span><input name="${esc(key)}" maxlength="80" value="${esc(formNo(key))}" autocomplete="off" aria-label="${esc(t(label))}"></label>`).join('')}</form>`;
   document.getElementById('iso-form')?.addEventListener('submit', (event) => {
     event.preventDefault();
     saveIsoForms();
