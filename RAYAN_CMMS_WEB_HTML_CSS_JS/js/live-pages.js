@@ -1137,7 +1137,7 @@ function drawPlants() {
   document.getElementById('workspace').className = 'workspace';
   document.getElementById('workspace').innerHTML = `<section class="panel">${tabsHtml(['All Plants', 'Active', 'Inactive'])}${tableShell(['Plant Code', 'Plant Name', 'Production Lines', 'Status'], body, shown(rows.length, store.plants.length, 'plants'))}</section>${detail}`;
   if (selected && canMaintain() && ui.mode !== 'create') {
-    document.querySelector('.detail')?.insertAdjacentHTML('beforeend', `<button type="button" class="detail-button danger" data-delete="/plants" data-delete-id="${esc(selected.plant_id)}">${esc(t('Delete'))}</button>`);
+    document.querySelector('.detail')?.insertAdjacentHTML('beforeend', `<button type="button" class="detail-button danger" data-delete="/plants" data-delete-id="${esc(selected.plant_id)}" data-delete-note="Delete this plant? Its equipment, maintenance history, and KPI charts will be removed.">${esc(t('Delete'))}</button>`);
   }
   bindRows();
   bindForm();
@@ -1212,7 +1212,7 @@ function drawEquipment() {
   document.getElementById('workspace').className = 'workspace';
   document.getElementById('workspace').innerHTML = `<section class="panel">${filtersHtml()}${equipmentTabs()}${tableShell(['Equipment Code', 'Equipment Name', 'Category', 'Location (Plant / Line)', 'Status', 'Condition', 'Criticality'], body, shown(rows.length, all.length, 'equipment'))}</section>${detail}`;
   if (selected && canMaintain() && ui.mode !== 'create') {
-    document.querySelector('.detail')?.insertAdjacentHTML('beforeend', `<button type="button" class="detail-button danger" data-delete="/equipment" data-delete-id="${esc(selected.equipment_id)}">${esc(t('Delete'))}</button>`);
+    document.querySelector('.detail')?.insertAdjacentHTML('beforeend', `<button type="button" class="detail-button danger" data-delete="/equipment" data-delete-id="${esc(selected.equipment_id)}" data-delete-note="Delete this equipment? Its maintenance history and KPI charts will be removed.">${esc(t('Delete'))}</button>`);
   }
   bindFilters();
   bindRows();
@@ -1475,7 +1475,8 @@ function bindDeletes() {
       event.preventDefault();
       event.stopPropagation();
       if (!canMaintain()) return;
-      if (!window.confirm(t('Delete this record? This cannot be undone.'))) return;
+      const note = button.dataset.deleteNote || 'Delete this record? This cannot be undone.';
+      if (!window.confirm(t(note))) return;
       try {
         await apiRequest(`${button.dataset.delete}/${encodeURIComponent(button.dataset.deleteId)}`, { method: 'DELETE' });
         store = null;

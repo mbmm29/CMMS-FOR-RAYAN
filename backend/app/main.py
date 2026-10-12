@@ -2858,6 +2858,67 @@ def remove_work_order(db, order):
     db.delete(order)
 
 
+def purge_kpi_history(db, equipment_ids=None, plant_id=None, line_ids=None):
+    """Remove the records that still draw a deleted plant or machine on the KPI charts."""
+    equipment_ids = [value for value in (equipment_ids or []) if value]
+    line_ids = [value for value in (line_ids or []) if value]
+    order_filters = []
+    if equipment_ids:
+        order_filters.append(WorkOrder.equipment_id.in_(equipment_ids))
+        order_filters.append(WorkOrder.manual_equipment_code.in_(equipment_ids))
+    if plant_id:
+        order_filters.append(WorkOrder.manual_plant_id == plant_id)
+    if line_ids:
+        order_filters.append(WorkOrder.manual_line_id.in_(line_ids))
+    if order_filters:
+        for order in db.query(WorkOrder).filter(or_(*order_filters)).all():
+            remove_work_order(db, order)
+    if equipment_ids:
+        db.query(MachineRecord).filter(MachineRecord.equipment_id.in_(equipment_ids)).delete(synchronize_session=False)
+    if plant_id:
+        reports = db.query(DailyReport).filter(DailyReport.plant_id == plant_id).all()
+        report_ids = [row.id for row in reports]
+        if report_ids:
+            db.query(DailyReportItem).filter(DailyReportItem.report_id.in_(report_ids)).delete(synchronize_session=False)
+            db.query(MachineRecord).filter(MachineRecord.daily_report_id.in_(report_ids)).delete(synchronize_session=False)
+            for row in reports:
+                db.delete(row)
+    item_filters = []
+    if equipment_ids:
+        item_filters.append(DailyReportItem.equipment_id.in_(equipment_ids))
+        item_filters.append(DailyReportItem.equipment_code.in_(equipment_ids))
+    if plant_id:
+        item_filters.append(DailyReportItem.plant_id == plant_id)
+    if line_ids:
+        item_filters.append(DailyReportItem.line_id.in_(line_ids))
+    if item_filters:
+        db.query(DailyReportItem).filter(or_(*item_filters)).delete(synchronize_session=False)
+    plan_filters = []
+    if equipment_ids:
+        plan_filters.append(PMPlan.equipment_id.in_(equipment_ids))
+        plan_filters.append(PMPlan.manual_equipment_code.in_(equipment_ids))
+    if plant_id:
+        plan_filters.append(PMPlan.manual_plant_id == plant_id)
+    if line_ids:
+        plan_filters.append(PMPlan.manual_line_id.in_(line_ids))
+    if plan_filters:
+        db.query(PMPlan).filter(or_(*plan_filters)).delete(synchronize_session=False)
+    if equipment_ids:
+        db.query(Component).filter(Component.equipment_id.in_(equipment_ids)).delete(synchronize_session=False)
+        db.query(SOP).filter(SOP.equipment_id.in_(equipment_ids)).delete(synchronize_session=False)
+        db.query(Measurement).filter(Measurement.equipment_id.in_(equipment_ids)).delete(synchronize_session=False)
+        db.query(PartUsed).filter(PartUsed.equipment_id.in_(equipment_ids)).delete(synchronize_session=False)
+    target_filters = []
+    if equipment_ids:
+        target_filters.append(KpiTarget.equipment_id.in_(equipment_ids))
+    if plant_id:
+        target_filters.append(KpiTarget.plant_id == plant_id)
+    if line_ids:
+        target_filters.append(KpiTarget.line_id.in_(line_ids))
+    if target_filters:
+        db.query(KpiTarget).filter(or_(*target_filters)).delete(synchronize_session=False)
+
+
 @app.delete('/plants/{plant_id}')
 def delete_plant(plant_id: str, db: Session = Depends(get_db), u=Depends(role(*ENGINEER))):
     plant = db.query(Plant).filter_by(plant_id=plant_id).first()
@@ -2870,14 +2931,13 @@ def delete_plant(plant_id: str, db: Session = Depends(get_db), u=Depends(role(*E
         db.query(AnnualPMItem).filter(AnnualPMItem.plan_id.in_(plan_ids)).delete(synchronize_session=False)
         db.query(AnnualPMPlan).filter(AnnualPMPlan.id.in_(plan_ids)).delete(synchronize_session=False)
     line_ids = [row.line_id for row in db.query(PlantLine).filter_by(plant_id=plant_id).all()]
-    if line_ids:
-        db.query(Equipment).filter(Equipment.line_id.in_(line_ids)).update(
-            {Equipment.line_id: None}, synchronize_session=False,
-        )
-    db.query(Equipment).filter(Equipment.plant_id == plant_id).update(
-        {Equipment.plant_id: None}, synchronize_session=False,
-    )
-    db.query(KpiTarget).filter(KpiTarget.plant_id == plant_id).delete(synchronize_session=False)
+    equipment_ids = [
+        row.equipment_id for row in db.query(Equipment).filter(Equipment.plant_id == plant_id).all()
+    ]
+    purge_kpi_history(db, equipment_ids, plant_id, line_ids)
+    db.flush()
+    if equipment_ids:
+        db.query(Equipment).filter(Equipment.equipment_id.in_(equipment_ids)).delete(synchronize_session=False)
     db.query(PlantLine).filter_by(plant_id=plant_id).delete(synchronize_session=False)
     db.delete(plant)
     audit(db, u, 'DELETE', 'Plant', plant_id)
@@ -2905,21 +2965,8 @@ def delete_equipment(equipment_id: str, db: Session = Depends(get_db), u=Depends
     equipment = db.query(Equipment).filter_by(equipment_id=equipment_id).first()
     if not equipment:
         raise HTTPException(404, 'Equipment not found')
-    for order in db.query(WorkOrder).filter_by(equipment_id=equipment_id).all():
-        if not order.manual_equipment_code:
-            order.manual_equipment_code = equipment.equipment_id
-            order.manual_equipment_name = equipment.name
-            order.manual_plant_id = equipment.plant_id
-            order.manual_line_id = equipment.line_id
-        order.equipment_id = None
-    for plan in db.query(PMPlan).filter_by(equipment_id=equipment_id).all():
-        if not plan.manual_equipment_code:
-            plan.manual_equipment_code = equipment.equipment_id
-            plan.manual_equipment_name = equipment.name
-        plan.equipment_id = None
-    db.query(Component).filter_by(equipment_id=equipment_id).delete(synchronize_session=False)
-    db.query(SOP).filter_by(equipment_id=equipment_id).delete(synchronize_session=False)
-    db.query(KpiTarget).filter(KpiTarget.equipment_id == equipment_id).delete(synchronize_session=False)
+    purge_kpi_history(db, [equipment.equipment_id])
+    db.flush()
     db.delete(equipment)
     audit(db, u, 'DELETE', 'Equipment', equipment_id)
     db.commit()

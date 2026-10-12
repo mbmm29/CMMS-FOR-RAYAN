@@ -596,6 +596,8 @@ const CMMS_AR = {
   'Enter the equipment': 'أدخل المعدة',
   'The sheet holds 40 equipment rows': 'تتسع الورقة لأربعين معدة',
   'Choose an oil level and oil condition from the list': 'اختر مستوى الزيت وحالة الزيت من القائمة',
+  'Delete this plant? Its equipment, maintenance history, and KPI charts will be removed.': 'حذف هذا المصنع؟ ستُحذف معداته وسجل الصيانة ومخططات مؤشر الأداء.',
+  'Delete this equipment? Its maintenance history and KPI charts will be removed.': 'حذف هذه المعدة؟ سيُحذف سجل الصيانة ومخططات مؤشر الأداء.',
 };
 
 function currentLang() {
