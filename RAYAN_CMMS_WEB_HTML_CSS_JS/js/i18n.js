@@ -605,6 +605,11 @@ const CMMS_AR = {
   'Temperature of the selected equipment.': 'حرارة المعدة المحددة.',
   'Average of the recorded readings on each measurement day.': 'متوسط القراءات المسجّلة في كل يوم قياس.',
   'No motor readings in this period.': 'لا توجد قراءات محرك في هذه الفترة.',
+  'Search reports': 'بحث في التقارير',
+  'Date, equipment, plant, or inspector': 'التاريخ أو المعدة أو المصنع أو الفاحص',
+  'No reports yet.': 'لا توجد تقارير بعد.',
+  'No matching reports.': 'لا توجد تقارير مطابقة.',
+  'Motor report saved.': 'تم حفظ تقرير حالة المحرك.',
 };
 
 function currentLang() {

@@ -3561,19 +3561,51 @@ def motor_due(on: date, db: Session = Depends(get_db), u=Depends(role(*MOTOR))):
     return motor_due_equipment(db, on)
 
 
-@app.get('/motor-condition')
-def motor_sheets(db: Session = Depends(get_db), u=Depends(role(*MOTOR))):
+def motor_sheet_summaries(db):
+    """Daily motor reports for the list on the motor page."""
     rows = db.query(MotorConditionReport).order_by(
         MotorConditionReport.report_date.desc(), MotorConditionReport.id.desc()
-    ).limit(80).all()
-    return [{
-        'report_id': row.report_id,
-        'report_date': row.report_date.isoformat(),
-        'inspection_time': row.inspection_time or '',
-        'inspector_name': row.inspector_name or '',
-        'group_key': row.group_key,
-        'place_key': row.place_key,
-    } for row in rows]
+    ).limit(1000).all()
+    ids = [row.id for row in rows]
+    grouped = {}
+    if ids:
+        readings = db.query(MotorConditionReading).filter(
+            MotorConditionReading.report_id.in_(ids)
+        ).order_by(MotorConditionReading.sort_order, MotorConditionReading.id).all()
+        for reading in readings:
+            grouped.setdefault(reading.report_id, []).append(reading)
+    payload = []
+    for row in rows:
+        equipment = []
+        plants = []
+        lines = []
+        for item in grouped.get(row.id, []):
+            label = (item.machine or item.equipment_id or '').strip()
+            if label and label not in equipment:
+                equipment.append(label)
+            plant = (item.plant or '').strip()
+            if plant and plant not in plants:
+                plants.append(plant)
+            line_number = (item.line_number or '').strip()
+            if line_number and line_number not in lines:
+                lines.append(line_number)
+        payload.append({
+            'report_id': row.report_id,
+            'report_date': row.report_date.isoformat(),
+            'inspection_time': row.inspection_time or '',
+            'inspector_name': row.inspector_name or '',
+            'group_key': row.group_key,
+            'place_key': row.place_key,
+            'equipment': equipment,
+            'plants': plants,
+            'lines': lines,
+        })
+    return payload
+
+
+@app.get('/motor-condition')
+def motor_sheets(db: Session = Depends(get_db), u=Depends(role(*MOTOR))):
+    return motor_sheet_summaries(db)
 
 
 @app.get('/motor-condition/{report_id}')
