@@ -128,6 +128,39 @@ function motorLocked(name, index, value) {
   return `<input data-motor="${name}" data-row="${index}" value="${esc(value || '')}" readonly tabindex="-1">`;
 }
 
+function motorTempText(value) {
+  const number = Number(value);
+  if (!Number.isFinite(number)) return '—';
+  const text = Number.isInteger(number) ? String(number) : String(Math.round(number * 10) / 10);
+  return `${text}°C`;
+}
+
+function motorMachineLabel(row) {
+  if (!row) return '';
+  const code = row.equipment_id || '';
+  const name = row.name && row.name !== code ? row.name : '';
+  return [code, name].filter(Boolean).join(' · ');
+}
+
+function motorUseCard(title, row, emptyKey, tone) {
+  if (!row) {
+    return `<article class="motor-spot ${tone}"><h3>${esc(t(title))}</h3><b>—</b><span>${esc(t(emptyKey))}</span></article>`;
+  }
+  const qty = Number(row.quantity);
+  const value = Number.isFinite(qty) && qty > 0
+    ? (Number.isInteger(qty) ? String(qty) : String(Math.round(qty * 1000) / 1000))
+    : `${row.times || 0} ${t('times')}`;
+  return `<article class="motor-spot ${tone}"><h3>${esc(t(title))}</h3><b>${esc(value)}</b><span>${esc(motorMachineLabel(row))}</span></article>`;
+}
+
+function motorHighlights(data) {
+  const hottest = data?.hottest;
+  const five = data?.hottest_five || [];
+  const rows = five.map((row, index) => `<li><b>${index + 1}</b><span>${esc(motorMachineLabel(row))}</span><em>${esc(motorTempText(row.temperature))}</em></li>`).join('');
+  const list = rows || `<li class="motor-empty">${esc(t('No temperature readings yet.'))}</li>`;
+  return `<section class="motor-highlights"><article class="motor-spot hot"><h3>${esc(t('Hottest machine'))}</h3><b>${esc(hottest ? motorTempText(hottest.temperature) : '—')}</b><span>${esc(hottest ? motorMachineLabel(hottest) : t('No temperature readings yet.'))}</span></article><article class="motor-rank"><h3>${esc(t('Top 5 hottest machines'))}</h3><ol>${list}</ol></article>${motorUseCard('Most oil used', data?.most_oil, 'No oil changes yet.', 'oil')}${motorUseCard('Most grease used', data?.most_grease, 'No grease changes yet.', 'grease')}</section>`;
+}
+
 function motorTableRow(row, index) {
   const cell = (label, inner) => `<td data-label="${esc(t(label))}">${inner}</td>`;
   const identity = `<input type="hidden" data-motor="equipment_id" value="${esc(row.equipment_id || '')}">`;
@@ -151,13 +184,19 @@ async function drawMotorCondition() {
     if (existing) current = await apiRequest(`/motor-condition/${encodeURIComponent(existing.report_id)}`);
   }
   const due = await apiRequest(`/motor-condition/due?on=${encodeURIComponent(motorUi.date)}`);
+  let highlights = { hottest: null, hottest_five: [], most_oil: null, most_grease: null };
+  try {
+    highlights = await apiRequest('/motor-condition/highlights');
+  } catch (_) {
+    highlights = { hottest: null, hottest_five: [], most_oil: null, most_grease: null };
+  }
   const ready = motorReadyRows(due, current?.readings || []);
   const recorded = ready.filter((row) => row.temp_1 || row.temp_2 || row.oil_level || row.oil_condition || row.inspection_time).length;
-  document.getElementById('metric-grid').innerHTML = metrics([
+  document.getElementById('metric-grid').innerHTML = `${metrics([
     ['Machines', String(ready.length), '⚙', 'blue', ''],
     ['Recorded', String(recorded), '✓', 'green', ''],
     ['Reports', String(motorSheets.length), '▤', 'purple', ''],
-  ]);
+  ])}${motorHighlights(highlights)}`;
   const rows = ready.length
     ? ready.map(motorTableRow).join('')
     : `<tr><td class="live-note" colspan="9">${esc(t('No equipment is scheduled from preventive maintenance for this day.'))}</td></tr>`;

@@ -4136,6 +4136,99 @@ def motor_due(on: date, db: Session = Depends(get_db), u=Depends(role(*MOTOR))):
     return motor_due_equipment(db, on)
 
 
+def _quantity_number(value):
+    text = (value or '').strip().replace(',', '.')
+    token = ''
+    for char in text:
+        if char.isdigit() or char == '.' or (char == '-' and not token):
+            token += char
+        elif token:
+            break
+    if not token or token in ('.', '-'):
+        return None
+    try:
+        number = float(token)
+    except ValueError:
+        return None
+    if number < 0:
+        return None
+    return number
+
+
+def _shown_amount(value):
+    number = round(float(value), 3)
+    if number == int(number):
+        return int(number)
+    return number
+
+
+def motor_highlights(db):
+    """Hottest motors, plus the machines that used the most oil and grease."""
+    equipment = {row.equipment_id.lower(): row for row in db.query(Equipment).all()}
+    peaks = {}
+    readings = db.query(MotorConditionReading).all()
+    for reading in readings:
+        code = (reading.equipment_id or (reading.machine or '').split('—')[0]).strip()
+        if not code:
+            continue
+        temps = [value for value in (_motor_temp(reading.temp_1), _motor_temp(reading.temp_2)) if value is not None]
+        if not temps:
+            continue
+        peak = max(temps)
+        known = equipment.get(code.lower())
+        name = (known.name if known else '') or (reading.machine or '').strip() or code
+        slot = peaks.get(code.lower())
+        if slot is None or peak > slot['temperature']:
+            peaks[code.lower()] = {
+                'equipment_id': known.equipment_id if known else code,
+                'name': name,
+                'temperature': _shown_amount(peak),
+            }
+    ranked = sorted(peaks.values(), key=lambda item: (-float(item['temperature']), item['name'].lower()))
+
+    def consume(work_type):
+        totals = {}
+        lines = db.query(LubricationLine).filter(LubricationLine.work_type == work_type).all()
+        for line in lines:
+            code = (line.equipment_code or '').strip()
+            if not code:
+                continue
+            known = equipment.get(code.lower())
+            slot = totals.setdefault(code.lower(), {
+                'equipment_id': known.equipment_id if known else code,
+                'name': (known.name if known else '') or (line.equipment_name or '').strip() or code,
+                'quantity': 0.0,
+                'times': 0,
+            })
+            slot['times'] += 1
+            amount = _quantity_number(line.quantity)
+            if amount:
+                slot['quantity'] += amount
+        if not totals:
+            return None
+        winner = sorted(totals.values(), key=lambda item: (-item['quantity'], -item['times'], item['name'].lower()))[0]
+        if winner['quantity'] <= 0 and winner['times'] <= 0:
+            return None
+        return {
+            'equipment_id': winner['equipment_id'],
+            'name': winner['name'],
+            'quantity': _shown_amount(winner['quantity']) if winner['quantity'] else None,
+            'times': winner['times'],
+        }
+
+    return {
+        'hottest': ranked[0] if ranked else None,
+        'hottest_five': ranked[:5],
+        'most_oil': consume('Oil change'),
+        'most_grease': consume('Grease change'),
+    }
+
+
+@app.get('/motor-condition/highlights')
+def motor_condition_highlights(db: Session = Depends(get_db), u=Depends(role(*MOTOR))):
+    return motor_highlights(db)
+
+
 def motor_sheet_summaries(db):
     """Daily motor reports for the list on the motor page."""
     rows = db.query(MotorConditionReport).order_by(

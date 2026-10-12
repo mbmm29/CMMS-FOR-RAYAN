@@ -542,3 +542,22 @@ body .spare-filter select,body .spare-form input,body .spare-form select{width:1
 .equipment-parts{display:grid;gap:8px;margin:14px 0 4px;padding-top:12px;border-top:1px solid #23406e;min-width:0}
 .equipment-parts h3{margin:0;color:#f4f8ff;font-size:14px}
 .equipment-parts .live-note{margin:0;color:#9eb4d6}
+@media(min-width:901px){
+  body[data-live-page="motor-condition"] .metric-grid{grid-template-columns:repeat(3,minmax(0,1fr))}
+}
+body .motor-highlights{grid-column:1/-1;display:grid;grid-template-columns:minmax(160px,.8fr) minmax(220px,1.5fr) minmax(160px,.8fr) minmax(160px,.8fr);gap:12px;min-width:0}
+body .motor-spot,body .motor-rank{min-width:0;padding:14px 16px;border:1px solid #2a4f88;border-radius:16px;background:linear-gradient(180deg,#12305ccc,#0c1e40cc);box-shadow:0 12px 28px #02081440,inset 0 1px 0 #ffffff14}
+body .motor-spot h3,body .motor-rank h3{margin:0;color:#9eb4d6;font-size:12px;font-weight:800}
+body .motor-spot b{display:block;margin-top:8px;color:#ffb4b8;font-size:28px;line-height:1.1}
+body .motor-spot.oil b{color:#8ee0c2}
+body .motor-spot.grease b{color:#ffd59a}
+body .motor-spot span{display:block;margin-top:6px;color:#d5e4ff;font-size:13px;line-height:1.35}
+body .motor-rank ol{display:grid;gap:6px;margin:10px 0 0;padding:0;list-style:none}
+body .motor-rank li{display:grid;grid-template-columns:22px minmax(0,1fr) auto;gap:8px;align-items:center;min-width:0}
+body .motor-rank b{color:#9ec4ff;font-size:13px}
+body .motor-rank span{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#f4f8ff;font-size:13px}
+body .motor-rank em{font-style:normal;color:#ffb4b8;font-weight:800}
+body .motor-empty{color:#9eb4d6}
+@media(max-width:900px){
+  body .motor-highlights{grid-template-columns:1fr}
+}
