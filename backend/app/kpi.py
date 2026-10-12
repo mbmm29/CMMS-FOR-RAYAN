@@ -364,6 +364,7 @@ def compute_kpi(db: Session, plant_id=None, line_id=None, equipment_id=None, tec
             'order_counts': order_counts,
             'corrective_pct': _pct(hours['Corrective'], total_hours),
             'preventive_pct': _pct(hours['Preventive'], total_hours),
+            'emergency_to_routine': _pct(hours['Emergency'], hours['Routine']),
             'wo_schedule': _pct(len(scheduled_done), len(scheduled_orders)),
             'wo_scheduled': len(scheduled_orders),
             'wo_scheduled_done': len(scheduled_done),
