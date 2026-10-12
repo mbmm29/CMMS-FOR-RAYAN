@@ -518,6 +518,7 @@ class MotorConditionReading(Base):
     report_id: Mapped[int] = mapped_column(Integer, ForeignKey('motor_condition_reports.id'), index=True)
     sort_order: Mapped[int] = mapped_column(Integer, default=0)
     machine: Mapped[str] = mapped_column(String(150), default='')
+    equipment_id: Mapped[str] = mapped_column(String(50), default='')
     plant: Mapped[str] = mapped_column(String(80), default='')
     line_number: Mapped[str] = mapped_column(String(40), default='')
     temp_1: Mapped[str] = mapped_column(String(20), default='')

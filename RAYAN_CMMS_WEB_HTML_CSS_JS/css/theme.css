@@ -317,6 +317,7 @@ body .daily-paper .lube-machine input[data-field="line"][data-resolved="1"]{back
 .motor-paper .motor-table th,.motor-paper .motor-table td{height:52px;padding:6px 8px;white-space:normal;overflow-wrap:anywhere;text-align:start;vertical-align:middle}
 .motor-paper .motor-table th{line-height:1.3}
 body .motor-paper.lube-paper .motor-table input,body .motor-paper.lube-paper .motor-table select{height:46px;width:100%;padding:6px 8px;font-size:15px;background:#fff}
+body .motor-paper.lube-paper .motor-table input[readonly]{font-weight:800;background:#f3f7ff}
 @page motorsheet{size:A3 landscape;margin:8mm}
 .nav-link.motor-nav[hidden]{display:none!important}
 .workspace.log-board .split{display:grid;grid-template-columns:220px minmax(0,1fr);align-items:start}

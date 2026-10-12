@@ -174,6 +174,7 @@ def ensure_additive_columns():
             additions = {
                 'plant': "VARCHAR(80) DEFAULT ''",
                 'line_number': "VARCHAR(40) DEFAULT ''",
+                'equipment_id': "VARCHAR(50) DEFAULT ''",
             }
             with engine.begin() as conn:
                 for name, sql_type in additions.items():
@@ -1308,7 +1309,12 @@ def kpi_dashboard(
 ):
     if is_technician_account(u) and u.technician_id:
         technician_id = u.technician_id
-    return compute_kpi(db, plant_id or None, line_id or None, equipment_id or None, technician_id or None, date_from, date_to)
+    payload = compute_kpi(db, plant_id or None, line_id or None, equipment_id or None, technician_id or None, date_from, date_to)
+    period = payload.get('period') or {}
+    start = date.fromisoformat(period['from']) if period.get('from') else date.today()
+    end = date.fromisoformat(period['to']) if period.get('to') else date.today()
+    payload['motor'] = motor_chart(db, plant_id or None, line_id or None, equipment_id or None, start, end)
+    return payload
 
 @app.put('/kpi/targets')
 def update_kpi_target(data: KpiTargetIn, db: Session = Depends(get_db), u=Depends(role(*ENGINEER))):
@@ -2908,6 +2914,10 @@ def purge_kpi_history(db, equipment_ids=None, plant_id=None, line_ids=None):
         db.query(SOP).filter(SOP.equipment_id.in_(equipment_ids)).delete(synchronize_session=False)
         db.query(Measurement).filter(Measurement.equipment_id.in_(equipment_ids)).delete(synchronize_session=False)
         db.query(PartUsed).filter(PartUsed.equipment_id.in_(equipment_ids)).delete(synchronize_session=False)
+        db.query(MotorConditionReading).filter(or_(
+            MotorConditionReading.equipment_id.in_(equipment_ids),
+            MotorConditionReading.machine.in_(equipment_ids),
+        )).delete(synchronize_session=False)
     target_filters = []
     if equipment_ids:
         target_filters.append(KpiTarget.equipment_id.in_(equipment_ids))
@@ -3382,6 +3392,137 @@ def save_lubrication_report(data: LubricationSave, db: Session = Depends(get_db)
     return payload
 
 
+def _motor_temp(value):
+    text = (value or '').strip().replace(',', '.')
+    if not text:
+        return None
+    try:
+        return float(text)
+    except ValueError:
+        return None
+
+
+def motor_equipment_index(db):
+    equipment = db.query(Equipment).all()
+    plants = {row.plant_id: row.name for row in db.query(Plant).all()}
+    lines = {row.line_id: row for row in db.query(PlantLine).all()}
+    by_code = {}
+    details = {}
+    for row in equipment:
+        line = lines.get(row.line_id)
+        line_number = '' if line is None or line.line_number is None else str(line.line_number)
+        detail = {
+            'equipment_id': row.equipment_id,
+            'name': row.name or '',
+            'label': f'{row.equipment_id} — {row.name}',
+            'plant_id': row.plant_id or '',
+            'plant_name': plants.get(row.plant_id) or '',
+            'line_id': row.line_id or '',
+            'line_number': line_number,
+        }
+        by_code[row.equipment_id.lower()] = row
+        details[row.equipment_id] = detail
+    return by_code, details
+
+
+def motor_due_equipment(db, day):
+    """Preventive tasks for this day, limited to equipment that exists in the register."""
+    by_code, details = motor_equipment_index(db)
+    chosen = []
+    seen = set()
+
+    def add(equipment):
+        if equipment.equipment_id in seen:
+            return
+        seen.add(equipment.equipment_id)
+        chosen.append(details[equipment.equipment_id])
+
+    tasks = db.query(AnnualPMDayTask).filter(AnnualPMDayTask.work_date == day).all()
+    for task in tasks:
+        if (task.maintenance_type or 'Preventive').strip().lower() != 'preventive':
+            continue
+        found = by_code.get((task.machine_code or '').strip().lower())
+        if found:
+            add(found)
+    plans = db.query(PMPlan).filter(
+        PMPlan.active == True,
+        PMPlan.next_due_date == day,
+        PMPlan.equipment_id.isnot(None),
+    ).all()
+    for plan in plans:
+        if (plan.pm_type or 'Preventive').strip().lower() not in ('', 'preventive'):
+            continue
+        found = by_code.get((plan.equipment_id or '').strip().lower())
+        if found:
+            add(found)
+    chosen.sort(key=lambda row: (
+        row['plant_name'].lower(),
+        int(row['line_number']) if str(row['line_number']).isdigit() else 0,
+        row['equipment_id'].lower(),
+    ))
+    return chosen
+
+
+def motor_chart(db, plant_id, line_id, equipment_id, start, end):
+    """Temperature and oil charts for the KPI page. This does not change the KPI equations."""
+    rows = db.query(MotorConditionReading, MotorConditionReport).join(
+        MotorConditionReport, MotorConditionReport.id == MotorConditionReading.report_id
+    ).filter(
+        MotorConditionReport.report_date >= start,
+        MotorConditionReport.report_date <= end,
+    ).all()
+    by_code, _details = motor_equipment_index(db)
+    temp_1 = {}
+    temp_2 = {}
+    oil_level = {'good': 0, 'add': 0}
+    oil_condition = {'good': 0, 'critical': 0, 'change': 0}
+    recorded = 0
+    for reading, report in rows:
+        code = (reading.equipment_id or (reading.machine or '').split('—')[0]).strip().lower()
+        found = by_code.get(code)
+        if equipment_id and (not found or found.equipment_id != equipment_id):
+            continue
+        if plant_id and (not found or found.plant_id != plant_id):
+            continue
+        if line_id and (not found or found.line_id != line_id):
+            continue
+        recorded += 1
+        day = report.report_date.isoformat()
+        first = _motor_temp(reading.temp_1)
+        second = _motor_temp(reading.temp_2)
+        if first is not None:
+            temp_1.setdefault(day, []).append(first)
+        if second is not None:
+            temp_2.setdefault(day, []).append(second)
+        if reading.oil_level in oil_level:
+            oil_level[reading.oil_level] += 1
+        if reading.oil_condition in oil_condition:
+            oil_condition[reading.oil_condition] += 1
+    days = sorted(set(temp_1) | set(temp_2))[-12:]
+
+    def series(bucket, key, name):
+        return {
+            'id': key,
+            'name': name,
+            'points': [{
+                'date': day,
+                'hours': round(sum(bucket[day]) / len(bucket[day]), 1) if bucket.get(day) else None,
+            } for day in days],
+        }
+
+    level_names = [('good', 'Oil good'), ('add', 'Needs adding')]
+    condition_names = [('good', 'Oil good'), ('critical', 'Oil critical'), ('change', 'Needs replacement')]
+    return {
+        'readings': recorded,
+        'temperature': [
+            series(temp_1, 'temp_1', 'Temperature 1'),
+            series(temp_2, 'temp_2', 'Temperature 2'),
+        ],
+        'oil_level': [{'name': label, 'value': oil_level[key]} for key, label in level_names if oil_level[key]],
+        'oil_condition': [{'name': label, 'value': oil_condition[key]} for key, label in condition_names if oil_condition[key]],
+    }
+
+
 def motor_payload(db, row):
     readings = db.query(MotorConditionReading).filter(
         MotorConditionReading.report_id == row.id
@@ -3398,6 +3539,7 @@ def motor_payload(db, row):
         'notes': row.notes or '',
         'readings': [{
             'machine': item.machine or '',
+            'equipment_id': item.equipment_id or '',
             'plant': item.plant or '',
             'line_number': item.line_number or '',
             'temp_1': item.temp_1 or '',
@@ -3412,6 +3554,11 @@ def motor_payload(db, row):
 @app.get('/motor-condition/catalog')
 def motor_catalog(u=Depends(role(*MOTOR))):
     return motor_catalog_payload()
+
+
+@app.get('/motor-condition/due')
+def motor_due(on: date, db: Session = Depends(get_db), u=Depends(role(*MOTOR))):
+    return motor_due_equipment(db, on)
 
 
 @app.get('/motor-condition')
@@ -3442,24 +3589,29 @@ def save_motor_sheet(data: MotorConditionSave, db: Session = Depends(get_db), u=
     if not motor_sheet_allowed(data.group_key, data.place_key):
         raise HTTPException(400, 'Choose a group from the form')
     incoming = []
+    seen = set()
+    by_code, details = motor_equipment_index(db)
     for reading in data.readings:
-        machine = ' '.join((reading.machine or '').split())[:150]
-        plant = ' '.join((reading.plant or '').split())[:80]
-        line_number = ' '.join((reading.line_number or '').split())[:40]
+        code = (reading.equipment_id or (reading.machine or '').split('—')[0]).strip()
+        found = by_code.get(code.lower())
+        if not found:
+            raise HTTPException(400, 'This equipment is not in the system')
+        if found.equipment_id in seen:
+            continue
+        seen.add(found.equipment_id)
+        detail = details[found.equipment_id]
         temp_1 = (reading.temp_1 or '').strip()[:20]
         temp_2 = (reading.temp_2 or '').strip()[:20]
         oil_level = (reading.oil_level or '').strip()
         oil_condition = (reading.oil_condition or '').strip()
         checked_at = (reading.inspection_time or '').strip()[:8]
-        if not any((machine, plant, line_number, temp_1, temp_2, oil_level, oil_condition, checked_at)):
+        if not any((temp_1, temp_2, oil_level, oil_condition, checked_at)):
             continue
-        if not machine:
-            raise HTTPException(400, 'Enter the equipment')
         if oil_level not in OIL_LEVELS or oil_condition not in OIL_CONDITIONS:
             raise HTTPException(400, 'Choose an oil level and oil condition from the list')
-        incoming.append((machine, plant, line_number, temp_1, temp_2, oil_level, oil_condition, checked_at))
-    if len(incoming) > 40:
-        raise HTTPException(400, 'The sheet holds 40 equipment rows')
+        incoming.append((detail['label'], detail['plant_name'], detail['line_number'], temp_1, temp_2, oil_level, oil_condition, checked_at, found.equipment_id))
+    if len(incoming) > 120:
+        raise HTTPException(400, 'The sheet holds 120 equipment rows')
     clock = (data.inspection_time or '').strip()[:8]
     inspector = (data.inspector_name or '').strip()[:150] or (u.full_name or u.username)
     notes = (data.notes or '').strip()[:4000]
@@ -3489,11 +3641,12 @@ def save_motor_sheet(data: MotorConditionSave, db: Session = Depends(get_db), u=
     row.notes = notes
     db.query(MotorConditionReading).filter(MotorConditionReading.report_id == row.id).delete()
     for index, item in enumerate(incoming):
-        machine, plant, line_number, temp_1, temp_2, oil_level, oil_condition, checked_at = item
+        machine, plant, line_number, temp_1, temp_2, oil_level, oil_condition, checked_at, equipment_id = item
         db.add(MotorConditionReading(
             report_id=row.id,
             sort_order=index,
             machine=machine,
+            equipment_id=equipment_id,
             plant=plant,
             line_number=line_number,
             temp_1=temp_1,

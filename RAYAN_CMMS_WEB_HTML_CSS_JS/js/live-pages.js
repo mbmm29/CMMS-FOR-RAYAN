@@ -347,7 +347,7 @@ function equipmentOptions() {
   return store.equipment.map((item) => `<option value="${esc(item.equipment_id)}">${esc(item.equipment_id)} — ${esc(item.name)}</option>`).join('');
 }
 
-function areaChart(series) {
+function areaChart(series, unit = 'h') {
   const palette = ['#075cf5', '#009c63', '#ff710d', '#7439f5', '#fa3038', '#17adae', '#0b2558', '#d4a017', '#0ea5e9', '#c026d3'];
   const rows = (series || []).filter((row) => row.points?.length);
   if (!rows.length) return '';
@@ -373,15 +373,30 @@ function areaChart(series) {
   }).join('');
   const shapes = rows.map((row, seriesIndex) => {
     const color = palette[seriesIndex % palette.length];
-    const coords = row.points.map((point, index) => [xAt(index), yAt(point.hours)]);
-    const line = coords.map((coord, index) => `${index ? 'L' : 'M'}${coord[0].toFixed(1)},${coord[1].toFixed(1)}`).join(' ');
-    const area = `${line} L${coords[count - 1][0].toFixed(1)},${base} L${coords[0][0].toFixed(1)},${base} Z`;
+    const coords = row.points.map((point, index) => [
+      xAt(index),
+      point.hours == null || point.hours === '' ? null : yAt(point.hours),
+    ]);
+    let line = '';
+    let drawing = false;
+    coords.forEach((coord) => {
+      if (coord[1] == null) {
+        drawing = false;
+        return;
+      }
+      line += `${drawing ? 'L' : 'M'}${coord[0].toFixed(1)},${coord[1].toFixed(1)}`;
+      drawing = true;
+    });
+    const missing = coords.some((coord) => coord[1] == null);
+    const area = missing || !line ? '' : `${line} L${coords[count - 1][0].toFixed(1)},${base} L${coords[0][0].toFixed(1)},${base} Z`;
     const dots = coords.map((coord, index) => {
+      if (coord[1] == null) return '';
       const hours = Number(row.points[index].hours) || 0;
       if (!hours) return '';
-      return `<circle cx="${coord[0].toFixed(1)}" cy="${coord[1].toFixed(1)}" r="3.2" fill="#fff" stroke="${color}"><title>${esc(row.name)} · ${esc(fmtDate(row.points[index].date))}: ${numberText(hours, 1)} h</title></circle>`;
+      return `<circle cx="${coord[0].toFixed(1)}" cy="${coord[1].toFixed(1)}" r="3.2" fill="#fff" stroke="${color}"><title>${esc(row.name)} · ${esc(fmtDate(row.points[index].date))}: ${numberText(hours, 1)} ${esc(unit)}</title></circle>`;
     }).join('');
-    return `<path class="area-fill" d="${area}" style="fill:url(#downArea${seriesIndex})"></path><path class="area-line" d="${line}" style="stroke:${color}"></path>${dots}`;
+    const fill = area ? `<path class="area-fill" d="${area}" style="fill:url(#downArea${seriesIndex})"></path>` : '';
+    return `${fill}<path class="area-line" d="${line}" style="stroke:${color}"></path>${dots}`;
   }).join('');
   const gradients = rows.map((row, seriesIndex) => {
     const color = palette[seriesIndex % palette.length];
@@ -402,6 +417,14 @@ function donut(parts, total) {
   const style = total ? `background:conic-gradient(${stops.join(',')})` : 'background:#e7ebf3';
   const legend = active.map((part) => `<li><i style="background:${part.color}"></i><span>${esc(t(part.name))}</span></li>`).join('');
   return `<div class="donut live" data-label="${esc(numberText(total, 1))}&#10;${esc(t('Total'))}" style="${style}"></div><ul class="area-legend">${legend}</ul>`;
+}
+
+function motorDonut(parts) {
+  const colors = ['#009c63', '#ff710d', '#fa3038', '#075cf5'];
+  const colored = (parts || []).filter((part) => part.value > 0).map((part, index) => ({ name: part.name, value: part.value, color: colors[index % colors.length] }));
+  const total = colored.reduce((sum, part) => sum + part.value, 0);
+  if (!total) return `<p class="chart-empty">${esc(t('No motor readings in this period.'))}</p>`;
+  return donut(colored, total);
 }
 
 function kpiText(value, digits = 1, suffix = '') {
@@ -478,6 +501,9 @@ async function drawDashboard() {
     </section>
     <section class="panel chart-panel"><h2>${esc(t('Maintenance hours'))}</h2><p class="kpi-note">${esc(t('Total'))} ${kpiText(kpi.total_hours, 1)} ${esc(t('from daily reports and work orders.'))}</p>${kpi.total_hours ? donut(hourParts, kpi.total_hours) : `<p class="chart-empty">${esc(t('No maintenance hours yet'))}</p>`}</section>
     <section class="panel chart-panel chart-wide"><h2>${esc(t('Downtime trend'))}</h2><p class="kpi-note">${esc(t(kpi.trend_by === 'line' ? 'Each line' : kpi.trend_by === 'equipment' ? 'Selected equipment' : 'Each plant'))} · ${esc(t('scheduled'))} ${kpiText(kpi.scheduled_downtime_h, 1)} · ${esc(t('unscheduled'))} ${kpiText(kpi.unscheduled_downtime_h, 1)}</p>${kpi.trend_series?.length ? areaChart(kpi.trend_series) : `<p class="chart-empty">${esc(t('No downtime in this period'))}</p>`}</section>
+    <section class="panel chart-panel chart-wide"><h2>${esc(t('Motor temperature'))}</h2><p class="kpi-note">${esc(t(ui.equipmentId ? 'Temperature of the selected equipment.' : 'Average of the recorded readings on each measurement day.'))}</p>${(kpi.motor?.temperature || []).some((row) => (row.points || []).some((point) => point.hours != null)) ? areaChart(kpi.motor.temperature, '°C') : `<p class="chart-empty">${esc(t('No motor readings in this period.'))}</p>`}</section>
+    <section class="panel chart-panel"><h2>${esc(t('Oil level'))}</h2>${motorDonut(kpi.motor?.oil_level)}</section>
+    <section class="panel chart-panel"><h2>${esc(t('Oil condition'))}</h2>${motorDonut(kpi.motor?.oil_condition)}</section>
     <section class="panel chart-panel"><h2>${esc(t('Availability basis'))}</h2><div class="summary-row"><span>${esc(t('Uptime'))}</span><b>${kpiText(kpi.uptime_h, 1)} ${esc(t('h'))}</b></div><div class="summary-row"><span>${esc(t('Available time'))}</span><b>${kpiText(kpi.available_h, 1)} ${esc(t('h'))}</b></div><div class="summary-row"><span>${esc(t('Idle time'))}</span><b>${kpiText(kpi.idle_h, 1)} ${esc(t('h'))}</b></div><div class="summary-row"><span>${esc(t('Operating time'))}</span><b>${kpiText(kpi.operating_h, 1)} ${esc(t('h'))}</b></div><small class="kpi-note">${esc(t('Availability = uptime ÷ (available − idle). MTBF = operating time ÷ failures. MTTR = corrective hours ÷ corrective events.'))}</small></section>
     <section class="panel chart-panel"><h2>${esc(t('Work orders and PM'))}</h2><div class="summary-row"><span>${esc(t('Issued / completed'))}</span><b>${kpi.wo_issued || 0} / ${kpi.wo_completed || 0}</b></div><div class="summary-row"><span>${esc(t('PM due / on time'))}</span><b>${kpi.pm_due || 0} / ${kpi.pm_on_time || 0}</b></div><div class="summary-row"><span>${esc(t('Corrective events'))}</span><b>${kpi.corrective_events || 0}</b></div><div class="summary-row"><span>${esc(kpiTargetText(kpi.availability, targets.availability, true))}</span><b>${esc(t('Availability'))}</b></div><div class="summary-row"><span>${esc(kpiTargetText(kpi.mtbf, targets.mtbf, true))}</span><b>${esc(t('MTBF'))}</b></div><div class="summary-row"><span>${esc(kpiTargetText(kpi.mttr, targets.mttr, false))}</span><b>${esc(t('MTTR'))}</b></div>${targetForm}</section>
     <section class="panel chart-panel"><h2>${esc(t('Component life'))}</h2><p class="kpi-note">${esc(t('Removal date − installation date. In-service components use today.'))}</p>${components}<div class="summary-row"><span>${esc(t('Average life'))}</span><b>${kpi.component_life_avg == null ? '—' : `${kpi.component_life_avg} ${t('days')}`}</b></div></section>`;

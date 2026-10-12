@@ -465,6 +465,7 @@ class LubricationSave(BaseModel):
 
 class MotorReadingIn(BaseModel):
     machine: str = ''
+    equipment_id: str = ''
     plant: str = ''
     line_number: str = ''
     temp_1: str = ''

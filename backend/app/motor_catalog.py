@@ -97,10 +97,10 @@ def motor_place(group_key: str, place_key: str):
 
 
 def motor_sheet_allowed(group_key: str, place_key: str) -> bool:
+    if place_key == SHEET_PLACE and (group_key in MOTOR_GROUPS or group_key == 'pm'):
+        return True
     if group_key not in MOTOR_GROUPS:
         return False
-    if place_key == SHEET_PLACE:
-        return True
     return place_key in MOTOR_GROUPS[group_key]['places']
 
 
