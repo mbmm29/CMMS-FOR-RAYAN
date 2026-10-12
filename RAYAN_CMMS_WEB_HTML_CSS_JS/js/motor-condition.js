@@ -129,8 +129,9 @@ function motorLocked(name, index, value) {
 }
 
 function motorTableRow(row, index) {
+  const cell = (label, inner) => `<td data-label="${esc(t(label))}">${inner}</td>`;
   const identity = `<input type="hidden" data-motor="equipment_id" value="${esc(row.equipment_id || '')}">`;
-  return `<tr><td>${identity}${motorLocked('equipment_code', index, row.equipment_id)}</td><td>${motorLocked('machine', index, row.name)}</td><td>${motorLocked('plant', index, row.plant)}</td><td>${motorLocked('line_number', index, row.line_number)}</td><td>${motorField('temp_1', index, row.temp_1, 'inputmode="decimal"')}</td><td>${motorField('temp_2', index, row.temp_2, 'inputmode="decimal"')}</td><td>${motorChoice('oil_level', row.oil_level || '', [['good', 'Oil good'], ['add', 'Needs adding']])}</td><td>${motorChoice('oil_condition', row.oil_condition || '', [['good', 'Oil good'], ['critical', 'Oil critical'], ['change', 'Needs replacement']])}</td><td>${motorField('inspection_time', index, row.inspection_time, 'type="time"')}</td></tr>`;
+  return `<tr>${cell('Equipment number', `${identity}${motorLocked('equipment_code', index, row.equipment_id)}`)}${cell('Equipment name', motorLocked('machine', index, row.name))}${cell('Plant', motorLocked('plant', index, row.plant))}${cell('Line', motorLocked('line_number', index, row.line_number))}${cell('Temperature 1', motorField('temp_1', index, row.temp_1, 'inputmode="decimal"'))}${cell('Temperature 2', motorField('temp_2', index, row.temp_2, 'inputmode="decimal"'))}${cell('Oil level', motorChoice('oil_level', row.oil_level || '', [['good', 'Oil good'], ['add', 'Needs adding']]))}${cell('Oil condition', motorChoice('oil_condition', row.oil_condition || '', [['good', 'Oil good'], ['critical', 'Oil critical'], ['change', 'Needs replacement']]))}${cell('Inspection time', motorField('inspection_time', index, row.inspection_time, 'type="time"'))}</tr>`;
 }
 
 async function drawMotorCondition() {

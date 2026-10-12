@@ -463,3 +463,30 @@ body .section-chip .detail-button{width:auto;height:22px;margin:0;padding:0 6px}
 .section-form input{flex:1 1 120px;min-width:0;height:34px;padding:0 8px}
 body .section-form .detail-button{width:auto;height:34px;margin:0;padding:0 12px}
 .section-form .section-error{flex-basis:100%;margin:0}
+@media(max-width:760px){
+  html body .workspace.lube-board:has(.motor-paper){display:flex;flex-direction:column;grid-template-columns:minmax(0,1fr);width:100%;max-width:100%;min-width:0;overflow:visible;gap:12px}
+  html body .workspace.lube-board:has(.motor-paper) > *{width:100%;min-width:0;max-width:100%}
+  html body .workspace.lube-board > .motor-paper,
+  html body .motor-paper,
+  html body .motor-paper .sheet-scroll,
+  html body .motor-paper .sheet-scroll .motor-table{width:100%;min-width:0;max-width:100%}
+  html body .motor-paper.daily-paper{overflow:visible;padding:12px 10px}
+  html body .motor-paper .lube-head{grid-template-columns:1fr;justify-items:center}
+  html body .motor-paper .lube-head img{max-width:180px}
+  html body .motor-paper .lube-meta,
+  html body .motor-paper .lube-meta label{grid-template-columns:minmax(0,1fr)}
+  html body .motor-paper textarea{padding:8px}
+  html body .motor-paper .sheet-scroll{overflow:visible}
+  html body .motor-paper .motor-table,
+  html body .motor-paper .motor-table tbody,
+  html body .motor-paper .motor-table tr,
+  html body .motor-paper .motor-table td{display:block;width:100%}
+  html body .motor-paper .motor-table thead{display:none}
+  html body .motor-paper .motor-table tr{margin:0 0 10px;padding:4px 8px;border:1px solid #2a5287}
+  html body .motor-paper .motor-table td{display:grid;grid-template-columns:112px minmax(0,1fr);gap:8px;align-items:center;border:0;border-bottom:1px solid #d5e2f4;padding:6px 0}
+  html body .motor-paper .motor-table td::before{content:attr(data-label);color:#102d60;font-size:12px;font-weight:800}
+  html body .motor-paper .motor-table td.live-note{display:block;border:0}
+  html body .motor-paper .motor-table td.live-note::before{content:none}
+  html body .motor-paper .motor-table input,
+  html body .motor-paper .motor-table select{width:100%;min-width:0;height:36px}
+}
