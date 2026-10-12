@@ -194,6 +194,8 @@ const CMMS_AR = {
   'No temperature readings yet.': 'لا توجد قراءات حرارة بعد.',
   'No oil changes yet.': 'لا توجد تبديلات زيت بعد.',
   'No grease changes yet.': 'لا توجد تبديلات شحم بعد.',
+  'Delete this motor report?': 'حذف تقرير حالة المحرك هذا؟',
+  'No equipment matches this filter.': 'لا توجد معدات مطابقة لهذا الفلتر.',
   'times': 'مرات',
   'Weekly motor temperature, oil level and oil condition': 'قياس أسبوعي لحرارة المحركات ومستوى الزيت وحالته',
   'Motor temperature, oil level and oil condition': 'حرارة المحركات ومستوى الزيت وحالته',

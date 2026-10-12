@@ -350,6 +350,15 @@ function openPlants(keepId = '') {
   return (store?.plants || []).filter((plant) => plant.active !== false || (keepId && plant.plant_id === keepId));
 }
 
+function currentFilters() {
+  return {
+    plantId: ui.plantId || '',
+    lineId: ui.lineId || '',
+    sectionId: ui.sectionId || '',
+    equipmentId: ui.equipmentId || '',
+  };
+}
+
 function filtersHtml() {
   const openIds = new Set((store.plants || []).filter((plant) => plant.active !== false).map((plant) => plant.plant_id));
   if (ui.plantId && !openIds.has(ui.plantId)) {

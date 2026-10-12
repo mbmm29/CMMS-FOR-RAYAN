@@ -3837,6 +3837,7 @@ def motor_equipment_index(db):
             'line_id': row.line_id or '',
             'line_number': line_number,
             'line_name': line_name or line_number,
+            'section_id': row.section_id or '',
         }
         by_code[row.equipment_id.lower()] = row
         details[row.equipment_id] = detail
@@ -4102,6 +4103,9 @@ def motor_payload(db, row):
             'machine': detail.get('label') or machine,
             'name': name,
             'equipment_id': item.equipment_id or '',
+            'plant_id': detail.get('plant_id') or '',
+            'line_id': detail.get('line_id') or '',
+            'section_id': detail.get('section_id') or '',
             'plant': detail.get('plant_name') or item.plant or '',
             'line_number': detail.get('line_name') or item.line_number or '',
             'temp_1': item.temp_1 or '',
@@ -4162,20 +4166,41 @@ def _shown_amount(value):
     return number
 
 
-def motor_highlights(db):
+def motor_highlights(db, plant_id='', line_id='', section_id='', equipment_id=''):
     """Hottest motors, plus the machines that used the most oil and grease."""
+    plant_id = (plant_id or '').strip()
+    line_id = (line_id or '').strip()
+    section_id = (section_id or '').strip()
+    equipment_id = (equipment_id or '').strip()
     equipment = {row.equipment_id.lower(): row for row in db.query(Equipment).all()}
+
+    def in_scope(known, code):
+        identity = known.equipment_id if known else code
+        if equipment_id and identity != equipment_id:
+            return False
+        if known is None:
+            return not (plant_id or line_id or section_id)
+        if plant_id and (known.plant_id or '') != plant_id:
+            return False
+        if line_id and (known.line_id or '') != line_id:
+            return False
+        if section_id and (known.section_id or '') != section_id:
+            return False
+        return True
+
     peaks = {}
     readings = db.query(MotorConditionReading).all()
     for reading in readings:
         code = (reading.equipment_id or (reading.machine or '').split('—')[0]).strip()
         if not code:
             continue
+        known = equipment.get(code.lower())
+        if not in_scope(known, code):
+            continue
         temps = [value for value in (_motor_temp(reading.temp_1), _motor_temp(reading.temp_2)) if value is not None]
         if not temps:
             continue
         peak = max(temps)
-        known = equipment.get(code.lower())
         name = (known.name if known else '') or (reading.machine or '').strip() or code
         slot = peaks.get(code.lower())
         if slot is None or peak > slot['temperature']:
@@ -4194,6 +4219,8 @@ def motor_highlights(db):
             if not code:
                 continue
             known = equipment.get(code.lower())
+            if not in_scope(known, code):
+                continue
             slot = totals.setdefault(code.lower(), {
                 'equipment_id': known.equipment_id if known else code,
                 'name': (known.name if known else '') or (line.equipment_name or '').strip() or code,
@@ -4225,8 +4252,15 @@ def motor_highlights(db):
 
 
 @app.get('/motor-condition/highlights')
-def motor_condition_highlights(db: Session = Depends(get_db), u=Depends(role(*MOTOR))):
-    return motor_highlights(db)
+def motor_condition_highlights(
+    plant_id: str = '',
+    line_id: str = '',
+    section_id: str = '',
+    equipment_id: str = '',
+    db: Session = Depends(get_db),
+    u=Depends(role(*MOTOR)),
+):
+    return motor_highlights(db, plant_id, line_id, section_id, equipment_id)
 
 
 def motor_sheet_summaries(db):
@@ -4242,11 +4276,16 @@ def motor_sheet_summaries(db):
         ).order_by(MotorConditionReading.sort_order, MotorConditionReading.id).all()
         for reading in readings:
             grouped.setdefault(reading.report_id, []).append(reading)
+    _by_code, details = motor_equipment_index(db)
     payload = []
     for row in rows:
         equipment = []
         plants = []
         lines = []
+        equipment_ids = []
+        plant_ids = []
+        line_ids = []
+        section_ids = []
         for item in grouped.get(row.id, []):
             label = (item.machine or item.equipment_id or '').strip()
             if label and label not in equipment:
@@ -4257,6 +4296,20 @@ def motor_sheet_summaries(db):
             line_number = (item.line_number or '').strip()
             if line_number and line_number not in lines:
                 lines.append(line_number)
+            code = (item.equipment_id or '').strip()
+            detail = details.get(code) or {}
+            identity = detail.get('equipment_id') or code
+            if identity and identity not in equipment_ids:
+                equipment_ids.append(identity)
+            plant_key = detail.get('plant_id') or ''
+            if plant_key and plant_key not in plant_ids:
+                plant_ids.append(plant_key)
+            line_key = detail.get('line_id') or ''
+            if line_key and line_key not in line_ids:
+                line_ids.append(line_key)
+            section_key = detail.get('section_id') or ''
+            if section_key and section_key not in section_ids:
+                section_ids.append(section_key)
         payload.append({
             'report_id': row.report_id,
             'report_date': row.report_date.isoformat(),
@@ -4267,6 +4320,10 @@ def motor_sheet_summaries(db):
             'equipment': equipment,
             'plants': plants,
             'lines': lines,
+            'equipment_ids': equipment_ids,
+            'plant_ids': plant_ids,
+            'line_ids': line_ids,
+            'section_ids': section_ids,
         })
     return payload
 
@@ -4364,6 +4421,18 @@ def save_motor_sheet(data: MotorConditionSave, db: Session = Depends(get_db), u=
     db.commit()
     db.refresh(row)
     return motor_payload(db, row)
+
+
+@app.delete('/motor-condition/{report_id}')
+def delete_motor_sheet(report_id: str, db: Session = Depends(get_db), u=Depends(role(*ENGINEER))):
+    row = db.query(MotorConditionReport).filter(MotorConditionReport.report_id == report_id).first()
+    if not row:
+        raise HTTPException(404, 'Motor condition sheet not found')
+    db.query(MotorConditionReading).filter(MotorConditionReading.report_id == row.id).delete(synchronize_session=False)
+    db.delete(row)
+    audit(db, u, 'DELETE', 'MotorConditionReport', report_id)
+    db.commit()
+    return {'ok': True}
 
 
 @app.get('/dashboard')

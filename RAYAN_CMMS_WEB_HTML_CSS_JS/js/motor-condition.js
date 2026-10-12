@@ -37,6 +37,9 @@ function motorReadyRows(due, readings) {
       equipment_id: item.equipment_id,
       name: item.name || '',
       machine: item.label,
+      plant_id: item.plant_id || '',
+      line_id: item.line_id || '',
+      section_id: item.section_id || '',
       plant: item.plant_name || '',
       line_number: item.line_name || item.line_number || '',
       temp_1: found.temp_1 || '',
@@ -56,6 +59,9 @@ function motorReadyRows(due, readings) {
       equipment_id: row.equipment_id || key,
       name: row.name || named,
       machine,
+      plant_id: row.plant_id || '',
+      line_id: row.line_id || '',
+      section_id: row.section_id || '',
       plant: row.plant || '',
       line_number: row.line_name || row.line_number || '',
       temp_1: row.temp_1 || '',
@@ -81,10 +87,29 @@ function motorReportText(sheet) {
   ].join(' ').toLowerCase();
 }
 
+function motorPageFilters() {
+  if (typeof currentFilters !== 'function') return { plantId: '', lineId: '', sectionId: '', equipmentId: '' };
+  return currentFilters();
+}
+
+function motorScope(row, scope) {
+  const filter = scope || motorPageFilters();
+  if (filter.plantId && row.plant_id !== filter.plantId) return false;
+  if (filter.lineId && row.line_id !== filter.lineId) return false;
+  if (filter.sectionId && row.section_id !== filter.sectionId) return false;
+  if (filter.equipmentId && row.equipment_id !== filter.equipmentId) return false;
+  return true;
+}
+
+function motorSheetInScope(sheet) {
+  const filter = motorPageFilters();
+  const has = (list, id) => !id || (sheet[list] || []).includes(id);
+  return has('plant_ids', filter.plantId) && has('line_ids', filter.lineId) && has('section_ids', filter.sectionId) && has('equipment_ids', filter.equipmentId);
+}
+
 function motorVisibleSheets() {
   const query = motorUi.query.trim().toLowerCase();
-  if (!query) return motorSheets;
-  return motorSheets.filter((sheet) => motorReportText(sheet).includes(query));
+  return motorSheets.filter((sheet) => motorSheetInScope(sheet) && (!query || motorReportText(sheet).includes(query)));
 }
 
 function motorReportButton(sheet, selected) {
@@ -92,7 +117,24 @@ function motorReportButton(sheet, selected) {
   const shown = names.slice(0, 2).join(' · ');
   const more = names.length > 2 ? ` +${names.length - 2}` : '';
   const detail = [sheet.inspector_name, shown].filter(Boolean).join(' · ');
-  return `<button type="button" class="lube-open${selected ? ' selected' : ''}" data-motor-sheet="${esc(sheet.report_id)}"><b>${esc(fmtDate(sheet.report_date))}</b>${detail ? `<small>${esc(detail)}${esc(more)}</small>` : ''}</button>`;
+  const remove = typeof canMaintain === 'function' && canMaintain()
+    ? `<button type="button" class="motor-delete" data-motor-delete="${esc(sheet.report_id)}">${esc(t('Delete'))}</button>`
+    : '';
+  return `<div class="motor-report-row"><button type="button" class="lube-open${selected ? ' selected' : ''}" data-motor-sheet="${esc(sheet.report_id)}"><b>${esc(fmtDate(sheet.report_date))}</b>${detail ? `<small>${esc(detail)}${esc(more)}</small>` : ''}</button>${remove}</div>`;
+}
+
+async function deleteMotorReport(reportId) {
+  if (typeof canMaintain === 'function' && !canMaintain()) return;
+  if (!reportId) return;
+  if (!window.confirm(t('Delete this motor report?'))) return;
+  try {
+    await apiRequest(`/motor-condition/${encodeURIComponent(reportId)}`, { method: 'DELETE' });
+    if (motorUi.id === reportId) motorUi.id = '';
+    toast(t('Deleted.'));
+    await drawMotorCondition();
+  } catch (error) {
+    toast(t(error.message));
+  }
 }
 
 function paintMotorReports(currentId) {
@@ -109,6 +151,11 @@ function paintMotorReports(currentId) {
   list.querySelectorAll('[data-motor-sheet]').forEach((button) => button.addEventListener('click', () => {
     motorUi.id = button.dataset.motorSheet;
     drawMotorCondition();
+  }));
+  list.querySelectorAll('[data-motor-delete]').forEach((button) => button.addEventListener('click', (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+    deleteMotorReport(button.dataset.motorDelete);
   }));
 }
 
@@ -184,27 +231,35 @@ async function drawMotorCondition() {
     if (existing) current = await apiRequest(`/motor-condition/${encodeURIComponent(existing.report_id)}`);
   }
   const due = await apiRequest(`/motor-condition/due?on=${encodeURIComponent(motorUi.date)}`);
+  const scope = motorPageFilters();
+  const highlightQuery = new URLSearchParams();
+  if (scope.plantId) highlightQuery.set('plant_id', scope.plantId);
+  if (scope.lineId) highlightQuery.set('line_id', scope.lineId);
+  if (scope.sectionId) highlightQuery.set('section_id', scope.sectionId);
+  if (scope.equipmentId) highlightQuery.set('equipment_id', scope.equipmentId);
+  const highlightPath = `/motor-condition/highlights${highlightQuery.toString() ? `?${highlightQuery}` : ''}`;
   let highlights = { hottest: null, hottest_five: [], most_oil: null, most_grease: null };
   try {
-    highlights = await apiRequest('/motor-condition/highlights');
+    highlights = await apiRequest(highlightPath);
   } catch (_) {
     highlights = { hottest: null, hottest_five: [], most_oil: null, most_grease: null };
   }
   const ready = motorReadyRows(due, current?.readings || []);
-  const recorded = ready.filter((row) => row.temp_1 || row.temp_2 || row.oil_level || row.oil_condition || row.inspection_time).length;
+  const matched = ready.filter((row) => motorScope(row, scope));
+  const kept = ready.filter((row) => !motorScope(row, scope));
+  const recorded = matched.filter((row) => row.temp_1 || row.temp_2 || row.oil_level || row.oil_condition || row.inspection_time).length;
   document.getElementById('metric-grid').innerHTML = `${metrics([
-    ['Machines', String(ready.length), '⚙', 'blue', ''],
+    ['Machines', String(matched.length), '⚙', 'blue', ''],
     ['Recorded', String(recorded), '✓', 'green', ''],
-    ['Reports', String(motorSheets.length), '▤', 'purple', ''],
+    ['Reports', String(motorVisibleSheets().length), '▤', 'purple', ''],
   ])}${motorHighlights(highlights)}`;
-  const rows = ready.length
-    ? ready.map(motorTableRow).join('')
-    : `<tr><td class="live-note" colspan="9">${esc(t('No equipment is scheduled from preventive maintenance for this day.'))}</td></tr>`;
+  const emptyNote = ready.length ? 'No equipment matches this filter.' : 'No equipment is scheduled from preventive maintenance for this day.';
+  const rows = `${matched.length ? matched.map(motorTableRow).join('') : `<tr><td class="live-note" colspan="9">${esc(t(emptyNote))}</td></tr>`}${kept.map((row, index) => motorTableRow(row, index + 1000).replace('<tr>', '<tr class="motor-kept">')).join('')}`;
   const inspector = current?.inspector_name || getSavedUser()?.full_name || '';
   const groupKey = current?.group_key || motorUi.group || 'pm';
   const placeKey = current?.place_key || motorUi.place || 'sheet';
   document.getElementById('workspace').className = 'workspace lube-board';
-  document.getElementById('workspace').innerHTML = `<aside class="panel lube-list motor-reports"><div class="lube-list-head"><b>${esc(t('Reports'))}</b><button type="button" class="detail-button" id="motor-new">${esc(t('New report'))}</button></div><label class="daily-filter"><span>${esc(t('Search reports'))}</span><input id="motor-search" type="search" value="${esc(motorUi.query)}" placeholder="${esc(t('Date, equipment, plant, or inspector'))}"></label><div id="motor-sheet-list"></div></aside><form id="motor-form" class="lube-paper daily-paper motor-paper" data-report-id="${esc(current?.report_id || '')}"><header class="lube-head"><img src="logo-rayan.png?v=2" alt="Rayan"><div><h2>${esc(t('Motor condition'))}</h2><p>${esc(t(motorCatalog.inspection))}</p><small>${esc(t('Mechanical Maintenance Department'))}</small></div><dl><div><dt>${esc(t('Form No.:'))}</dt><dd>${esc(motorCatalog.form_no)}</dd></div><div><dt>${esc(t('Rev.'))}</dt><dd>${esc(motorCatalog.revision)}</dd></div></dl></header><div class="lube-meta"><label><span>${esc(t('Date'))}</span><input id="motor-date" type="date" value="${esc(motorUi.date)}" required></label><label><span>${esc(t('Inspector'))}</span><input id="motor-inspector" value="${esc(inspector)}" required></label></div><input type="hidden" id="motor-group" value="${esc(groupKey)}"><input type="hidden" id="motor-place" value="${esc(placeKey)}"><div class="sheet-scroll"><table class="lube-table motor-table"><colgroup><col class="m-code"><col class="m-name"><col class="m-plant"><col class="m-line"><col class="m-temp"><col class="m-temp"><col class="m-oil"><col class="m-oil"><col class="m-time"></colgroup><thead><tr><th>${esc(t('Equipment number'))}</th><th>${esc(t('Equipment name'))}</th><th>${esc(t('Plant'))}</th><th>${esc(t('Line'))}</th><th>${esc(t('Temperature 1'))}</th><th>${esc(t('Temperature 2'))}</th><th>${esc(t('Oil level'))}</th><th>${esc(t('Oil condition'))}</th><th>${esc(t('Inspection time'))}</th></tr></thead><tbody>${rows}</tbody></table></div><label class="daily-notes"><span>${esc(t('General notes'))}</span><textarea id="motor-notes">${esc(current?.notes || '')}</textarea></label><p id="motor-error" class="form-error"></p></form>`;
+  document.getElementById('workspace').innerHTML = `${typeof filtersHtml === 'function' ? filtersHtml() : ''}<aside class="panel lube-list motor-reports"><div class="lube-list-head"><b>${esc(t('Reports'))}</b><button type="button" class="detail-button" id="motor-new">${esc(t('New report'))}</button></div><label class="daily-filter"><span>${esc(t('Search reports'))}</span><input id="motor-search" type="search" value="${esc(motorUi.query)}" placeholder="${esc(t('Date, equipment, plant, or inspector'))}"></label><div id="motor-sheet-list"></div></aside><form id="motor-form" class="lube-paper daily-paper motor-paper" data-report-id="${esc(current?.report_id || '')}"><header class="lube-head"><img src="logo-rayan.png?v=2" alt="Rayan"><div><h2>${esc(t('Motor condition'))}</h2><p>${esc(t(motorCatalog.inspection))}</p><small>${esc(t('Mechanical Maintenance Department'))}</small></div><dl><div><dt>${esc(t('Form No.:'))}</dt><dd>${esc(motorCatalog.form_no)}</dd></div><div><dt>${esc(t('Rev.'))}</dt><dd>${esc(motorCatalog.revision)}</dd></div></dl></header><div class="lube-meta"><label><span>${esc(t('Date'))}</span><input id="motor-date" type="date" value="${esc(motorUi.date)}" required></label><label><span>${esc(t('Inspector'))}</span><input id="motor-inspector" value="${esc(inspector)}" required></label></div><input type="hidden" id="motor-group" value="${esc(groupKey)}"><input type="hidden" id="motor-place" value="${esc(placeKey)}"><div class="sheet-scroll"><table class="lube-table motor-table"><colgroup><col class="m-code"><col class="m-name"><col class="m-plant"><col class="m-line"><col class="m-temp"><col class="m-temp"><col class="m-oil"><col class="m-oil"><col class="m-time"></colgroup><thead><tr><th>${esc(t('Equipment number'))}</th><th>${esc(t('Equipment name'))}</th><th>${esc(t('Plant'))}</th><th>${esc(t('Line'))}</th><th>${esc(t('Temperature 1'))}</th><th>${esc(t('Temperature 2'))}</th><th>${esc(t('Oil level'))}</th><th>${esc(t('Oil condition'))}</th><th>${esc(t('Inspection time'))}</th></tr></thead><tbody>${rows}</tbody></table></div><label class="daily-notes"><span>${esc(t('General notes'))}</span><textarea id="motor-notes">${esc(current?.notes || '')}</textarea></label>${current && typeof canMaintain === 'function' && canMaintain() ? `<div class="lube-actions no-print"><button type="button" class="detail-button danger" id="motor-delete">${esc(t('Delete'))}</button></div>` : ''}<p id="motor-error" class="form-error"></p></form>`;
   document.getElementById('motor-date').addEventListener('change', (event) => {
     motorUi.date = event.target.value;
     motorUi.group = 'pm';
@@ -220,6 +275,11 @@ async function drawMotorCondition() {
     drawMotorCondition();
   });
   paintMotorReports(current?.report_id || '');
+  if (typeof bindFilters === 'function') bindFilters();
+  document.getElementById('motor-delete')?.addEventListener('click', () => {
+    const reportId = document.getElementById('motor-form')?.dataset.reportId || '';
+    if (reportId) deleteMotorReport(reportId);
+  });
   document.getElementById('motor-search').addEventListener('input', (event) => {
     motorUi.query = event.target.value;
     paintMotorReports(current?.report_id || '');
