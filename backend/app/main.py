@@ -3551,6 +3551,7 @@ def motor_equipment_index(db):
     for row in equipment:
         line = lines.get(row.line_id)
         line_number = '' if line is None or line.line_number is None else str(line.line_number)
+        line_name = (line.name or '').strip() if line is not None else ''
         detail = {
             'equipment_id': row.equipment_id,
             'name': row.name or '',
@@ -3559,6 +3560,7 @@ def motor_equipment_index(db):
             'plant_name': plants.get(row.plant_id) or '',
             'line_id': row.line_id or '',
             'line_number': line_number,
+            'line_name': line_name or line_number,
         }
         by_code[row.equipment_id.lower()] = row
         details[row.equipment_id] = detail
@@ -3670,7 +3672,28 @@ def motor_payload(db, row):
     readings = db.query(MotorConditionReading).filter(
         MotorConditionReading.report_id == row.id
     ).order_by(MotorConditionReading.sort_order, MotorConditionReading.id).all()
+    _by_code, details = motor_equipment_index(db)
     place = motor_place(row.group_key, row.place_key) or {}
+
+    def reading_view(item):
+        detail = details.get(item.equipment_id or '') or {}
+        machine = item.machine or ''
+        name = detail.get('name') or ''
+        if not name and '—' in machine:
+            name = machine.split('—', 1)[1].strip()
+        return {
+            'machine': detail.get('label') or machine,
+            'name': name,
+            'equipment_id': item.equipment_id or '',
+            'plant': detail.get('plant_name') or item.plant or '',
+            'line_number': detail.get('line_name') or item.line_number or '',
+            'temp_1': item.temp_1 or '',
+            'temp_2': item.temp_2 or '',
+            'oil_level': item.oil_level or '',
+            'oil_condition': item.oil_condition or '',
+            'inspection_time': item.inspection_time or '',
+        }
+
     return {
         'report_id': row.report_id,
         'report_date': row.report_date.isoformat(),
@@ -3680,17 +3703,7 @@ def motor_payload(db, row):
         'place_key': row.place_key,
         'place_title': place.get('title', ''),
         'notes': row.notes or '',
-        'readings': [{
-            'machine': item.machine or '',
-            'equipment_id': item.equipment_id or '',
-            'plant': item.plant or '',
-            'line_number': item.line_number or '',
-            'temp_1': item.temp_1 or '',
-            'temp_2': item.temp_2 or '',
-            'oil_level': item.oil_level or '',
-            'oil_condition': item.oil_condition or '',
-            'inspection_time': item.inspection_time or '',
-        } for item in readings],
+        'readings': [reading_view(item) for item in readings],
     }
 
 

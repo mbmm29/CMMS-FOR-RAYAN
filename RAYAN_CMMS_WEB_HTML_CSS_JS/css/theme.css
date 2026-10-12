@@ -197,8 +197,8 @@ body .workspace.due-board{grid-template-columns:minmax(0,1fr)}
 .week-sheet td:first-child,.week-sheet td:nth-child(2){text-align:start;min-width:140px}
 .annual-empty{padding:28px 12px;color:#9eb4d6}
 
-body .workspace.lube-board{grid-template-columns:240px minmax(0,1fr);align-items:start;overflow-x:auto}
-body .workspace.lube-board:has(.motor-paper){grid-template-columns:300px minmax(0,1fr)}
+body .workspace.lube-board{grid-template-columns:240px minmax(0,1fr);align-items:start;min-width:0;overflow-x:auto}
+body .workspace.lube-board:has(.motor-paper){overflow-x:visible}
 .motor-reports .lube-open small{display:block;white-space:normal;overflow-wrap:anywhere}
 .lube-list-head{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:8px}
 .daily-filter{display:grid;gap:4px;margin:0 0 8px;color:#c5d6f4;font-size:12px;font-weight:700}
@@ -296,31 +296,28 @@ body .header-actions .ghost{background:transparent;color:#f4f8ff;border:1px soli
 body .daily-paper .lube-table .lube-machine input + input,
 body .daily-paper .lube-table .daily-work input + input{border-top:1px solid #2a5287}
 body .daily-paper .lube-machine input[data-field="line"][data-resolved="1"]{background:#f3f7ff;font-weight:700}
-.motor-paper{width:1520px;min-width:1520px;max-width:1520px;box-sizing:border-box;page:motorsheet}
-.motor-paper .lube-head{grid-template-columns:210px minmax(240px,1fr) 260px;gap:16px;align-items:center}
+.motor-paper{width:100%;min-width:0;max-width:100%;box-sizing:border-box}
 .motor-paper .lube-head > div{min-width:0}
-.motor-paper .lube-meta{grid-template-columns:repeat(3,minmax(0,1fr))}
-.motor-paper .lube-meta label{grid-template-columns:120px minmax(0,1fr)}
 .motor-table{width:100%;min-width:0;border-collapse:collapse;table-layout:fixed}
-.motor-table .m-equip{width:22%}
+.motor-table .m-code{width:12%}
+.motor-table .m-name{width:16%}
 .motor-table .m-plant{width:14%}
-.motor-table .m-line{width:10%}
-.motor-table .m-temp{width:10%}
-.motor-table .m-oil{width:12%}
-.motor-table .m-time{width:10%}
-.motor-paper.daily-paper .motor-table th:nth-child(1){width:22%}
-.motor-paper.daily-paper .motor-table th:nth-child(2){width:14%}
-.motor-paper.daily-paper .motor-table th:nth-child(3){width:10%}
-.motor-paper.daily-paper .motor-table th:nth-child(4){width:10%}
-.motor-paper.daily-paper .motor-table th:nth-child(5){width:10%}
-.motor-paper.daily-paper .motor-table th:nth-child(6){width:12%}
-.motor-paper.daily-paper .motor-table th:nth-child(7){width:12%}
-.motor-paper.daily-paper .motor-table th:nth-child(8){width:10%}
-.motor-paper .motor-table th,.motor-paper .motor-table td{height:52px;padding:6px 8px;white-space:normal;overflow-wrap:anywhere;text-align:start;vertical-align:middle}
+.motor-table .m-line{width:12%}
+.motor-table .m-temp{width:9%}
+.motor-table .m-oil{width:11%}
+.motor-table .m-time{width:6%}
+.motor-paper.daily-paper .motor-table th:nth-child(1){width:12%}
+.motor-paper.daily-paper .motor-table th:nth-child(2){width:16%}
+.motor-paper.daily-paper .motor-table th:nth-child(3){width:14%}
+.motor-paper.daily-paper .motor-table th:nth-child(4){width:12%}
+.motor-paper.daily-paper .motor-table th:nth-child(5){width:9%}
+.motor-paper.daily-paper .motor-table th:nth-child(6){width:9%}
+.motor-paper.daily-paper .motor-table th:nth-child(7){width:11%}
+.motor-paper.daily-paper .motor-table th:nth-child(8){width:11%}
+.motor-paper.daily-paper .motor-table th:nth-child(9){width:6%}
+.motor-paper .motor-table th,.motor-paper .motor-table td{height:auto;padding:4px 6px;white-space:normal;overflow-wrap:anywhere;text-align:start;vertical-align:middle}
 .motor-paper .motor-table th{line-height:1.3}
-body .motor-paper.lube-paper .motor-table input,body .motor-paper.lube-paper .motor-table select{height:46px;width:100%;padding:6px 8px;font-size:15px;background:#fff}
 body .motor-paper.lube-paper .motor-table input[readonly]{font-weight:800;background:#f3f7ff}
-@page motorsheet{size:A3 landscape;margin:8mm}
 .nav-link.motor-nav[hidden]{display:none!important}
 body .workspace.log-board{display:block;width:100%;min-width:0;max-width:100%}
 .workspace.log-board .panel,
@@ -436,8 +433,6 @@ button.job-open:hover{filter:brightness(1.12)}
   body:has(.daily-paper) .lube-meta{display:grid!important;grid-template-columns:1fr 1fr!important;gap:8px 16px}
   body:has(.daily-paper) .lube-meta label{display:grid!important;grid-template-columns:140px minmax(0,1fr)!important;gap:8px;align-items:center}
   body:has(.motor-paper) .motor-paper{width:auto!important;min-width:0!important;max-width:none!important;margin:0!important}
-  body:has(.motor-paper) .motor-paper .lube-head{grid-template-columns:210px minmax(240px,1fr) 260px!important}
-  body:has(.motor-paper) .motor-paper .lube-meta{grid-template-columns:repeat(3,minmax(0,1fr))!important}
 }
 
 @media(max-width:980px){
