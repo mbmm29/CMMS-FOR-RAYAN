@@ -187,9 +187,14 @@ def ensure_additive_columns():
                     conn.execute(text('ALTER TABLE motor_condition_readings ALTER COLUMN machine TYPE VARCHAR(150)'))
         if 'equipment' in tables:
             existing = {c['name'] for c in inspector.get_columns('equipment')}
-            if 'section_id' not in existing:
-                with engine.begin() as conn:
-                    conn.execute(text('ALTER TABLE equipment ADD COLUMN section_id VARCHAR(80)'))
+            additions = {
+                'section_id': 'VARCHAR(80)',
+                'commissioning_date': 'DATE',
+            }
+            with engine.begin() as conn:
+                for name, sql_type in additions.items():
+                    if name not in existing:
+                        conn.execute(text(f'ALTER TABLE equipment ADD COLUMN {name} {sql_type}'))
     except Exception:
         # Do not prevent the API from starting because of an optional migration.
         # The error will be visible in the application logs.
@@ -670,6 +675,20 @@ def assign_equipment_section(equipment_id: str, data: EquipmentSectionUpdate, db
     old = equipment.section_id
     equipment.section_id = section.section_id if section else None
     audit(db, u, 'UPDATE', 'Equipment', equipment_id, old={'section_id': old}, new={'section_id': equipment.section_id})
+    db.commit()
+    db.refresh(equipment)
+    return equipment
+
+@app.put('/equipment/{equipment_id}/log-facts', response_model=EquipmentOut)
+def update_equipment_log_facts(equipment_id: str, data: EquipmentLogFacts, db: Session = Depends(get_db), u=Depends(role(*ENGINEER))):
+    equipment = db.query(Equipment).filter_by(equipment_id=equipment_id).first()
+    if not equipment:
+        raise HTTPException(404, 'Equipment not found')
+    manufacturer = (data.manufacturer or '').strip()[:100] or None
+    old = {'manufacturer': equipment.manufacturer, 'commissioning_date': equipment.commissioning_date}
+    equipment.manufacturer = manufacturer
+    equipment.commissioning_date = data.commissioning_date
+    audit(db, u, 'UPDATE', 'Equipment', equipment_id, old=old, new={'manufacturer': manufacturer, 'commissioning_date': data.commissioning_date})
     db.commit()
     db.refresh(equipment)
     return equipment

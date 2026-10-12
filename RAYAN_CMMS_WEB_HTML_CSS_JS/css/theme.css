@@ -322,40 +322,51 @@ body .motor-paper.lube-paper .motor-table input,body .motor-paper.lube-paper .mo
 body .motor-paper.lube-paper .motor-table input[readonly]{font-weight:800;background:#f3f7ff}
 @page motorsheet{size:A3 landscape;margin:8mm}
 .nav-link.motor-nav[hidden]{display:none!important}
+body .workspace.log-board{display:block;width:100%;min-width:0;max-width:100%}
+.workspace.log-board .panel,
+.workspace.log-board .split,
+.workspace.log-board .asset-view,
+.machine-log,
+.machine-log .sheet-scroll{min-width:0;max-width:100%}
 .workspace.log-board .split{display:grid;grid-template-columns:220px minmax(0,1fr);align-items:start}
-.workspace.log-board .asset-view{min-width:0;overflow-x:auto}
-.machine-log{width:100%;min-width:1120px;max-width:none;box-sizing:border-box;page:logsheet}
-.machine-log .lube-head{display:grid;grid-template-columns:210px minmax(240px,1fr) 260px;gap:16px;align-items:center}
+.workspace.log-board .asset-view{overflow:visible}
+.machine-log{width:100%;box-sizing:border-box;page:logsheet}
+.machine-log .lube-head{display:grid;grid-template-columns:minmax(0,210px) minmax(0,1fr) minmax(140px,260px);gap:16px;align-items:center}
+.machine-log .sheet-scroll{overflow:visible}
+.machine-log .sheet-scroll .log-table{width:100%;min-width:0;table-layout:fixed}
 .machine-log .lube-head > div{min-width:0}
 .machine-log .lube-head h2{font-size:22px;line-height:1.25}
 .machine-log .lube-head dl{width:100%}
 .machine-log .lube-head dl div{grid-template-columns:1.2fr .8fr}
 .log-approve,.log-approved{margin:8px 0 12px;font-weight:800;text-align:center}
-.log-facts{display:grid;grid-template-columns:minmax(0,1.35fr) minmax(280px,.65fr);gap:18px;align-items:start;margin-bottom:12px}
+.log-facts{display:grid;grid-template-columns:minmax(0,1.35fr) minmax(0,.7fr);gap:18px;align-items:start;margin-bottom:12px}
+.log-facts dd{min-width:0}
+body .machine-log .log-facts input{width:100%;min-width:0;height:28px;padding:0 4px;border:0;border-bottom:1px solid #8eabda;border-radius:0;background:#fff;color:#102d60}
+body .machine-log .log-facts-save{width:auto;height:32px;margin:8px 0 0;padding:0 14px}
 .log-facts h3,.log-table-title{margin:0 0 8px;font-size:14px}
 .log-facts dl{display:grid;gap:6px;margin:0}
 .log-facts dl div{display:grid;grid-template-columns:minmax(140px,.9fr) minmax(0,1.1fr);gap:8px;border-bottom:1px solid #d5e2f5}
 .log-facts dt{font-weight:800}
 .log-facts dd{margin:0}
 .log-key{width:100%;border-collapse:collapse;table-layout:auto}
-.log-key th,.log-key td{border:1px solid #2a5287;padding:6px 10px;height:auto;font-size:13px;white-space:nowrap;text-align:start}
+.log-key th,.log-key td{border:1px solid #2a5287;padding:6px 10px;height:auto;font-size:13px;white-space:normal;text-align:start}
 .log-key th{background:#e7f0ff}
 .log-table{width:100%;min-width:0;border-collapse:collapse;table-layout:fixed}
 .log-table th,.log-table td{border:1px solid #2a5287;padding:5px 4px;height:auto;vertical-align:top;font-size:11px;overflow-wrap:anywhere;white-space:normal}
 .log-table th{background:#e7f0ff}
-.log-table .c-no{width:4%}.log-table .c-date{width:9%}.log-table .c-type{width:6%}.log-table .c-reason{width:13%}.log-table .c-work{width:16%}.log-table .c-order{width:11%}.log-table .c-parts{width:12%}.log-table .c-partno{width:8%}.log-table .c-qty{width:6%}.log-table .c-down{width:8%}.log-table .c-tech{width:7%}.log-table .c-remove{width:64px}
+.log-table .c-no{width:4%}.log-table .c-date{width:9%}.log-table .c-type{width:6%}.log-table .c-reason{width:12%}.log-table .c-work{width:14%}.log-table .c-order{width:10%}.log-table .c-parts{width:11%}.log-table .c-partno{width:8%}.log-table .c-qty{width:6%}.log-table .c-down{width:8%}.log-table .c-tech{width:7%}.log-table .c-remove{width:5%}
 .machine-log .log-table th:nth-child(1){width:4%}
 .machine-log .log-table th:nth-child(2){width:9%}
 .machine-log .log-table th:nth-child(3){width:6%}
-.machine-log .log-table th:nth-child(4){width:13%}
-.machine-log .log-table th:nth-child(5){width:16%}
-.machine-log .log-table th:nth-child(6){width:11%}
-.machine-log .log-table th:nth-child(7){width:12%}
+.machine-log .log-table th:nth-child(4){width:12%}
+.machine-log .log-table th:nth-child(5){width:14%}
+.machine-log .log-table th:nth-child(6){width:10%}
+.machine-log .log-table th:nth-child(7){width:11%}
 .machine-log .log-table th:nth-child(8){width:8%}
 .machine-log .log-table th:nth-child(9){width:6%}
 .machine-log .log-table th:nth-child(10){width:8%}
 .machine-log .log-table th:nth-child(11){width:7%}
-.machine-log .log-table th:nth-child(12){width:64px}
+.machine-log .log-table th:nth-child(12){width:5%}
 .log-table .log-delete{padding:4px 8px;font-size:12px;white-space:nowrap}
 @page logsheet{size:A4 landscape;margin:7mm}
 .daily-parts{margin-top:14px}

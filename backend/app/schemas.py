@@ -82,6 +82,11 @@ class EquipmentSectionUpdate(BaseModel):
     section_id: str | None = None
 
 
+class EquipmentLogFacts(BaseModel):
+    manufacturer: str | None = None
+    commissioning_date: date | None = None
+
+
 class EquipmentBase(BaseModel):
     equipment_id: str
     name: str
@@ -91,6 +96,7 @@ class EquipmentBase(BaseModel):
     section_id: str | None = None
     area: str | None = None
     manufacturer: str | None = None
+    commissioning_date: date | None = None
     model: str | None = None
     serial_number: str | None = None
     criticality: str = "B"

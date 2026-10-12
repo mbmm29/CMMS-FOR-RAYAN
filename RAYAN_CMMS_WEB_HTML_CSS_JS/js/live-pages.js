@@ -1439,14 +1439,6 @@ function oilChangeParts(row) {
   };
 }
 
-function pmPeriod(equipment) {
-  const plans = (store.plans || []).filter((plan) => plan.active !== false && plan.equipment_id === equipment?.equipment_id);
-  if (!plans.length) return '—';
-  const plan = plans.slice().sort((a, b) => String(a.next_due_date || '').localeCompare(String(b.next_due_date || '')))[0];
-  const count = Number(plan.frequency_value) > 1 ? `${plan.frequency_value} × ` : '';
-  return `${count}${t(plan.frequency || '')}`;
-}
-
 function machinePlace(equipment) {
   if (!equipment) return '—';
   const plant = store.plants.find((row) => row.plant_id === equipment.plant_id)?.name || '';
@@ -1465,7 +1457,10 @@ function machineLogPaper(equipment, rows) {
     const remove = canMaintain() ? `<td class="no-print"><button type="button" class="detail-button danger log-delete" data-delete="/machine-records" data-delete-id="${esc(row.id)}" data-delete-keep="1">${esc(t('Delete'))}</button></td>` : '';
     return `<tr><td>${index + 1}</td><td>${esc(fmtDate(row.record_date))}</td><td>${esc(logCode(kind))}</td><td>${esc(reason)}</td><td>${esc(parts.work)}</td><td>${esc(workOrderNumber(row) || '—')}</td><td>${esc(parts.names)}</td><td>${esc(parts.numbers)}</td><td>${esc(parts.quantity)}</td><td>${esc(downtime)}</td><td>${esc(technicianName(row.technician_id) || '—')}</td>${remove}</tr>`;
   }).join('') || `<tr><td colspan="${canMaintain() ? 12 : 11}">${esc(t('No log lines for this machine yet.'))}</td></tr>`;
-  return `<form class="lube-paper machine-log"><header class="lube-head"><img src="logo-rayan.png?v=2" alt="Rayan"><div><h2>${esc(t('Equipment maintenance log'))}</h2><p>${esc(t('Mechanical Maintenance Department'))}</p></div><dl><div><dt>${esc(t('Document no.'))}</dt><dd>${esc(equipment?.equipment_id || '—')}</dd></div><div><dt>${esc(t('Revision no.'))}</dt><dd>00</dd></div><div><dt>${esc(t('Issue date'))}</dt><dd>${esc(fmtDate(rows[0]?.record_date) || '—')}</dd></div></dl></header><p class="log-approve">${esc(t('Approved according to'))}: ${esc(t('Mechanical Maintenance Department'))}</p><div class="log-facts"><section><h3>${esc(t('Equipment data'))}</h3><dl><div><dt>${esc(t('Log machine name'))}</dt><dd>${esc(equipment?.name || '—')}</dd></div><div><dt>${esc(t('Machine number'))}</dt><dd>${esc(equipment?.equipment_id || '—')}</dd></div><div><dt>${esc(t('Location / section'))}</dt><dd>${esc(machinePlace(equipment))}</dd></div><div><dt>${esc(t('Commissioning date'))}</dt><dd>—</dd></div><div><dt>${esc(t('Manufacturer'))}</dt><dd>${esc(equipment?.manufacturer || '—')}</dd></div><div><dt>${esc(t('Preventive maintenance period'))}</dt><dd>${esc(pmPeriod(equipment))}</dd></div></dl></section><section><h3>${esc(t('Maintenance type key'))}</h3><table class="log-key"><thead><tr><th>${esc(t('Maintenance type'))}</th><th>${esc(t('Symbol'))}</th></tr></thead><tbody><tr><td>${esc(t('Corrective'))}</td><td>CM</td></tr><tr><td>${esc(t('Emergency'))}</td><td>EM</td></tr><tr><td>${esc(t('Oil change'))}</td><td>OC</td></tr></tbody></table></section></div><h3 class="log-table-title">${esc(t('Maintenance work and details'))}</h3><div class="sheet-scroll"><table class="lube-table log-table"><colgroup><col class="c-no"><col class="c-date"><col class="c-type"><col class="c-reason"><col class="c-work"><col class="c-order"><col class="c-parts"><col class="c-partno"><col class="c-qty"><col class="c-down"><col class="c-tech">${canMaintain() ? '<col class="c-remove no-print">' : ''}</colgroup><thead><tr><th>${esc(t('No.'))}</th><th>${esc(t('Maintenance date'))}</th><th>${esc(t('Maintenance type'))}</th><th>${esc(t('Reason for maintenance'))}</th><th>${esc(t('Work performed'))}</th><th>${esc(t('Work order no.'))}</th><th>${esc(t('Parts used'))}</th><th>${esc(t('Part No.'))}</th><th>${esc(t('Quantity'))}</th><th>${esc(t('Downtime time'))}</th><th>${esc(t('Technician name'))}</th>${canMaintain() ? `<th class="no-print">${esc(t('Delete'))}</th>` : ''}</tr></thead><tbody>${body}</tbody></table></div></form>`;
+  const commissioned = String(equipment?.commissioning_date || '').slice(0, 10);
+  const lock = canMaintain() ? '' : ' readonly';
+  const saveFacts = canMaintain() ? `<button class="detail-button primary no-print log-facts-save" type="submit">${esc(t('Save'))}</button>` : '';
+  return `<form class="lube-paper machine-log" id="machine-log"><header class="lube-head"><img src="logo-rayan.png?v=2" alt="Rayan"><div><h2>${esc(t('Equipment maintenance log'))}</h2><p>${esc(t('Mechanical Maintenance Department'))}</p></div><dl><div><dt>${esc(t('Document no.'))}</dt><dd>${esc(equipment?.equipment_id || '—')}</dd></div><div><dt>${esc(t('Revision no.'))}</dt><dd>00</dd></div><div><dt>${esc(t('Issue date'))}</dt><dd>${esc(fmtDate(rows[0]?.record_date) || '—')}</dd></div></dl></header><p class="log-approve">${esc(t('Approved according to'))}: ${esc(t('Mechanical Maintenance Department'))}</p><div class="log-facts"><section><h3>${esc(t('Equipment data'))}</h3><dl><div><dt>${esc(t('Log machine name'))}</dt><dd>${esc(equipment?.name || '—')}</dd></div><div><dt>${esc(t('Machine number'))}</dt><dd>${esc(equipment?.equipment_id || '—')}</dd></div><div><dt>${esc(t('Location / section'))}</dt><dd>${esc(machinePlace(equipment))}</dd></div><div><dt>${esc(t('Commissioning date'))}</dt><dd><input name="commissioning_date" type="date" value="${esc(commissioned)}"${lock}></dd></div><div><dt>${esc(t('Manufacturer'))}</dt><dd><input name="manufacturer" value="${esc(equipment?.manufacturer || '')}"${lock}></dd></div></dl>${saveFacts}</section><section><h3>${esc(t('Maintenance type key'))}</h3><table class="log-key"><thead><tr><th>${esc(t('Maintenance type'))}</th><th>${esc(t('Symbol'))}</th></tr></thead><tbody><tr><td>${esc(t('Corrective'))}</td><td>CM</td></tr><tr><td>${esc(t('Emergency'))}</td><td>EM</td></tr><tr><td>${esc(t('Oil change'))}</td><td>OC</td></tr></tbody></table></section></div><h3 class="log-table-title">${esc(t('Maintenance work and details'))}</h3><div class="sheet-scroll"><table class="lube-table log-table"><colgroup><col class="c-no"><col class="c-date"><col class="c-type"><col class="c-reason"><col class="c-work"><col class="c-order"><col class="c-parts"><col class="c-partno"><col class="c-qty"><col class="c-down"><col class="c-tech">${canMaintain() ? '<col class="c-remove no-print">' : ''}</colgroup><thead><tr><th>${esc(t('No.'))}</th><th>${esc(t('Maintenance date'))}</th><th>${esc(t('Maintenance type'))}</th><th>${esc(t('Reason for maintenance'))}</th><th>${esc(t('Work performed'))}</th><th>${esc(t('Work order no.'))}</th><th>${esc(t('Parts used'))}</th><th>${esc(t('Part No.'))}</th><th>${esc(t('Quantity'))}</th><th>${esc(t('Downtime time'))}</th><th>${esc(t('Technician name'))}</th>${canMaintain() ? `<th class="no-print">${esc(t('Delete'))}</th>` : ''}</tr></thead><tbody>${body}</tbody></table></div></form>`;
 }
 
 function drawRecords() {
@@ -1489,6 +1484,26 @@ function drawRecords() {
   bindAssets();
   bindRows();
   bindDeletes();
+  document.getElementById('machine-log')?.addEventListener('submit', async (event) => {
+    event.preventDefault();
+    if (!canMaintain() || !equipment) return;
+    const form = event.currentTarget;
+    const error = form.querySelector('.form-error');
+    const manufacturer = form.querySelector('[name="manufacturer"]').value.trim();
+    const commissioning = form.querySelector('[name="commissioning_date"]').value;
+    try {
+      const saved = await apiRequest(`/equipment/${encodeURIComponent(equipment.equipment_id)}/log-facts`, {
+        method: 'PUT',
+        body: JSON.stringify({ manufacturer: manufacturer || null, commissioning_date: commissioning || null }),
+      });
+      equipment.manufacturer = saved.manufacturer;
+      equipment.commissioning_date = saved.commissioning_date;
+      toast(t('Saved.'));
+    } catch (exception) {
+      if (error) error.textContent = t(exception.message);
+      else toast(t(exception.message));
+    }
+  });
 }
 
 function jobPartRows(text) {

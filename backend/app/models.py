@@ -51,6 +51,7 @@ class Equipment(Base):
     section_id: Mapped[str|None]=mapped_column(String(80),nullable=True)
     area: Mapped[str|None]=mapped_column(String(100),nullable=True)
     manufacturer: Mapped[str|None]=mapped_column(String(100),nullable=True)
+    commissioning_date: Mapped[date|None]=mapped_column(Date,nullable=True)
     model: Mapped[str|None]=mapped_column(String(100),nullable=True)
     serial_number: Mapped[str|None]=mapped_column(String(100),nullable=True)
     criticality: Mapped[str]=mapped_column(String(1),default='B')
