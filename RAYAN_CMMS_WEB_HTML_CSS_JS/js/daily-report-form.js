@@ -88,7 +88,7 @@ function selectedPlantId() {
 
 function fillPlantSelect(selected) {
   const select = document.getElementById('plant-summary');
-  select.innerHTML = `<option value="">Select plant</option>${catalog.plants.map((plant) => `<option value="${htmlEscape(plant.plant_id)}">${htmlEscape(plant.name)}</option>`).join('')}`;
+  select.innerHTML = `<option value="">Select plant</option>${catalog.plants.filter((plant) => plant.active !== false || plant.plant_id === selected).map((plant) => `<option value="${htmlEscape(plant.plant_id)}">${htmlEscape(plant.name)}</option>`).join('')}`;
   if (selected) select.value = selected;
 }
 

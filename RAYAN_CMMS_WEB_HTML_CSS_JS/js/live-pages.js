@@ -303,12 +303,22 @@ function dateLabel(dates) {
   button.textContent = valid.length ? `${fmtDate(valid[0])} - ${fmtDate(valid[valid.length - 1])}` : t('No dated records');
 }
 
+function openPlants(keepId = '') {
+  return (store?.plants || []).filter((plant) => plant.active !== false || (keepId && plant.plant_id === keepId));
+}
+
 function filtersHtml() {
-  const lines = store.lines.filter((line) => !ui.plantId || line.plant_id === ui.plantId);
-  const equipment = store.equipment.filter((item) => (!ui.plantId || item.plant_id === ui.plantId) && (!ui.lineId || item.line_id === ui.lineId));
+  const openIds = new Set((store.plants || []).filter((plant) => plant.active !== false).map((plant) => plant.plant_id));
+  if (ui.plantId && !openIds.has(ui.plantId)) {
+    ui.plantId = '';
+    ui.lineId = '';
+    ui.equipmentId = '';
+  }
+  const lines = store.lines.filter((line) => openIds.has(line.plant_id) && (!ui.plantId || line.plant_id === ui.plantId));
+  const equipment = store.equipment.filter((item) => (!item.plant_id || openIds.has(item.plant_id)) && (!ui.plantId || item.plant_id === ui.plantId) && (!ui.lineId || item.line_id === ui.lineId));
   const option = (value, label, selected) => `<option value="${esc(value)}"${selected === value ? ' selected' : ''}>${esc(label)}</option>`;
   return `<div class="live-filters">
-    <label>${t('Plant')}<select data-filter="plant">${option('', t('All plants'), ui.plantId)}${store.plants.map((plant) => option(plant.plant_id, plant.name, ui.plantId)).join('')}</select></label>
+    <label>${t('Plant')}<select data-filter="plant">${option('', t('All plants'), ui.plantId)}${openPlants().map((plant) => option(plant.plant_id, plant.name, ui.plantId)).join('')}</select></label>
     <label>${t('Line')}<select data-filter="line">${option('', t('All lines'), ui.lineId)}${lines.map((line) => option(line.line_id, line.name, ui.lineId)).join('')}</select></label>
     <label>${t('Equipment')}<select data-filter="equipment">${option('', t('All equipment'), ui.equipmentId)}${equipment.map((item) => option(item.equipment_id, `${item.equipment_id} — ${item.name}`, ui.equipmentId)).join('')}</select></label>
   </div>`;
@@ -1013,6 +1023,11 @@ async function drawTechnicianSchedule() {
 
 async function drawAnnualPlan() {
   if (isTechnician()) return drawTechnicianSchedule();
+  if (ui.annualPlant && store?.plants && !store.plants.some((plant) => plant.plant_id === ui.annualPlant && plant.active !== false)) {
+    ui.annualPlant = '';
+    ui.annualItems = [];
+    ui.annualWeek = '';
+  }
   if (ui.annualWeek && ui.annualPlant) return drawWeekForm();
   ui.annualWeek = '';
   const locked = !canMaintain();
@@ -1032,7 +1047,7 @@ async function drawAnnualPlan() {
   document.getElementById('metric-grid').innerHTML = annualHorizon(overview);
   const monthHead = ANNUAL_MONTHS.map((month) => `<th colspan="4">${esc(t(month))}</th>`).join('');
   const weekHead = ANNUAL_MONTHS.map((_, monthIndex) => [1, 2, 3, 4].map((week) => `<th><button type="button" class="week-open" data-open-week="${monthIndex + 1}-${week}">${week}</button></th>`).join('')).join('');
-  const options = store.plants.map((item) => `<option value="${esc(item.plant_id)}"${item.plant_id === ui.annualPlant ? ' selected' : ''}>${esc(item.name)}</option>`).join('');
+  const options = openPlants().map((item) => `<option value="${esc(item.plant_id)}"${item.plant_id === ui.annualPlant ? ' selected' : ''}>${esc(item.name)}</option>`).join('');
   const rows = !ui.annualPlant
     ? `<tr><td class="annual-empty" colspan="54">${esc(t('Choose a plant, then set the plan.'))}</td></tr>`
     : (items.length ? items.map((item) => annualRowHtml(item, locked)).join('') : `<tr><td class="annual-empty" colspan="54">${esc(t('No records yet'))}</td></tr>`);
@@ -1159,7 +1174,8 @@ function drawPlants() {
   });
   const lineRows = plantLines.map((line) => `<div class="summary-row"><span>${esc(t('Line'))} ${esc(line.line_number ?? '—')}</span><b>${esc(line.name || '')}</b>${canMaintain() ? `<button type="button" class="detail-button danger" data-delete="/lines" data-delete-id="${esc(line.line_id)}" data-delete-keep="1">${esc(t('Delete'))}</button>` : ''}</div>`).join('') || `<p class="live-note">${esc(t('No records yet'))}</p>`;
   const lineForm = selected && canMaintain() ? `<form id="line-form" class="live-form"><div class="assign-block"><b>Add production line</b></div><label>Line number<input name="line_number" type="number" min="1" step="1" required></label><label>Name<input name="name" placeholder="Optional"></label><button class="detail-button primary" type="submit">Add line</button><p id="line-error" class="form-error"></p></form>` : '';
-  const detail = ui.mode === 'create' ? plantForm() : `<aside class="panel detail"><h2>Plant Details</h2><div class="detail-top"><div class="machine">▣</div>${liveBadge(selected?.active === false ? 'Inactive' : 'Active')}<h3>${esc(selected?.plant_id || '—')}</h3><p>${esc(selected?.name || '')}</p></div><div class="detail-list">${lineRows}</div>${lineForm}</aside>`;
+  const statusForm = selected && canMaintain() ? `<form id="plant-status" class="live-form"><label>${esc(t('Status'))}<select name="active">${plantStatusOptions(selected.active)}</select></label><button class="detail-button primary" type="submit">${esc(t('Save'))}</button><p id="plant-status-error" class="form-error"></p></form>` : '';
+  const detail = ui.mode === 'create' ? plantForm() : `<aside class="panel detail"><h2>Plant Details</h2><div class="detail-top"><div class="machine">▣</div>${liveBadge(selected?.active === false ? 'Inactive' : 'Active')}<h3>${esc(selected?.plant_id || '—')}</h3><p>${esc(selected?.name || '')}</p></div><div class="detail-list">${lineRows}</div>${lineForm}${statusForm}</aside>`;
   document.getElementById('workspace').className = 'workspace';
   document.getElementById('workspace').innerHTML = `<section class="panel">${tabsHtml(['All Plants', 'Active', 'Inactive'])}${tableShell(['Plant Code', 'Plant Name', 'Production Lines', 'Status'], body, shown(rows.length, store.plants.length, 'plants'))}</section>${detail}`;
   if (selected && canMaintain() && ui.mode !== 'create') {
@@ -1183,12 +1199,33 @@ function drawPlants() {
       error.textContent = exception.message;
     }
   });
+  document.getElementById('plant-status')?.addEventListener('submit', async (event) => {
+    event.preventDefault();
+    const error = document.getElementById('plant-status-error');
+    const active = new FormData(event.currentTarget).get('active') !== 'false';
+    try {
+      await apiRequest(`/plants/${encodeURIComponent(selected.plant_id)}`, { method: 'PUT', body: JSON.stringify({ active }) });
+      store = null;
+      ui.rowKey = selected.plant_id;
+      ui.mode = 'view';
+      toast(t('Saved.'));
+      await paint('plants');
+    } catch (exception) {
+      if (error) error.textContent = t(exception.message);
+    }
+  });
+}
+
+function plantStatusOptions(active) {
+  const current = active === false ? 'false' : 'true';
+  return [['true', 'Active plant'], ['false', 'Inactive plant']].map(([value, label]) => `<option value="${value}"${value === current ? ' selected' : ''}>${esc(t(label))}</option>`).join('');
 }
 
 function plantForm() {
   return formPanel('Add Plant', [
     field('Plant code', '<input name="plant_id" required>'),
     field('Plant name', '<input name="name" required>'),
+    field('Status', `<select name="active">${plantStatusOptions(true)}</select>`),
   ].join(''));
 }
 
@@ -1436,7 +1473,7 @@ function equipmentChoice(values, selected = '') {
 }
 
 function equipmentForm() {
-  const plants = store.plants.map((plant) => `<option value="${esc(plant.plant_id)}">${esc(plant.name)}</option>`).join('');
+  const plants = openPlants().map((plant) => `<option value="${esc(plant.plant_id)}">${esc(plant.name)}</option>`).join('');
   return formPanel('Add Equipment', [
     field('Equipment code', '<input name="equipment_id" required>'),
     field('Name', '<input name="name" required>'),
@@ -1599,7 +1636,7 @@ function bindForm() {
         });
         await apiRequest('/equipment', { method: 'POST', body: JSON.stringify(data) });
       } else if (ui.page === 'plants') {
-        data.active = true;
+        data.active = data.active !== 'false';
         await apiRequest('/plants', { method: 'POST', body: JSON.stringify(data) });
       } else if (ui.page === 'sop') {
         data.revision = data.revision || '00';
@@ -1653,7 +1690,7 @@ function drawEquipmentFromReports() {
     const plant = store.plants.find((item) => item.plant_id === row.plant_id)?.name || row.plant_id || '—';
     return `<tr data-row="${esc(row.id)}" class="${selected && selected.id === row.id ? 'selected' : ''}">${cell(esc(row.equipment_code), true)}${cell(esc(row.equipment_name))}${cell(esc(plant))}${cell(esc(row.line_number || '—'))}${cell(esc(technicianName(row.technician_id)))}</tr>`;
   });
-  const reviewForm = `<form class="live-form" id="pending-review"><label>${esc(t('Equipment name'))}<input id="pending-name" value="${esc(selected?.equipment_name || '')}" required></label><label>${esc(t('Plant'))}<select id="pending-plant"><option value="">${esc(t('Select'))}</option>${store.plants.map((plant) => `<option value="${esc(plant.plant_id)}"${plant.plant_id === selected?.plant_id ? ' selected' : ''}>${esc(plant.name)}</option>`).join('')}</select></label><label>${esc(t('Line number'))}<select id="pending-line"><option value="">${esc(t('Select'))}</option></select></label><div class="summary-row"><span>${esc(t('Technician'))}</span><b>${esc(technicianName(selected?.technician_id))}</b></div><div class="summary-row"><span>${esc(t('Report'))}</span><b>${esc(pendingSource(selected))} ${esc(selected?.report_id || '')}</b></div></form><div class="assign-block"><button class="detail-button primary" type="button" id="approve-equipment">${esc(t('Approve'))}</button><button class="detail-button" type="button" id="reject-equipment">${esc(t('Reject'))}</button><p id="pending-error" class="form-error"></p></div>`;
+  const reviewForm = `<form class="live-form" id="pending-review"><label>${esc(t('Equipment name'))}<input id="pending-name" value="${esc(selected?.equipment_name || '')}" required></label><label>${esc(t('Plant'))}<select id="pending-plant"><option value="">${esc(t('Select'))}</option>${openPlants().map((plant) => `<option value="${esc(plant.plant_id)}"${plant.plant_id === selected?.plant_id ? ' selected' : ''}>${esc(plant.name)}</option>`).join('')}</select></label><label>${esc(t('Line number'))}<select id="pending-line"><option value="">${esc(t('Select'))}</option></select></label><div class="summary-row"><span>${esc(t('Technician'))}</span><b>${esc(technicianName(selected?.technician_id))}</b></div><div class="summary-row"><span>${esc(t('Report'))}</span><b>${esc(pendingSource(selected))} ${esc(selected?.report_id || '')}</b></div></form><div class="assign-block"><button class="detail-button primary" type="button" id="approve-equipment">${esc(t('Approve'))}</button><button class="detail-button" type="button" id="reject-equipment">${esc(t('Reject'))}</button><p id="pending-error" class="form-error"></p></div>`;
   const review = selected ? reviewForm : `<p class="live-note">${esc(t('No new equipment'))}</p>`;
   const detail = ui.mode === 'create' ? equipmentForm() : `<aside class="panel detail pending-review"><h2>${esc(t('From reports'))}</h2><div class="detail-top"><div class="machine">⚙</div>${selected ? liveBadge('Pending') : ''}<h3>${esc(selected?.equipment_code || '—')}</h3></div>${review}</aside>`;
   document.getElementById('workspace').className = 'workspace';
@@ -2157,7 +2194,7 @@ async function drawDailyReport() {
   }
   const reportDate = String(report?.report_date || openReportDate(dailyCache)).slice(0, 10);
   const plantId = report?.plant_id || items.find((item) => item.plant_id)?.plant_id || '';
-  const plants = [`<option value="">${esc(t('Select plant'))}</option>`, ...store.plants.map((plant) => `<option value="${esc(plant.plant_id)}"${plant.plant_id === plantId ? ' selected' : ''}>${esc(plant.name)}</option>`)].join('');
+  const plants = [`<option value="">${esc(t('Select plant'))}</option>`, ...openPlants(plantId).map((plant) => `<option value="${esc(plant.plant_id)}"${plant.plant_id === plantId ? ' selected' : ''}>${esc(plant.name)}</option>`)].join('');
   const techName = report?.technician_name || getSavedUser()?.full_name || '';
   const visibleReports = () => (ui.dailyFilter
     ? dailyCache.filter((row) => String(row.report_date).slice(0, 10) === ui.dailyFilter)

@@ -61,6 +61,10 @@ class PlantCreate(BaseModel):
     active: bool = True
 
 
+class PlantUpdate(BaseModel):
+    active: bool
+
+
 class LineCreate(BaseModel):
     line_id: str | None = None
     plant_id: str

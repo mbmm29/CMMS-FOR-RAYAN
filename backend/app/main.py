@@ -477,6 +477,26 @@ def create_plant(data:PlantCreate,db:Session=Depends(get_db),u=Depends(role(*ENG
     if db.query(Plant).filter_by(plant_id=plant_id).first():
         raise HTTPException(409, 'Plant ID already exists')
     o=Plant(plant_id=plant_id, name=data.name.strip(), active=data.active); db.add(o); audit(db,u,'CREATE','Plant',plant_id,new=data.model_dump()); db.commit(); db.refresh(o); return as_dict(o)
+
+@app.put('/plants/{plant_id}')
+def update_plant(plant_id: str, data: PlantUpdate, db: Session = Depends(get_db), u=Depends(role(*ENGINEER))):
+    plant = db.query(Plant).filter_by(plant_id=plant_id).first()
+    if not plant:
+        raise HTTPException(404, 'Plant not found')
+    old = plant.active
+    plant.active = data.active
+    audit(db, u, 'UPDATE', 'Plant', plant_id, old={'active': old}, new={'active': data.active})
+    db.commit()
+    db.refresh(plant)
+    return as_dict(plant)
+
+def active_plant_or_404(db, plant_id: str):
+    plant = db.query(Plant).filter_by(plant_id=plant_id).first()
+    if not plant:
+        raise HTTPException(404, 'Plant not found')
+    if plant.active is False:
+        raise HTTPException(400, 'Choose an active plant')
+    return plant
 @app.get('/lines')
 def lines(plant_id:str|None=None,db:Session=Depends(get_db),u=Depends(auth)):
     q=db.query(PlantLine)
@@ -559,8 +579,7 @@ def create_equipment(data:EquipmentCreate,db:Session=Depends(get_db),u=Depends(a
         raise HTTPException(403, 'Insufficient permission')
     if not data.plant_id or not data.line_id:
         raise HTTPException(400, 'Select a plant and then a line number')
-    if not db.query(Plant).filter_by(plant_id=data.plant_id).first():
-        raise HTTPException(404, 'Plant not found')
+    active_plant_or_404(db, data.plant_id)
     if not db.query(PlantLine).filter_by(line_id=data.line_id, plant_id=data.plant_id).first():
         raise HTTPException(400, 'The line number does not belong to the selected plant')
     if data.status not in EQUIPMENT_STATUSES: raise HTTPException(400,'Invalid equipment status')
@@ -607,6 +626,7 @@ def approve_pending_equipment(item_id: int, plant_id: str | None = None, line_id
         row.line_number = str(line.line_number) if line.line_number is not None else row.line_number
     if not row.plant_id or line is None:
         raise HTTPException(400, 'Select a plant and a line before approving this equipment.')
+    active_plant_or_404(db, row.plant_id)
     equipment = Equipment(
         equipment_id=row.equipment_code,
         name=row.equipment_name,
@@ -830,7 +850,9 @@ def pack_plan_tasks(rows, limit=80, plant_names=None):
 def annual_pm_overview(year: int, plant_id: str | None = None, db: Session = Depends(get_db), u=Depends(auth)):
     """Tasks that fall today, this week, and this month, plus task counts per plant."""
     today = date.today()
-    names = {row.plant_id: row.name for row in db.query(Plant).all()}
+    plant_rows = db.query(Plant).all()
+    names = {row.plant_id: row.name for row in plant_rows}
+    active_ids = {row.plant_id for row in plant_rows if row.active is not False}
     counted = db.query(AnnualPMPlan.plant_id, func.count(AnnualPMItem.id)).outerjoin(
         AnnualPMItem,
         and_(AnnualPMItem.plan_id == AnnualPMPlan.id, AnnualPMItem.task != ''),
@@ -839,7 +861,7 @@ def annual_pm_overview(year: int, plant_id: str | None = None, db: Session = Dep
         'plant_id': plant,
         'name': names.get(plant) or plant,
         'tasks': count or 0,
-    } for plant, count in counted]
+    } for plant, count in counted if plant in active_ids]
     plants.sort(key=lambda row: row['name'].lower())
     empty = {'count': 0, 'items': []}
     payload = {
@@ -859,7 +881,7 @@ def annual_pm_overview(year: int, plant_id: str | None = None, db: Session = Dep
     plans = db.query(AnnualPMPlan).filter(AnnualPMPlan.year == year)
     if plant_id:
         plans = plans.filter(AnnualPMPlan.plant_id == plant_id)
-    plan_rows = plans.all()
+    plan_rows = [row for row in plans.all() if row.plant_id in active_ids]
     if not plan_rows:
         return payload
     month_start = today.replace(day=1)
@@ -992,8 +1014,7 @@ def annual_pm(plant_id: str, year: int, db: Session = Depends(get_db), u=Depends
 
 @app.put('/annual-pm', response_model=AnnualPMOut)
 def save_annual_pm(data: AnnualPMSave, db: Session = Depends(get_db), u=Depends(role(*ENGINEER))):
-    if not db.query(Plant).filter_by(plant_id=data.plant_id).first():
-        raise HTTPException(404, 'Plant not found')
+    active_plant_or_404(db, data.plant_id)
     if data.year < 2000 or data.year > 2100:
         raise HTTPException(400, 'Choose a year between 2000 and 2100')
     if len(data.items) > 400:
@@ -1208,8 +1229,7 @@ def annual_pm_days(plant_id: str, year: int, date_from: date, date_to: date, db:
 
 @app.put('/annual-pm/days', response_model=list[AnnualDayTaskOut])
 def save_annual_pm_days(data: AnnualDaySave, db: Session = Depends(get_db), u=Depends(role(*ENGINEER))):
-    if not db.query(Plant).filter_by(plant_id=data.plant_id).first():
-        raise HTTPException(404, 'Plant not found')
+    active_plant_or_404(db, data.plant_id)
     if data.date_from.year != data.year or data.date_to.year != data.year or data.date_from > data.date_to:
         raise HTTPException(400, 'The week dates must stay inside the selected year')
     if len(data.items) > 300:
@@ -3428,10 +3448,13 @@ def motor_equipment_index(db):
 def motor_due_equipment(db, day):
     """Preventive tasks for this day, limited to equipment that exists in the register."""
     by_code, details = motor_equipment_index(db)
+    inactive_plants = {row.plant_id for row in db.query(Plant).all() if row.active is False}
     chosen = []
     seen = set()
 
     def add(equipment):
+        if equipment.plant_id and equipment.plant_id in inactive_plants:
+            return
         if equipment.equipment_id in seen:
             return
         seen.add(equipment.equipment_id)
