@@ -165,6 +165,7 @@ body .workspace.due-board{grid-template-columns:minmax(0,1fr)}
   width:100%;min-width:0;height:36px;padding-inline:8px;color:#f4f8ff;background:#071428;border:1px solid #2c528c;border-radius:8px;
 }
 .annual-bar .detail-button{width:auto;height:36px;margin:0}
+.annual-bar .detail-button:disabled{opacity:.45;cursor:default}
 .annual-scroll{overflow:auto;max-width:100%;border:1px solid #23406e;border-radius:12px}
 .annual-sheet{border-collapse:separate;border-spacing:0;min-width:1480px;font-size:11px}
 .annual-sheet th,.annual-sheet td{border-bottom:1px solid #1c365f;border-inline-end:1px solid #1c365f;padding:4px;text-align:center;color:#c5d6f4;background:#0c1e40}
@@ -172,8 +173,9 @@ body .workspace.due-board{grid-template-columns:minmax(0,1fr)}
 .annual-sheet thead tr:nth-child(2) th{top:30px}
 .annual-sheet .annual-machine{min-width:180px;text-align:start}
 .annual-sheet .annual-machine input{margin:2px 0}
-.annual-sheet td:nth-child(2){min-width:220px}
-.annual-sheet td:nth-child(3){min-width:130px}
+.annual-sheet .annual-line{min-width:150px;text-align:start}
+.annual-sheet td:nth-child(3){min-width:220px}
+.annual-sheet td:nth-child(4){min-width:130px}
 .annual-sheet input[type="checkbox"]{width:16px;height:16px;accent-color:#3b82f6}
 .annual-remove{border:0;background:transparent;color:#ffb4b8;cursor:pointer;font-size:11px}
 .week-days{display:flex;flex-direction:column;gap:12px}

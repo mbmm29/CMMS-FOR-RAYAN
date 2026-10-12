@@ -14,7 +14,7 @@ const DEFAULT_TAB = {
   iso: 'All',
 };
 const shellRender = render;
-const ui = { page: 'dashboard', tab: 'All', rowKey: '', mode: 'view', plantId: '', lineId: '', sectionId: '', equipmentId: '', technicianId: '', dateFrom: '', dateTo: '', annualPlant: '', annualYear: new Date().getFullYear(), annualItems: [], annualWeek: '', weekTasks: [], lubeId: '', dailyId: '', dailyFilter: '' };
+const ui = { page: 'dashboard', tab: 'All', rowKey: '', mode: 'view', plantId: '', lineId: '', sectionId: '', equipmentId: '', technicianId: '', dateFrom: '', dateTo: '', annualPlant: '', annualYear: new Date().getFullYear(), annualItems: [], annualWeek: '', annualCopy: null, weekTasks: [], lubeId: '', dailyId: '', dailyFilter: '' };
 const ANNUAL_MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 const WEEKDAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 const DAY_MAINTENANCE_TYPES = ['Preventive', 'Corrective', 'Emergency', 'Routine', 'Inspection', 'Lubrication'];
@@ -845,6 +845,17 @@ function applyRowRepeat(row) {
   row.dataset.wasDriven = driven ? '1' : '';
 }
 
+function annualLineSelect(selected, locked) {
+  const lines = (store.lines || []).filter((line) => line.plant_id === ui.annualPlant)
+    .sort((a, b) => Number(a.line_number) - Number(b.line_number) || String(a.name).localeCompare(String(b.name)));
+  const lock = locked ? ' disabled' : '';
+  const options = [`<option value="">${esc(t('No line'))}</option>`].concat(lines.map((line) => {
+    const label = line.name ? `${line.line_number} · ${line.name}` : String(line.line_number ?? '');
+    return `<option value="${esc(line.line_id)}"${line.line_id === selected ? ' selected' : ''}>${esc(label)}</option>`;
+  }));
+  return `<select data-field="line_id"${lock}>${options.join('')}</select>`;
+}
+
 function annualRowHtml(item = {}, locked = false) {
   const marks = annualMarks(item.weeks);
   const lock = locked ? ' disabled' : '';
@@ -857,6 +868,7 @@ function annualRowHtml(item = {}, locked = false) {
   const field = (name, value, placeholder) => `<input data-field="${name}" value="${esc(value || '')}" placeholder="${esc(placeholder)}"${lock}>`;
   return `<tr data-line="${esc(annualLineKey(item))}" data-days="${esc(item.days || '')}">
     <td class="annual-machine">${field('machine_code', item.machine_code, 'B-1001')}${field('machine_name', item.machine_name, t('Machine name'))}</td>
+    <td class="annual-line">${annualLineSelect(item.line_id || '', locked)}</td>
     <td>${field('task', item.task, t('Task description'))}</td>
     <td><select data-field="maintenance_type"${lock}>${typeOptions}</select></td>
     <td>${field('frequency_time', item.frequency_time, '7')}</td>
@@ -870,7 +882,7 @@ function readAnnualRows() {
   return [...document.querySelectorAll('#annual-rows tr')].map((row) => {
     const value = (name) => row.querySelector(`[data-field="${name}"]`)?.value.trim() || '';
     const weeks = [...row.querySelectorAll('[data-week]:checked')].map((box) => box.dataset.week).join(',');
-    return { line_key: row.dataset.line || '', machine_code: value('machine_code'), machine_name: value('machine_name'), task: value('task'), frequency_time: value('frequency_time'), frequency_hours: value('frequency_hours'), maintenance_type: value('maintenance_type') || 'Preventive', weeks, days: row.dataset.days || '' };
+    return { line_key: row.dataset.line || '', line_id: value('line_id'), machine_code: value('machine_code'), machine_name: value('machine_name'), task: value('task'), frequency_time: value('frequency_time'), frequency_hours: value('frequency_hours'), maintenance_type: value('maintenance_type') || 'Preventive', weeks, days: row.dataset.days || '' };
   });
 }
 
@@ -924,6 +936,71 @@ async function saveAnnualPlan() {
   } catch (exception) {
     if (error) error.textContent = t(exception.message);
   }
+}
+
+function filledAnnualRows(rows) {
+  return rows.filter((row) => row.task || row.machine_code || row.machine_name || row.frequency_time || row.frequency_hours);
+}
+
+function copyAnnualPlan() {
+  const error = document.getElementById('annual-error');
+  if (!ui.annualPlant) {
+    if (error) error.textContent = t('Choose a plant, then set the plan.');
+    return;
+  }
+  const items = filledAnnualRows(readAnnualRows());
+  if (!items.length) {
+    if (error) error.textContent = t('This plan has no tasks to copy.');
+    return;
+  }
+  const plant = store.plants.find((item) => item.plant_id === ui.annualPlant);
+  ui.annualCopy = {
+    year: Number(ui.annualYear),
+    plantId: ui.annualPlant,
+    plantName: plant?.name || ui.annualPlant,
+    items: items.map((item) => ({
+      ...item,
+      line_number: store.lines.find((line) => line.line_id === item.line_id)?.line_number ?? '',
+      line_key: '',
+    })),
+  };
+  toast(t('Plan copied. Open the other plant and paste it.'));
+  drawAnnualPlan();
+}
+
+async function pasteAnnualPlan() {
+  const error = document.getElementById('annual-error');
+  const copy = ui.annualCopy;
+  if (!copy) return;
+  if (!ui.annualPlant) {
+    if (error) error.textContent = t('Choose a plant, then set the plan.');
+    return;
+  }
+  if (ui.annualPlant === copy.plantId && Number(ui.annualYear) === Number(copy.year)) {
+    if (error) error.textContent = t('Paste into the other plant.');
+    return;
+  }
+  const existing = filledAnnualRows(readAnnualRows());
+  if (existing.length && !window.confirm(t('Replace the annual plan of this plant with the copied plan?'))) return;
+  const lines = (store.lines || []).filter((line) => line.plant_id === ui.annualPlant);
+  ui.annualWeek = '';
+  ui.annualItems = copy.items.map((item) => {
+    const match = lines.find((line) => String(line.line_number) === String(item.line_number) && item.line_number !== '');
+    return {
+      machine_code: item.machine_code,
+      machine_name: item.machine_name,
+      task: item.task,
+      frequency_time: item.frequency_time,
+      frequency_hours: item.frequency_hours,
+      maintenance_type: item.maintenance_type || 'Preventive',
+      weeks: item.weeks || '',
+      days: Number(ui.annualYear) === Number(copy.year) ? (item.days || '') : '',
+      line_id: match?.line_id || '',
+      line_key: '',
+    };
+  });
+  await drawAnnualPlan();
+  await saveAnnualPlan();
 }
 
 function dayTaskHtml(task = {}, locked = false) {
@@ -1167,18 +1244,18 @@ async function drawAnnualPlan() {
   const weekHead = ANNUAL_MONTHS.map((_, monthIndex) => [1, 2, 3, 4].map((week) => `<th><button type="button" class="week-open" data-open-week="${monthIndex + 1}-${week}">${week}</button></th>`).join('')).join('');
   const options = openPlants().map((item) => `<option value="${esc(item.plant_id)}"${item.plant_id === ui.annualPlant ? ' selected' : ''}>${esc(item.name)}</option>`).join('');
   const rows = !ui.annualPlant
-    ? `<tr><td class="annual-empty" colspan="54">${esc(t('Choose a plant, then set the plan.'))}</td></tr>`
-    : (items.length ? items.map((item) => annualRowHtml(item, locked)).join('') : `<tr><td class="annual-empty" colspan="54">${esc(t('No records yet'))}</td></tr>`);
+    ? `<tr><td class="annual-empty" colspan="55">${esc(t('Choose a plant, then set the plan.'))}</td></tr>`
+    : (items.length ? items.map((item) => annualRowHtml(item, locked)).join('') : `<tr><td class="annual-empty" colspan="55">${esc(t('No records yet'))}</td></tr>`);
   document.getElementById('workspace').className = 'workspace';
   document.getElementById('workspace').innerHTML = `<section class="panel annual-plan">${tabsHtml(['Annual plan', 'Due tasks'])}
     <div class="annual-bar">
       <label>${esc(t('Plant'))}<select id="annual-plant"><option value="">${esc(t('Choose a plant'))}</option>${options}</select></label>
       <label>${esc(t('Year'))}<input id="annual-year" type="number" min="2000" max="2100" value="${esc(ui.annualYear)}"${locked ? ' disabled' : ''}></label>
-      ${locked ? '' : `<button type="button" id="annual-add" class="detail-button">${esc(t('Add task'))}</button>`}
+      ${locked ? '' : `<button type="button" id="annual-add" class="detail-button">${esc(t('Add task'))}</button><button type="button" id="annual-copy" class="detail-button">${esc(t('Copy plan'))}</button><button type="button" id="annual-paste" class="detail-button"${ui.annualCopy ? '' : ' disabled'}>${esc(ui.annualCopy ? `${t('Paste plan')} · ${ui.annualCopy.plantName}` : t('Paste plan'))}</button>`}
     </div>
     <h2 class="annual-title">${esc(t('Annual preventive maintenance plan'))}${formNo('annual_plan') ? ` · ${esc(formNo('annual_plan'))}` : ''}</h2>
     <div class="annual-scroll"><table class="annual-sheet">
-      <thead><tr><th rowspan="2">${esc(t('Machine name'))}</th><th rowspan="2">${esc(t('Task description'))}</th><th rowspan="2">${esc(t('Maintenance type'))}</th><th colspan="2">${esc(t('Frequency'))}</th>${monthHead}<th rowspan="2"></th></tr>
+      <thead><tr><th rowspan="2">${esc(t('Machine name'))}</th><th rowspan="2">${esc(t('Line number'))}</th><th rowspan="2">${esc(t('Task description'))}</th><th rowspan="2">${esc(t('Maintenance type'))}</th><th colspan="2">${esc(t('Frequency'))}</th>${monthHead}<th rowspan="2"></th></tr>
       <tr><th>${esc(t('Every (days)'))}</th><th>${esc(t('By running hours'))}</th>${weekHead}</tr></thead>
       <tbody id="annual-rows">${rows}</tbody>
     </table></div>
@@ -1218,9 +1295,11 @@ async function drawAnnualPlan() {
   });
   document.getElementById('annual-add')?.addEventListener('click', () => {
     ui.annualItems = readAnnualRows();
-    ui.annualItems.push({ machine_code: '', machine_name: '', task: '', frequency_time: '', frequency_hours: '', maintenance_type: 'Preventive', weeks: '' });
+    ui.annualItems.push({ machine_code: '', machine_name: '', task: '', frequency_time: '', frequency_hours: '', maintenance_type: 'Preventive', line_id: '', weeks: '' });
     drawAnnualPlan();
   });
+  document.getElementById('annual-copy')?.addEventListener('click', copyAnnualPlan);
+  document.getElementById('annual-paste')?.addEventListener('click', () => { pasteAnnualPlan(); });
   document.querySelectorAll('#annual-rows tr[data-line]').forEach((row) => {
     applyRowRepeat(row);
     row.querySelector('[data-field="frequency_time"]')?.addEventListener('input', () => applyRowRepeat(row));

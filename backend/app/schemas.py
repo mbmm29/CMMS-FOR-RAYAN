@@ -189,6 +189,7 @@ class AnnualPMItemIn(BaseModel):
     frequency_hours: str = ""
     maintenance_type: str = "Preventive"
     line_key: str = ""
+    line_id: str = ""
     weeks: str = ""
     days: str = ""
 

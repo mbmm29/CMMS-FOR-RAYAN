@@ -141,6 +141,7 @@ def ensure_additive_columns():
                 'days': "TEXT DEFAULT ''",
                 'maintenance_type': "VARCHAR(40) DEFAULT 'Preventive'",
                 'line_key': "VARCHAR(40) DEFAULT ''",
+                'line_id': "VARCHAR(80) DEFAULT ''",
             }
             with engine.begin() as conn:
                 for name, sql_type in additions.items():
@@ -1146,6 +1147,7 @@ def save_annual_pm(data: AnnualPMSave, db: Session = Depends(get_db), u=Depends(
         frequency_hours = item.frequency_hours.strip()[:40]
         maintenance_type = (item.maintenance_type or 'Preventive').strip()
         line_key = item.line_key.strip()[:40]
+        line_id = item.line_id.strip()[:80]
         weeks = clean_annual_weeks(item.weeks)
         days = clean_annual_days(item.days, data.year)
         repeated = repeat_every_days(data.year, frequency_time)
@@ -1157,6 +1159,8 @@ def save_annual_pm(data: AnnualPMSave, db: Session = Depends(get_db), u=Depends(
             raise HTTPException(400, 'A repeated task needs an equipment number or name')
         if maintenance_type not in MAINT_TYPES:
             raise HTTPException(400, 'Choose a maintenance type.')
+        if line_id and not db.query(PlantLine).filter_by(line_id=line_id, plant_id=data.plant_id).first():
+            raise HTTPException(400, 'The line number does not belong to the selected plant')
         machine_code, machine_name, added = register_plan_equipment(db, u, data.plant_id, machine_code, machine_name, maintenance_type)
         if added:
             created_equipment.append(machine_code)
@@ -1168,6 +1172,7 @@ def save_annual_pm(data: AnnualPMSave, db: Session = Depends(get_db), u=Depends(
             'frequency_hours': frequency_hours,
             'maintenance_type': maintenance_type,
             'line_key': line_key,
+            'line_id': line_id,
             'weeks': weeks,
             'days': days,
         })

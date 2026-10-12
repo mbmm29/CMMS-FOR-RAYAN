@@ -129,6 +129,7 @@ class AnnualPMItem(Base):
     frequency_hours: Mapped[str]=mapped_column(String(40),default='')
     maintenance_type: Mapped[str]=mapped_column(String(40),default='Preventive')
     line_key: Mapped[str]=mapped_column(String(40),default='')
+    line_id: Mapped[str]=mapped_column(String(80),default='')
     weeks: Mapped[str]=mapped_column(Text,default='')
     days: Mapped[str]=mapped_column(Text,default='')
 
