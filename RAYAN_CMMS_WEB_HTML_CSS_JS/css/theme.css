@@ -309,6 +309,7 @@ body .motor-paper .motor-table input,body .motor-paper .motor-table select{heigh
 .log-facts dd{margin:0}
 .log-grid,.log-table{min-width:980px;border-collapse:collapse}
 .log-grid th,.log-grid td,.log-table th,.log-table td{border:1px solid #c5d7ef;padding:6px;vertical-align:top;font-size:12px}
+.log-table .log-delete{padding:4px 8px;font-size:12px;white-space:nowrap}
 @media(max-width:900px){.log-facts{grid-template-columns:1fr}}
 .daily-parts{margin-top:14px}
 .daily-parts h3{margin:0;color:#102d60;font-size:13px}

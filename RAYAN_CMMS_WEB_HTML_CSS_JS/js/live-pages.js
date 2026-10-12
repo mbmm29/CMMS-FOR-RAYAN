@@ -563,7 +563,11 @@ function drawWorkOrders() {
   ]);
   document.getElementById('workspace').className = 'workspace';
   document.getElementById('workspace').innerHTML = `<section class="panel">${tabsHtml(['All Work Orders', 'In Progress', 'Overdue', 'Completed', 'On Hold'])}${tableShell(['WO No.', 'Type', 'Equipment', 'Problem / Description', 'Priority', 'Status', 'Assigned To', 'Due Date', 'Created On'], body, shown(rows.length, scoped(store.orders).length, 'work orders'))}</section>${detail}`;
+  if (ui.mode !== 'create' && selected && canMaintain()) {
+    document.querySelector('.detail')?.insertAdjacentHTML('beforeend', `<button type="button" class="detail-button danger" data-delete="/work-orders" data-delete-id="${esc(selected.work_order_id)}">${esc(t('Delete'))}</button>`);
+  }
   bindRows();
+  bindDeletes();
   document.querySelectorAll('[data-open]').forEach((button) => button.addEventListener('click', (event) => {
     event.stopPropagation();
     ui.rowKey = button.dataset.open;
@@ -1127,13 +1131,17 @@ function drawPlants() {
     const count = store.lines.filter((line) => line.plant_id === plant.plant_id).length;
     return `<tr data-row="${esc(plant.plant_id)}" class="${selected && selected.plant_id === plant.plant_id ? 'selected' : ''}">${cell(esc(plant.plant_id), true)}${cell(esc(plant.name))}${cell(String(count))}${cell(liveBadge(plant.active === false ? 'Inactive' : 'Active'))}</tr>`;
   });
-  const lineRows = plantLines.map((line) => `<div class="summary-row"><span>${esc(t('Line'))} ${esc(line.line_number ?? '—')}</span><b>${esc(line.name || '')}</b></div>`).join('') || `<p class="live-note">${esc(t('No records yet'))}</p>`;
+  const lineRows = plantLines.map((line) => `<div class="summary-row"><span>${esc(t('Line'))} ${esc(line.line_number ?? '—')}</span><b>${esc(line.name || '')}</b>${canMaintain() ? `<button type="button" class="detail-button danger" data-delete="/lines" data-delete-id="${esc(line.line_id)}" data-delete-keep="1">${esc(t('Delete'))}</button>` : ''}</div>`).join('') || `<p class="live-note">${esc(t('No records yet'))}</p>`;
   const lineForm = selected && canMaintain() ? `<form id="line-form" class="live-form"><div class="assign-block"><b>Add production line</b></div><label>Line number<input name="line_number" type="number" min="1" step="1" required></label><label>Name<input name="name" placeholder="Optional"></label><button class="detail-button primary" type="submit">Add line</button><p id="line-error" class="form-error"></p></form>` : '';
   const detail = ui.mode === 'create' ? plantForm() : `<aside class="panel detail"><h2>Plant Details</h2><div class="detail-top"><div class="machine">▣</div>${liveBadge(selected?.active === false ? 'Inactive' : 'Active')}<h3>${esc(selected?.plant_id || '—')}</h3><p>${esc(selected?.name || '')}</p></div><div class="detail-list">${lineRows}</div>${lineForm}</aside>`;
   document.getElementById('workspace').className = 'workspace';
   document.getElementById('workspace').innerHTML = `<section class="panel">${tabsHtml(['All Plants', 'Active', 'Inactive'])}${tableShell(['Plant Code', 'Plant Name', 'Production Lines', 'Status'], body, shown(rows.length, store.plants.length, 'plants'))}</section>${detail}`;
+  if (selected && canMaintain() && ui.mode !== 'create') {
+    document.querySelector('.detail')?.insertAdjacentHTML('beforeend', `<button type="button" class="detail-button danger" data-delete="/plants" data-delete-id="${esc(selected.plant_id)}">${esc(t('Delete'))}</button>`);
+  }
   bindRows();
   bindForm();
+  bindDeletes();
   document.getElementById('line-form')?.addEventListener('submit', async (event) => {
     event.preventDefault();
     const error = document.getElementById('line-error');
@@ -1203,9 +1211,13 @@ function drawEquipment() {
   const detail = ui.mode === 'create' ? equipmentForm() : equipmentDetail(selected);
   document.getElementById('workspace').className = 'workspace';
   document.getElementById('workspace').innerHTML = `<section class="panel">${filtersHtml()}${equipmentTabs()}${tableShell(['Equipment Code', 'Equipment Name', 'Category', 'Location (Plant / Line)', 'Status', 'Condition', 'Criticality'], body, shown(rows.length, all.length, 'equipment'))}</section>${detail}`;
+  if (selected && canMaintain() && ui.mode !== 'create') {
+    document.querySelector('.detail')?.insertAdjacentHTML('beforeend', `<button type="button" class="detail-button danger" data-delete="/equipment" data-delete-id="${esc(selected.equipment_id)}">${esc(t('Delete'))}</button>`);
+  }
   bindFilters();
   bindRows();
   bindForm();
+  bindDeletes();
 }
 
 function drawSops() {
@@ -1327,9 +1339,10 @@ function machineLogPaper(equipment, rows) {
     const parts = kind === 'Oil change' ? oilChangeParts(row) : { ...logParts(row.spare_parts), quantity: '—', work: row.action || row.description || '—' };
     const reason = kind === 'Oil change' ? t('Oil change') : (row.cause || '—');
     const downtime = row.downtime_h == null || row.downtime_h === '' ? '—' : numberText(row.downtime_h, 2);
-    return `<tr><td>${index + 1}</td><td>${esc(fmtDate(row.record_date))}</td><td>${esc(logCode(kind))}</td><td>${esc(reason)}</td><td>${esc(parts.work)}</td><td>${esc(workOrderNumber(row) || '—')}</td><td>${esc(parts.names)}</td><td>${esc(parts.numbers)}</td><td>${esc(parts.quantity)}</td><td>${esc(downtime)}</td><td>${esc(technicianName(row.technician_id) || '—')}</td></tr>`;
-  }).join('') || `<tr><td colspan="11">${esc(t('No log lines for this machine yet.'))}</td></tr>`;
-  return `<form class="lube-paper machine-log"><header class="lube-head"><img src="logo-rayan.png?v=2" alt="Rayan"><div><h2>${esc(t('Equipment maintenance log'))}</h2><p>${esc(t('Mechanical Maintenance Department'))}</p></div><dl><div><dt>${esc(t('Document no.'))}</dt><dd>${esc(equipment?.equipment_id || '—')}</dd></div><div><dt>${esc(t('Revision no.'))}</dt><dd>00</dd></div><div><dt>${esc(t('Issue date'))}</dt><dd>${esc(fmtDate(rows[0]?.record_date) || '—')}</dd></div></dl></header><p class="log-approve">${esc(t('Approved according to'))}: ${esc(t('Mechanical Maintenance Department'))}</p><div class="log-facts"><section><h3>${esc(t('Equipment data'))}</h3><dl><div><dt>${esc(t('Log machine name'))}</dt><dd>${esc(equipment?.name || '—')}</dd></div><div><dt>${esc(t('Machine number'))}</dt><dd>${esc(equipment?.equipment_id || '—')}</dd></div><div><dt>${esc(t('Location / section'))}</dt><dd>${esc(machinePlace(equipment))}</dd></div><div><dt>${esc(t('Commissioning date'))}</dt><dd>—</dd></div><div><dt>${esc(t('Manufacturer'))}</dt><dd>${esc(equipment?.manufacturer || '—')}</dd></div><div><dt>${esc(t('Preventive maintenance period'))}</dt><dd>${esc(pmPeriod(equipment))}</dd></div></dl></section><section><h3>${esc(t('Maintenance type key'))}</h3><table class="lube-table"><thead><tr><th>${esc(t('Maintenance type'))}</th><th>${esc(t('Symbol'))}</th></tr></thead><tbody><tr><td>${esc(t('Corrective'))}</td><td>CM</td></tr><tr><td>${esc(t('Emergency'))}</td><td>EM</td></tr><tr><td>${esc(t('Oil change'))}</td><td>OC</td></tr></tbody></table></section></div><h3 class="log-table-title">${esc(t('Maintenance work and details'))}</h3><div class="sheet-scroll"><table class="lube-table log-table"><thead><tr><th>${esc(t('No.'))}</th><th>${esc(t('Maintenance date'))}</th><th>${esc(t('Maintenance type'))}</th><th>${esc(t('Reason for maintenance'))}</th><th>${esc(t('Work performed'))}</th><th>${esc(t('Work order no.'))}</th><th>${esc(t('Parts used'))}</th><th>${esc(t('Part No.'))}</th><th>${esc(t('Quantity'))}</th><th>${esc(t('Downtime time'))}</th><th>${esc(t('Technician name'))}</th></tr></thead><tbody>${body}</tbody></table></div></form>`;
+    const remove = canMaintain() ? `<td><button type="button" class="detail-button danger log-delete" data-delete="/machine-records" data-delete-id="${esc(row.id)}" data-delete-keep="1">${esc(t('Delete'))}</button></td>` : '';
+    return `<tr><td>${index + 1}</td><td>${esc(fmtDate(row.record_date))}</td><td>${esc(logCode(kind))}</td><td>${esc(reason)}</td><td>${esc(parts.work)}</td><td>${esc(workOrderNumber(row) || '—')}</td><td>${esc(parts.names)}</td><td>${esc(parts.numbers)}</td><td>${esc(parts.quantity)}</td><td>${esc(downtime)}</td><td>${esc(technicianName(row.technician_id) || '—')}</td>${remove}</tr>`;
+  }).join('') || `<tr><td colspan="${canMaintain() ? 12 : 11}">${esc(t('No log lines for this machine yet.'))}</td></tr>`;
+  return `<form class="lube-paper machine-log"><header class="lube-head"><img src="logo-rayan.png?v=2" alt="Rayan"><div><h2>${esc(t('Equipment maintenance log'))}</h2><p>${esc(t('Mechanical Maintenance Department'))}</p></div><dl><div><dt>${esc(t('Document no.'))}</dt><dd>${esc(equipment?.equipment_id || '—')}</dd></div><div><dt>${esc(t('Revision no.'))}</dt><dd>00</dd></div><div><dt>${esc(t('Issue date'))}</dt><dd>${esc(fmtDate(rows[0]?.record_date) || '—')}</dd></div></dl></header><p class="log-approve">${esc(t('Approved according to'))}: ${esc(t('Mechanical Maintenance Department'))}</p><div class="log-facts"><section><h3>${esc(t('Equipment data'))}</h3><dl><div><dt>${esc(t('Log machine name'))}</dt><dd>${esc(equipment?.name || '—')}</dd></div><div><dt>${esc(t('Machine number'))}</dt><dd>${esc(equipment?.equipment_id || '—')}</dd></div><div><dt>${esc(t('Location / section'))}</dt><dd>${esc(machinePlace(equipment))}</dd></div><div><dt>${esc(t('Commissioning date'))}</dt><dd>—</dd></div><div><dt>${esc(t('Manufacturer'))}</dt><dd>${esc(equipment?.manufacturer || '—')}</dd></div><div><dt>${esc(t('Preventive maintenance period'))}</dt><dd>${esc(pmPeriod(equipment))}</dd></div></dl></section><section><h3>${esc(t('Maintenance type key'))}</h3><table class="lube-table"><thead><tr><th>${esc(t('Maintenance type'))}</th><th>${esc(t('Symbol'))}</th></tr></thead><tbody><tr><td>${esc(t('Corrective'))}</td><td>CM</td></tr><tr><td>${esc(t('Emergency'))}</td><td>EM</td></tr><tr><td>${esc(t('Oil change'))}</td><td>OC</td></tr></tbody></table></section></div><h3 class="log-table-title">${esc(t('Maintenance work and details'))}</h3><div class="sheet-scroll"><table class="lube-table log-table"><thead><tr><th>${esc(t('No.'))}</th><th>${esc(t('Maintenance date'))}</th><th>${esc(t('Maintenance type'))}</th><th>${esc(t('Reason for maintenance'))}</th><th>${esc(t('Work performed'))}</th><th>${esc(t('Work order no.'))}</th><th>${esc(t('Parts used'))}</th><th>${esc(t('Part No.'))}</th><th>${esc(t('Quantity'))}</th><th>${esc(t('Downtime time'))}</th><th>${esc(t('Technician name'))}</th>${canMaintain() ? `<th>${esc(t('Delete'))}</th>` : ''}</tr></thead><tbody>${body}</tbody></table></div></form>`;
 }
 
 function drawRecords() {
@@ -1352,6 +1365,7 @@ function drawRecords() {
   document.getElementById('workspace').innerHTML = `<section class="panel"><div class="split">${assetList(chosen)}<div class="asset-view">${tabsHtml(['All', 'Corrective', 'Emergency', 'Oil change'])}${chosen ? machineLogPaper(equipment, rows) : `<p class="live-note">${esc(t('Select a machine to open its maintenance log.'))}</p>`}</div></div></section>`;
   bindAssets();
   bindRows();
+  bindDeletes();
 }
 
 function jobPartRows(text) {
@@ -1453,6 +1467,27 @@ function bindFilters() {
     ui.rowKey = '';
     draw(ui.page);
   }));
+}
+
+function bindDeletes() {
+  document.querySelectorAll('[data-delete]').forEach((button) => {
+    button.addEventListener('click', async (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      if (!canMaintain()) return;
+      if (!window.confirm(t('Delete this record? This cannot be undone.'))) return;
+      try {
+        await apiRequest(`${button.dataset.delete}/${encodeURIComponent(button.dataset.deleteId)}`, { method: 'DELETE' });
+        store = null;
+        if (!button.dataset.deleteKeep) ui.rowKey = '';
+        if (button.dataset.delete === '/lubrication-reports') ui.lubeId = '';
+        toast(t('Deleted.'));
+        await paint(ui.page);
+      } catch (error) {
+        toast(error.message);
+      }
+    });
+  });
 }
 
 function bindRows() {
@@ -1726,7 +1761,7 @@ async function drawLubrication() {
     : `<select id="lube-tech">${store.technicians.map((item) => `<option value="${esc(item.technician_id)}"${item.technician_id === current?.technician_id ? ' selected' : ''}>${esc(item.name)}</option>`).join('')}</select>`;
   const list = lubeCache.map((row) => `<button type="button" class="lube-open${current?.report_id === row.report_id ? ' selected' : ''}" data-lube="${esc(row.report_id)}"><b>${esc(fmtDate(row.report_date))}</b><small>${esc(row.technician_name)} · ${esc(t(row.shift))} · ${row.line_count}</small></button>`).join('') || `<p class="live-note">${esc(t('No lubrication reports yet.'))}</p>`;
   document.getElementById('workspace').className = 'workspace lube-board';
-  document.getElementById('workspace').innerHTML = `<aside class="panel lube-list"><div class="lube-list-head"><b>${esc(t('Reports'))}</b><button type="button" class="detail-button" id="lube-new">${esc(t('New report'))}</button></div>${list}</aside><form id="lube-form" class="lube-paper"><header class="lube-head"><img src="logo-rayan.png?v=2" alt="Rayan"><div><h2>${esc(t('Daily report for the lubrication technician'))}</h2><p>${esc(t('Oil and grease change log'))}</p><small>${esc(t('Mechanical Maintenance Department'))}</small></div><dl><div><dt>${esc(t('Form No.:'))}</dt><dd>PMF 17-05 rev.a</dd></div><div><dt>${esc(t('Report No.'))}</dt><dd>${esc(current?.report_id || t('New'))}</dd></div></dl></header><div class="lube-meta"><label><span>${esc(t('Shift'))}</span><select id="lube-shift">${LUBE_SHIFTS.map((shift) => `<option value="${esc(shift)}"${shift === (current?.shift || LUBE_SHIFTS[0]) ? ' selected' : ''}>${esc(t(shift))}</option>`).join('')}</select></label><label><span>${esc(t("Technician's name"))}</span>${techField}</label><label><span>${esc(t('Day'))}</span><input id="lube-day" value="${esc(t(current?.day_name || lubeDayName(reportDate)))}" readonly></label><label><span>${esc(t('Date'))}</span><input id="lube-date" type="date" value="${esc(reportDate)}" required></label></div><table class="lube-table"><thead><tr><th>${esc(t('Seq.'))}</th><th>${esc(t('Machine'))}</th><th>${esc(t('Work type'))}</th><th>${esc(t('Component'))}</th><th>${esc(t('Qty'))}</th><th>${esc(t('Oil or grease name'))}</th><th>${esc(t('Remarks'))}</th></tr></thead><tbody id="lube-rows">${lines.map(lubeRow).join('')}</tbody></table><div class="lube-foot"><span>PMF 17-05 rev.a</span><span>${esc(t('Mechanical Maintenance Department'))}</span></div><p class="lube-help no-print">${esc(t('An equipment number that is not registered is sent to the maintenance engineer for approval.'))}</p><p id="lube-error" class="form-error"></p><div class="lube-actions no-print"><button type="button" id="lube-add">${esc(t('Add row'))}</button><button type="button" id="lube-print">${esc(t('Print'))}</button></div></form>`;
+  document.getElementById('workspace').innerHTML = `<aside class="panel lube-list"><div class="lube-list-head"><b>${esc(t('Reports'))}</b><button type="button" class="detail-button" id="lube-new">${esc(t('New report'))}</button></div>${list}</aside><form id="lube-form" class="lube-paper"><header class="lube-head"><img src="logo-rayan.png?v=2" alt="Rayan"><div><h2>${esc(t('Daily report for the lubrication technician'))}</h2><p>${esc(t('Oil and grease change log'))}</p><small>${esc(t('Mechanical Maintenance Department'))}</small></div><dl><div><dt>${esc(t('Form No.:'))}</dt><dd>PMF 17-05 rev.a</dd></div><div><dt>${esc(t('Report No.'))}</dt><dd>${esc(current?.report_id || t('New'))}</dd></div></dl></header><div class="lube-meta"><label><span>${esc(t('Shift'))}</span><select id="lube-shift">${LUBE_SHIFTS.map((shift) => `<option value="${esc(shift)}"${shift === (current?.shift || LUBE_SHIFTS[0]) ? ' selected' : ''}>${esc(t(shift))}</option>`).join('')}</select></label><label><span>${esc(t("Technician's name"))}</span>${techField}</label><label><span>${esc(t('Day'))}</span><input id="lube-day" value="${esc(t(current?.day_name || lubeDayName(reportDate)))}" readonly></label><label><span>${esc(t('Date'))}</span><input id="lube-date" type="date" value="${esc(reportDate)}" required></label></div><table class="lube-table"><thead><tr><th>${esc(t('Seq.'))}</th><th>${esc(t('Machine'))}</th><th>${esc(t('Work type'))}</th><th>${esc(t('Component'))}</th><th>${esc(t('Qty'))}</th><th>${esc(t('Oil or grease name'))}</th><th>${esc(t('Remarks'))}</th></tr></thead><tbody id="lube-rows">${lines.map(lubeRow).join('')}</tbody></table><div class="lube-foot"><span>PMF 17-05 rev.a</span><span>${esc(t('Mechanical Maintenance Department'))}</span></div><p class="lube-help no-print">${esc(t('An equipment number that is not registered is sent to the maintenance engineer for approval.'))}</p><p id="lube-error" class="form-error"></p><div class="lube-actions no-print"><button type="button" id="lube-add">${esc(t('Add row'))}</button><button type="button" id="lube-print">${esc(t('Print'))}</button>${current && canMaintain() ? `<button type="button" class="detail-button danger" data-delete="/lubrication-reports" data-delete-id="${esc(current.report_id)}">${esc(t('Delete'))}</button>` : ''}</div></form>`;
   if (viewer) document.querySelectorAll('#lube-form input, #lube-form select, #lube-add').forEach((node) => { node.disabled = true; });
   document.querySelectorAll('#lube-rows tr').forEach((row) => {
     const code = row.querySelector('[data-field="equipment_code"]');
@@ -1751,6 +1786,7 @@ async function drawLubrication() {
     bindEquipmentCode(row.querySelector('[data-field="equipment_code"]'), row.querySelector('[data-field="equipment_name"]'));
   });
   document.getElementById('lube-print')?.addEventListener('click', () => window.print());
+  bindDeletes();
   document.getElementById('lube-form')?.addEventListener('submit', (event) => { event.preventDefault(); saveLubrication(); });
 }
 

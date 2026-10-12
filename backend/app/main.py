@@ -2820,6 +2820,144 @@ def return_report(
     db.refresh(r)
     return r
 
+def remove_work_order(db, order):
+    order_id = order.work_order_id
+    db.query(WorkOrderAssignment).filter_by(work_order_id=order_id).delete(synchronize_session=False)
+    db.expire(order, ['assignments'])
+    db.query(Measurement).filter_by(work_order_id=order_id).delete(synchronize_session=False)
+    db.query(PartUsed).filter_by(work_order_id=order_id).delete(synchronize_session=False)
+    db.query(AnnualPMDayTask).filter_by(work_order_id=order_id).update(
+        {AnnualPMDayTask.work_order_id: None}, synchronize_session=False,
+    )
+    db.query(LubricationLine).filter_by(work_order_id=order_id).update(
+        {LubricationLine.work_order_id: None}, synchronize_session=False,
+    )
+    db.query(DailyReport).filter(DailyReport.work_order_id == order_id).update(
+        {DailyReport.work_order_id: None}, synchronize_session=False,
+    )
+    db.query(DailyReportItem).filter(DailyReportItem.wo_id == order_id).update(
+        {DailyReportItem.wo_id: None}, synchronize_session=False,
+    )
+    db.query(MachineRecord).filter_by(wo_id=order_id).delete(synchronize_session=False)
+    db.query(Notification).filter(Notification.related_id == order_id).delete(synchronize_session=False)
+    db.delete(order)
+
+
+@app.delete('/plants/{plant_id}')
+def delete_plant(plant_id: str, db: Session = Depends(get_db), u=Depends(role(*ENGINEER))):
+    plant = db.query(Plant).filter_by(plant_id=plant_id).first()
+    if not plant:
+        raise HTTPException(404, 'Plant not found')
+    plans = db.query(AnnualPMPlan).filter_by(plant_id=plant_id).all()
+    plan_ids = [plan.id for plan in plans]
+    if plan_ids:
+        db.query(AnnualPMDayTask).filter(AnnualPMDayTask.plan_id.in_(plan_ids)).delete(synchronize_session=False)
+        db.query(AnnualPMItem).filter(AnnualPMItem.plan_id.in_(plan_ids)).delete(synchronize_session=False)
+        db.query(AnnualPMPlan).filter(AnnualPMPlan.id.in_(plan_ids)).delete(synchronize_session=False)
+    line_ids = [row.line_id for row in db.query(PlantLine).filter_by(plant_id=plant_id).all()]
+    if line_ids:
+        db.query(Equipment).filter(Equipment.line_id.in_(line_ids)).update(
+            {Equipment.line_id: None}, synchronize_session=False,
+        )
+    db.query(Equipment).filter(Equipment.plant_id == plant_id).update(
+        {Equipment.plant_id: None}, synchronize_session=False,
+    )
+    db.query(KpiTarget).filter(KpiTarget.plant_id == plant_id).delete(synchronize_session=False)
+    db.query(PlantLine).filter_by(plant_id=plant_id).delete(synchronize_session=False)
+    db.delete(plant)
+    audit(db, u, 'DELETE', 'Plant', plant_id)
+    db.commit()
+    return {'ok': True}
+
+
+@app.delete('/lines/{line_id}')
+def delete_line(line_id: str, db: Session = Depends(get_db), u=Depends(role(*ENGINEER))):
+    line = db.query(PlantLine).filter_by(line_id=line_id).first()
+    if not line:
+        raise HTTPException(404, 'Line not found')
+    db.query(Equipment).filter(Equipment.line_id == line_id).update(
+        {Equipment.line_id: None}, synchronize_session=False,
+    )
+    db.query(KpiTarget).filter(KpiTarget.line_id == line_id).delete(synchronize_session=False)
+    db.delete(line)
+    audit(db, u, 'DELETE', 'PlantLine', line_id)
+    db.commit()
+    return {'ok': True}
+
+
+@app.delete('/equipment/{equipment_id}')
+def delete_equipment(equipment_id: str, db: Session = Depends(get_db), u=Depends(role(*ENGINEER))):
+    equipment = db.query(Equipment).filter_by(equipment_id=equipment_id).first()
+    if not equipment:
+        raise HTTPException(404, 'Equipment not found')
+    for order in db.query(WorkOrder).filter_by(equipment_id=equipment_id).all():
+        if not order.manual_equipment_code:
+            order.manual_equipment_code = equipment.equipment_id
+            order.manual_equipment_name = equipment.name
+            order.manual_plant_id = equipment.plant_id
+            order.manual_line_id = equipment.line_id
+        order.equipment_id = None
+    for plan in db.query(PMPlan).filter_by(equipment_id=equipment_id).all():
+        if not plan.manual_equipment_code:
+            plan.manual_equipment_code = equipment.equipment_id
+            plan.manual_equipment_name = equipment.name
+        plan.equipment_id = None
+    db.query(Component).filter_by(equipment_id=equipment_id).delete(synchronize_session=False)
+    db.query(SOP).filter_by(equipment_id=equipment_id).delete(synchronize_session=False)
+    db.query(KpiTarget).filter(KpiTarget.equipment_id == equipment_id).delete(synchronize_session=False)
+    db.delete(equipment)
+    audit(db, u, 'DELETE', 'Equipment', equipment_id)
+    db.commit()
+    return {'ok': True}
+
+
+@app.delete('/daily-reports/{report_id}')
+def delete_daily_report(report_id: str, db: Session = Depends(get_db), u=Depends(role(*ENGINEER))):
+    report = db.query(DailyReport).filter_by(report_id=report_id).first()
+    if not report:
+        raise HTTPException(404, 'Daily report not found')
+    db.query(DailyReportItem).filter_by(report_id=report.id).delete(synchronize_session=False)
+    db.query(MachineRecord).filter_by(daily_report_id=report.id).delete(synchronize_session=False)
+    db.delete(report)
+    audit(db, u, 'DELETE', 'DailyReport', report_id)
+    db.commit()
+    return {'ok': True}
+
+
+@app.delete('/lubrication-reports/{report_id}')
+def delete_lubrication_report(report_id: str, db: Session = Depends(get_db), u=Depends(role(*ENGINEER))):
+    report = db.query(LubricationReport).filter_by(report_id=report_id).first()
+    if not report:
+        raise HTTPException(404, 'Lubrication report not found')
+    db.query(LubricationLine).filter_by(report_id=report.id).delete(synchronize_session=False)
+    db.delete(report)
+    audit(db, u, 'DELETE', 'LubricationReport', report_id)
+    db.commit()
+    return {'ok': True}
+
+
+@app.delete('/work-orders/{work_order_id}')
+def delete_work_order(work_order_id: str, db: Session = Depends(get_db), u=Depends(role(*ENGINEER))):
+    order = db.query(WorkOrder).filter_by(work_order_id=work_order_id).first()
+    if not order:
+        raise HTTPException(404, 'Work order not found')
+    remove_work_order(db, order)
+    audit(db, u, 'DELETE', 'WorkOrder', work_order_id)
+    db.commit()
+    return {'ok': True}
+
+
+@app.delete('/machine-records/{record_id}')
+def delete_machine_record(record_id: int, db: Session = Depends(get_db), u=Depends(role(*ENGINEER))):
+    record = db.get(MachineRecord, record_id)
+    if not record:
+        raise HTTPException(404, 'Machine record not found')
+    db.delete(record)
+    audit(db, u, 'DELETE', 'MachineRecord', record_id)
+    db.commit()
+    return {'ok': True}
+
+
 @app.get('/machine-records')
 def machine_records(equipment_id:str|None=None,db:Session=Depends(get_db),u=Depends(auth)):
     q=db.query(MachineRecord)

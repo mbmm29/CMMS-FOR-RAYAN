@@ -198,11 +198,14 @@ document.addEventListener('DOMContentLoaded', async () => {
     const decisions = report.status === 'Submitted' && isEngineer()
       ? `<button type="button" class="decision approve" id="review-approve">${escapeHtml(t('Approve report'))}</button><button type="button" class="decision return" id="review-reject">${escapeHtml(t('Reject report'))}</button>`
       : '';
+    const remove = isEngineer()
+      ? `<button type="button" class="decision return" id="review-delete">${escapeHtml(t('Delete'))}</button>`
+      : '';
     const layout = document.querySelector('.reports-layout');
     const sheet = document.getElementById('detailsContent');
     if (!sheet) return;
     layout?.classList.add('reviewing');
-    sheet.innerHTML = `<div class="review-bar no-print"><button type="button" id="review-close">${escapeHtml(t('Back to reports'))}</button>${decisions}</div>
+    sheet.innerHTML = `<div class="review-bar no-print"><button type="button" id="review-close">${escapeHtml(t('Back to reports'))}</button>${decisions}${remove}</div>
       <form class="lube-paper daily-paper" id="review-paper">
         <header class="lube-head"><img src="logo-rayan.png?v=2" alt="Rayan"><div><h2>${escapeHtml(t('DAILY MAINTENANCE REPORT'))}</h2><p>${escapeHtml(t(report.status || 'Draft'))}</p><small>${escapeHtml(t('Mechanical Maintenance Department'))}</small></div><dl><div><dt>${escapeHtml(t('Form No.:'))}</dt><dd>DR</dd></div><div><dt>${escapeHtml(t('Approved by'))}</dt><dd>${escapeHtml(report.approvedBy || '—')}</dd></div></dl></header>
         <div class="lube-meta">
@@ -224,6 +227,7 @@ document.addEventListener('DOMContentLoaded', async () => {
       </form>`;
     document.getElementById('review-close')?.addEventListener('click', closeReview);
     document.getElementById('review-approve')?.addEventListener('click', approveSelected);
+    document.getElementById('review-delete')?.addEventListener('click', deleteSelected);
     document.getElementById('review-reject')?.addEventListener('click', () => {
       const box = document.getElementById('reject-box');
       if (!box) return;
@@ -253,6 +257,7 @@ document.addEventListener('DOMContentLoaded', async () => {
       actions.push(`<button type="button" class="decision return" id="return-report">${t('Return to technician')}</button>`);
     }
     if (report.status === 'Approved') actions.push(`<button type="button" class="decision print" id="print-report">${t('Print A4 report')}</button>`);
+    if (isEngineer()) actions.push(`<button type="button" class="decision return" id="delete-report">${t('Delete')}</button>`);
     document.getElementById('detailsContent').innerHTML = `<div class="detail-number"><strong>${escapeHtml(report.id)}</strong>${badge(report.status)}</div>
       <div class="detail-list">
         <div class="detail-row"><span class="detail-label">${t('Technician')}</span><span class="detail-value">${escapeHtml(report.technician)}</span></div>
@@ -267,6 +272,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     document.getElementById('approve-report')?.addEventListener('click', approveSelected);
     document.getElementById('return-report')?.addEventListener('click', returnSelected);
     document.getElementById('print-report')?.addEventListener('click', () => { window.location.href = `daily-report-print.html?report=${encodeURIComponent(report.id)}`; });
+    document.getElementById('delete-report')?.addEventListener('click', deleteSelected);
   }
 
   async function approveSelected() {
@@ -286,6 +292,22 @@ document.addEventListener('DOMContentLoaded', async () => {
     } catch (error) {
       button.disabled = false;
       button.textContent = 'Approve report';
+      showNotice(error.message, true);
+    }
+  }
+
+  async function deleteSelected() {
+    if (!state.selected || !isEngineer()) return;
+    if (!window.confirm(t('Delete this record? This cannot be undone.'))) return;
+    const reportId = state.selected.id;
+    try {
+      await apiRequest(`/daily-reports/${encodeURIComponent(reportId)}`, { method: 'DELETE' });
+      closeReview();
+      emptyDetails();
+      state.selected = null;
+      await loadReports();
+      showNotice(t('Deleted.'));
+    } catch (error) {
       showNotice(error.message, true);
     }
   }

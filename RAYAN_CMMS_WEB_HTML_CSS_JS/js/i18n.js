@@ -589,6 +589,9 @@ const CMMS_AR = {
   'Work order accepted and added to your daily report.': 'قُبل أمر الصيانة وأُضيف إلى تقريرك اليومي.',
   'Equipment name or number': 'اسم المعدة أو رقمها',
   'This equipment was not found. Enter its name or number as saved in the system.': 'هذه المعدة غير موجودة. اكتب اسمها أو رقمها كما هو محفوظ في النظام.',
+  'Delete': 'حذف',
+  'Delete this record? This cannot be undone.': 'حذف هذا السجل؟ لا يمكن التراجع عن الحذف.',
+  'Deleted.': 'تم الحذف.',
 };
 
 function currentLang() {
