@@ -490,3 +490,6 @@ body .section-form .detail-button{width:auto;height:34px;margin:0;padding:0 12px
   html body .motor-paper .motor-table input,
   html body .motor-paper .motor-table select{width:100%;min-width:0;height:36px}
 }
+.iso-form{display:grid;gap:14px;max-width:720px}
+.iso-form label{display:grid;gap:6px;font-weight:700}
+.iso-form input{width:100%;max-width:420px;height:40px;padding:0 10px}

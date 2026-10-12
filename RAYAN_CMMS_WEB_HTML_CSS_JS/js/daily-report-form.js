@@ -515,6 +515,11 @@ async function initializeForm() {
   const today = dateForInput(new Date());
   document.getElementById('report-date').value = today;
   document.getElementById('meta-date').textContent = new Date().toLocaleDateString('en-GB');
+  try {
+    const forms = await apiRequest('/form-numbers');
+    const slot = document.getElementById('daily-form-no');
+    if (slot && forms?.daily) slot.textContent = forms.daily;
+  } catch (_) {}
   const pages = document.getElementById('activity-pages');
   pages.innerHTML = activityPage(1);
   if (typeof applyLanguage === 'function') applyLanguage();

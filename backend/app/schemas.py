@@ -517,3 +517,6 @@ class ISOCreate(BaseModel):
     approved_by: str | None = None
     status: str = "Draft"
     notes: str | None = None
+
+class FormNumbersUpdate(BaseModel):
+    forms: dict[str, str]

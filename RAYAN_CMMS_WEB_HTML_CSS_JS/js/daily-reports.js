@@ -1,5 +1,5 @@
 document.addEventListener('DOMContentLoaded', async () => {
-  const state = { reports: [], filtered: [], page: 1, rows: 10, status: 'all', user: null, selected: null };
+  const state = { reports: [], filtered: [], page: 1, rows: 10, status: 'all', user: null, selected: null, formNo: 'DR' };
   const body = document.getElementById('reportsTableBody');
   const search = document.getElementById('globalSearch');
   const from = document.getElementById('dateFrom');
@@ -52,7 +52,11 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   async function loadReports() {
     body.innerHTML = `<tr><td colspan="11" class="loading-cell">${t('Loading reports from the CMMS...')}</td></tr>`;
-    const summaries = await apiRequest('/daily-reports');
+    const [summaries, forms] = await Promise.all([
+      apiRequest('/daily-reports'),
+      apiRequest('/form-numbers').catch(() => ({})),
+    ]);
+    state.formNo = forms.daily || 'DR';
     state.reports = await Promise.all(summaries.map(async summary => {
       const detail = await apiRequest(`/daily-reports/${encodeURIComponent(summary.report_id)}`);
       const report = detail.report;
@@ -207,7 +211,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     layout?.classList.add('reviewing');
     sheet.innerHTML = `<div class="review-bar no-print"><button type="button" id="review-close">${escapeHtml(t('Back to reports'))}</button>${decisions}${remove}</div>
       <form class="lube-paper daily-paper" id="review-paper">
-        <header class="lube-head"><img src="logo-rayan.png?v=2" alt="Rayan"><div><h2>${escapeHtml(t('DAILY MAINTENANCE REPORT'))}</h2><p>${escapeHtml(t(report.status || 'Draft'))}</p><small>${escapeHtml(t('Mechanical Maintenance Department'))}</small></div><dl><div><dt>${escapeHtml(t('Form No.:'))}</dt><dd>DR</dd></div><div><dt>${escapeHtml(t('Approved by'))}</dt><dd>${escapeHtml(report.approvedBy || '—')}</dd></div></dl></header>
+        <header class="lube-head"><img src="logo-rayan.png?v=2" alt="Rayan"><div><h2>${escapeHtml(t('DAILY MAINTENANCE REPORT'))}</h2><p>${escapeHtml(t(report.status || 'Draft'))}</p><small>${escapeHtml(t('Mechanical Maintenance Department'))}</small></div><dl><div><dt>${escapeHtml(t('Form No.:'))}</dt><dd>${escapeHtml(state.formNo || 'DR')}</dd></div><div><dt>${escapeHtml(t('Approved by'))}</dt><dd>${escapeHtml(report.approvedBy || '—')}</dd></div></dl></header>
         <div class="lube-meta">
           <label><span>${escapeHtml(t('Shift'))}</span><input value="${escapeHtml(t(report.shift || ''))}" readonly></label>
           <label><span>${escapeHtml(t("Technician's name"))}</span><input value="${escapeHtml(report.technician)}" readonly></label>

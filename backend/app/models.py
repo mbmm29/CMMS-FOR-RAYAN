@@ -429,6 +429,11 @@ class ISORecord(Base):
     status: Mapped[str]=mapped_column(String(40),default='Draft')
     notes: Mapped[str|None]=mapped_column(Text,nullable=True)
 
+class FormNumber(Base):
+    __tablename__='form_numbers'
+    form_key: Mapped[str]=mapped_column(String(40),primary_key=True)
+    form_no: Mapped[str]=mapped_column(String(80),default='')
+
 class Notification(Base):
     __tablename__='notifications'
     id: Mapped[int]=mapped_column(Integer,primary_key=True)

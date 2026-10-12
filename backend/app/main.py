@@ -3183,6 +3183,43 @@ def machine_records(equipment_id:str|None=None,db:Session=Depends(get_db),u=Depe
             clauses.append(MachineRecord.wo_id.in_(wo_ids))
         q = q.filter(or_(*clauses))
     return [as_dict(row) for row in q.order_by(MachineRecord.record_date.desc(),MachineRecord.id.desc()).all()]
+FORM_NUMBERS = {
+    'daily': 'DR',
+    'job_order': 'PMF 17-04',
+    'lubrication': 'PMF 17-05 rev.a',
+    'motor': 'PMF 25-6',
+    'equipment_log': '',
+    'annual_plan': '',
+}
+
+def form_number_map(db: Session) -> dict[str, str]:
+    stored = {row.form_key: (row.form_no or '').strip() for row in db.query(FormNumber).all()}
+    return {key: (stored.get(key) or default) for key, default in FORM_NUMBERS.items()}
+
+@app.get('/form-numbers')
+def read_form_numbers(db: Session = Depends(get_db), u=Depends(auth)):
+    return form_number_map(db)
+
+@app.put('/form-numbers')
+def save_form_numbers(data: FormNumbersUpdate, db: Session = Depends(get_db), u=Depends(role(*ENGINEER))):
+    unknown = [key for key in data.forms if key not in FORM_NUMBERS]
+    if unknown:
+        raise HTTPException(400, 'Unknown document')
+    saved = {}
+    for key, value in data.forms.items():
+        text_value = (value or '').strip()
+        if len(text_value) > 80 or any(ord(ch) < 32 for ch in text_value):
+            raise HTTPException(400, 'Form number is too long')
+        row = db.get(FormNumber, key)
+        if row is None:
+            db.add(FormNumber(form_key=key, form_no=text_value))
+        else:
+            row.form_no = text_value
+        saved[key] = text_value
+    audit(db, u, 'UPDATE', 'FormNumber', 'forms', new=saved)
+    db.commit()
+    return form_number_map(db)
+
 @app.get('/iso-records')
 def iso_records(db:Session=Depends(get_db),u=Depends(auth)): return db.query(ISORecord).order_by(ISORecord.document_number).all()
 @app.post('/iso-records')
@@ -3749,8 +3786,10 @@ def motor_payload(db, row):
 
 
 @app.get('/motor-condition/catalog')
-def motor_catalog(u=Depends(role(*MOTOR))):
-    return motor_catalog_payload()
+def motor_catalog(db: Session = Depends(get_db), u=Depends(role(*MOTOR))):
+    payload = motor_catalog_payload()
+    payload['form_no'] = form_number_map(db)['motor']
+    return payload
 
 
 @app.get('/motor-condition/due')

@@ -1,4 +1,4 @@
-const LIVE_PAGES = new Set(['dashboard', 'work-orders', 'pm-schedule', 'plants', 'new-equipment', 'equipment', 'sop', 'machine-records', 'lubrication', 'daily-reports', 'motor-condition']);
+const LIVE_PAGES = new Set(['dashboard', 'work-orders', 'pm-schedule', 'plants', 'new-equipment', 'equipment', 'sop', 'machine-records', 'lubrication', 'daily-reports', 'motor-condition', 'iso']);
 const DEFAULT_TAB = {
   dashboard: 'All',
   'work-orders': 'All Work Orders',
@@ -11,6 +11,7 @@ const DEFAULT_TAB = {
   lubrication: 'Report',
   'daily-reports': 'My Reports',
   'motor-condition': 'Sheet',
+  iso: 'All',
 };
 const shellRender = render;
 const ui = { page: 'dashboard', tab: 'All', rowKey: '', mode: 'view', plantId: '', lineId: '', sectionId: '', equipmentId: '', technicianId: '', dateFrom: '', dateTo: '', annualPlant: '', annualYear: new Date().getFullYear(), annualItems: [], annualWeek: '', weekTasks: [], lubeId: '', dailyId: '', dailyFilter: '' };
@@ -18,7 +19,20 @@ const ANNUAL_MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', '
 const WEEKDAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 const DAY_MAINTENANCE_TYPES = ['Preventive', 'Corrective', 'Emergency', 'Routine', 'Inspection', 'Lubrication'];
 let store = null;
+let isoForms = null;
 let paintToken = 0;
+const FORM_DEFAULTS = {
+  daily: 'DR',
+  job_order: 'PMF 17-04',
+  lubrication: 'PMF 17-05 rev.a',
+  motor: 'PMF 25-6',
+  equipment_log: '',
+  annual_plan: '',
+};
+function formNo(key) {
+  const value = isoForms && Object.prototype.hasOwnProperty.call(isoForms, key) ? isoForms[key] : FORM_DEFAULTS[key];
+  return value == null ? '' : String(value);
+}
 
 function esc(value) {
   return String(value ?? '').replace(/[&<>"']/g, (ch) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch]));
@@ -270,7 +284,7 @@ function sum(rows, field) {
 }
 
 async function loadStore() {
-  const [plants, lines, sections, equipment, orders, plans, sops, records, technicians, pending] = await Promise.all([
+  const [plants, lines, sections, equipment, orders, plans, sops, records, technicians, pending, forms] = await Promise.all([
     apiRequest('/plants'),
     apiRequest('/lines'),
     apiRequest('/sections'),
@@ -281,7 +295,9 @@ async function loadStore() {
     apiRequest('/machine-records'),
     apiRequest('/technicians'),
     canMaintain() ? apiRequest('/pending-equipment') : Promise.resolve([]),
+    apiRequest('/form-numbers'),
   ]);
+  isoForms = forms;
   store = { plants, lines, sections, equipment, orders, plans, sops, records, technicians, pending };
 }
 
@@ -1039,7 +1055,7 @@ function drawWeekForm() {
   document.getElementById('workspace').innerHTML = `<section class="panel annual-plan">
     <div class="annual-bar">
       <button type="button" id="week-back" class="detail-button">${esc(t('Back to annual plan'))}</button>
-      <b class="annual-title">${esc(t('Week'))} ${week} · ${esc(t(ANNUAL_MONTHS[month - 1]))} ${esc(ui.annualYear)}</b>
+      <b class="annual-title">${esc(t('Week'))} ${week} · ${esc(t(ANNUAL_MONTHS[month - 1]))} ${esc(ui.annualYear)}${formNo('annual_plan') ? ` · ${esc(formNo('annual_plan'))}` : ''}</b>
     </div>
     <p class="kpi-note">${esc(fmtDate(isoDate(first)))} – ${esc(fmtDate(isoDate(last)))} · ${dates.length} ${esc(t('days'))}</p>
     <div class="week-days">${days}</div>
@@ -1160,7 +1176,7 @@ async function drawAnnualPlan() {
       <label>${esc(t('Year'))}<input id="annual-year" type="number" min="2000" max="2100" value="${esc(ui.annualYear)}"${locked ? ' disabled' : ''}></label>
       ${locked ? '' : `<button type="button" id="annual-add" class="detail-button">${esc(t('Add task'))}</button>`}
     </div>
-    <h2 class="annual-title">${esc(t('Annual preventive maintenance plan'))}</h2>
+    <h2 class="annual-title">${esc(t('Annual preventive maintenance plan'))}${formNo('annual_plan') ? ` · ${esc(formNo('annual_plan'))}` : ''}</h2>
     <div class="annual-scroll"><table class="annual-sheet">
       <thead><tr><th rowspan="2">${esc(t('Machine name'))}</th><th rowspan="2">${esc(t('Task description'))}</th><th rowspan="2">${esc(t('Maintenance type'))}</th><th colspan="2">${esc(t('Frequency'))}</th>${monthHead}<th rowspan="2"></th></tr>
       <tr><th>${esc(t('Every (days)'))}</th><th>${esc(t('By running hours'))}</th>${weekHead}</tr></thead>
@@ -1542,7 +1558,7 @@ function machineLogPaper(equipment, rows) {
   const commissioned = String(equipment?.commissioning_date || '').slice(0, 10);
   const lock = canMaintain() ? '' : ' readonly';
   const saveFacts = canMaintain() ? `<button class="detail-button primary no-print log-facts-save" type="submit">${esc(t('Save'))}</button>` : '';
-  return `<form class="lube-paper machine-log" id="machine-log"><header class="lube-head"><img src="logo-rayan.png?v=2" alt="Rayan"><div><h2>${esc(t('Equipment maintenance log'))}</h2><p>${esc(t('Mechanical Maintenance Department'))}</p></div><dl><div><dt>${esc(t('Document no.'))}</dt><dd>${esc(equipment?.equipment_id || '—')}</dd></div><div><dt>${esc(t('Revision no.'))}</dt><dd>00</dd></div><div><dt>${esc(t('Issue date'))}</dt><dd>${esc(fmtDate(rows[0]?.record_date) || '—')}</dd></div></dl></header><p class="log-approve">${esc(t('Approved according to'))}: ${esc(t('Mechanical Maintenance Department'))}</p><div class="log-facts"><section><h3>${esc(t('Equipment data'))}</h3><dl><div><dt>${esc(t('Log machine name'))}</dt><dd>${esc(equipment?.name || '—')}</dd></div><div><dt>${esc(t('Machine number'))}</dt><dd>${esc(equipment?.equipment_id || '—')}</dd></div><div><dt>${esc(t('Location / section'))}</dt><dd>${esc(machinePlace(equipment))}</dd></div><div><dt>${esc(t('Commissioning date'))}</dt><dd><input name="commissioning_date" type="date" value="${esc(commissioned)}"${lock}></dd></div><div><dt>${esc(t('Manufacturer'))}</dt><dd><input name="manufacturer" value="${esc(equipment?.manufacturer || '')}"${lock}></dd></div></dl>${saveFacts}</section><section><h3>${esc(t('Maintenance type key'))}</h3><table class="log-key"><thead><tr><th>${esc(t('Maintenance type'))}</th><th>${esc(t('Symbol'))}</th></tr></thead><tbody><tr><td>${esc(t('Corrective'))}</td><td>CM</td></tr><tr><td>${esc(t('Emergency'))}</td><td>EM</td></tr><tr><td>${esc(t('Oil change'))}</td><td>OC</td></tr></tbody></table></section></div><h3 class="log-table-title">${esc(t('Maintenance work and details'))}</h3><div class="sheet-scroll"><table class="lube-table log-table"><colgroup><col class="c-no"><col class="c-date"><col class="c-type"><col class="c-reason"><col class="c-work"><col class="c-order"><col class="c-parts"><col class="c-partno"><col class="c-qty"><col class="c-down"><col class="c-tech">${canMaintain() ? '<col class="c-remove no-print">' : ''}</colgroup><thead><tr><th>${esc(t('No.'))}</th><th>${esc(t('Maintenance date'))}</th><th>${esc(t('Maintenance type'))}</th><th>${esc(t('Reason for maintenance'))}</th><th>${esc(t('Work performed'))}</th><th>${esc(t('Work order no.'))}</th><th>${esc(t('Parts used'))}</th><th>${esc(t('Part No.'))}</th><th>${esc(t('Quantity'))}</th><th>${esc(t('Downtime time'))}</th><th>${esc(t('Technician name'))}</th>${canMaintain() ? `<th class="no-print">${esc(t('Delete'))}</th>` : ''}</tr></thead><tbody>${body}</tbody></table></div></form>`;
+  return `<form class="lube-paper machine-log" id="machine-log"><header class="lube-head"><img src="logo-rayan.png?v=2" alt="Rayan"><div><h2>${esc(t('Equipment maintenance log'))}</h2><p>${esc(t('Mechanical Maintenance Department'))}</p></div><dl>${formNo('equipment_log') ? `<div><dt>${esc(t('Form No.:'))}</dt><dd>${esc(formNo('equipment_log'))}</dd></div>` : ''}<div><dt>${esc(t('Document no.'))}</dt><dd>${esc(equipment?.equipment_id || '—')}</dd></div><div><dt>${esc(t('Revision no.'))}</dt><dd>00</dd></div><div><dt>${esc(t('Issue date'))}</dt><dd>${esc(fmtDate(rows[0]?.record_date) || '—')}</dd></div></dl></header><p class="log-approve">${esc(t('Approved according to'))}: ${esc(t('Mechanical Maintenance Department'))}</p><div class="log-facts"><section><h3>${esc(t('Equipment data'))}</h3><dl><div><dt>${esc(t('Log machine name'))}</dt><dd>${esc(equipment?.name || '—')}</dd></div><div><dt>${esc(t('Machine number'))}</dt><dd>${esc(equipment?.equipment_id || '—')}</dd></div><div><dt>${esc(t('Location / section'))}</dt><dd>${esc(machinePlace(equipment))}</dd></div><div><dt>${esc(t('Commissioning date'))}</dt><dd><input name="commissioning_date" type="date" value="${esc(commissioned)}"${lock}></dd></div><div><dt>${esc(t('Manufacturer'))}</dt><dd><input name="manufacturer" value="${esc(equipment?.manufacturer || '')}"${lock}></dd></div></dl>${saveFacts}</section><section><h3>${esc(t('Maintenance type key'))}</h3><table class="log-key"><thead><tr><th>${esc(t('Maintenance type'))}</th><th>${esc(t('Symbol'))}</th></tr></thead><tbody><tr><td>${esc(t('Corrective'))}</td><td>CM</td></tr><tr><td>${esc(t('Emergency'))}</td><td>EM</td></tr><tr><td>${esc(t('Oil change'))}</td><td>OC</td></tr></tbody></table></section></div><h3 class="log-table-title">${esc(t('Maintenance work and details'))}</h3><div class="sheet-scroll"><table class="lube-table log-table"><colgroup><col class="c-no"><col class="c-date"><col class="c-type"><col class="c-reason"><col class="c-work"><col class="c-order"><col class="c-parts"><col class="c-partno"><col class="c-qty"><col class="c-down"><col class="c-tech">${canMaintain() ? '<col class="c-remove no-print">' : ''}</colgroup><thead><tr><th>${esc(t('No.'))}</th><th>${esc(t('Maintenance date'))}</th><th>${esc(t('Maintenance type'))}</th><th>${esc(t('Reason for maintenance'))}</th><th>${esc(t('Work performed'))}</th><th>${esc(t('Work order no.'))}</th><th>${esc(t('Parts used'))}</th><th>${esc(t('Part No.'))}</th><th>${esc(t('Quantity'))}</th><th>${esc(t('Downtime time'))}</th><th>${esc(t('Technician name'))}</th>${canMaintain() ? `<th class="no-print">${esc(t('Delete'))}</th>` : ''}</tr></thead><tbody>${body}</tbody></table></div></form>`;
 }
 
 function drawRecords() {
@@ -1608,10 +1624,10 @@ function workOrderForm(order) {
     const kind = order.work_order_type === 'Preventive' ? t('Preventive') : order.work_order_type === 'Corrective' ? t('Curative') : t(order.work_order_type || '');
     const crew = order.crew_type === 'External' ? t('External maintenance team') : t('Company maintenance team');
     const resultDate = String(order.closing_date || '').slice(0, 10);
-    return `<form id="live-form" class="lube-paper job-order" data-order-id="${esc(order.work_order_id)}"><header class="lube-head"><img src="logo-rayan.png?v=2" alt="Rayan"><div><h2>${esc(t('Maintenance Job Order'))}</h2><p class="job-kind">${esc(kind)}</p><small>Maintenance Job Order</small></div><dl><div><dt>${esc(t('Form No.:'))}</dt><dd>PMF 17-04</dd></div><div><dt>${esc(t('Rev.'))}</dt><dd>a</dd></div></dl></header><div class="lube-meta"><label><span>${esc(t('Machine name'))}</span><input value="${esc(equipmentText(order))}" readonly></label><label><span>${esc(t('Repair order no.'))}</span><input value="${esc(order.work_order_id)}" readonly></label><label><span>${esc(t('Section'))}</span><input value="${esc(department)}" readonly></label><label><span>${esc(t('Date'))}</span><input type="date" value="${esc(String(order.planned_date || '').slice(0, 10))}" readonly></label></div><div class="job-crew"><b>${esc(crew)}</b></div><label class="job-block"><span>${esc(t('Fault'))}</span><textarea readonly>${esc(order.problem_description || '')}</textarea></label><label class="job-block"><span>${esc(t('Action taken'))}</span><textarea name="corrective_action">${esc(order.corrective_action || '')}</textarea></label><div class="job-block"><span>${esc(t('Technician signature'))}</span><input value="${esc(getSavedUser()?.full_name || assigneeNames(order))}" readonly></div><section class="daily-parts"><h3>${esc(t('Parts used'))}</h3><table class="lube-table"><thead><tr><th>${esc(t('No.'))}</th><th>${esc(t('Parts used'))}</th><th>${esc(t('Part No.'))}</th></tr></thead><tbody id="job-parts">${partRows}</tbody></table></section><label class="job-block"><span>${esc(t('Result'))}</span><textarea name="verification">${esc(order.verification || '')}</textarea></label><label class="job-result-date"><span>${esc(t('Date'))}</span><input name="result_date" type="date" value="${esc(resultDate)}"></label><p id="live-form-error" class="form-error"></p><div class="lube-actions"><button type="button" id="job-back">${esc(t('Back'))}</button><button type="submit">${esc(t('Save'))}</button></div></form>`;
+    return `<form id="live-form" class="lube-paper job-order" data-order-id="${esc(order.work_order_id)}"><header class="lube-head"><img src="logo-rayan.png?v=2" alt="Rayan"><div><h2>${esc(t('Maintenance Job Order'))}</h2><p class="job-kind">${esc(kind)}</p><small>Maintenance Job Order</small></div><dl><div><dt>${esc(t('Form No.:'))}</dt><dd>${esc(formNo('job_order'))}</dd></div><div><dt>${esc(t('Rev.'))}</dt><dd>a</dd></div></dl></header><div class="lube-meta"><label><span>${esc(t('Machine name'))}</span><input value="${esc(equipmentText(order))}" readonly></label><label><span>${esc(t('Repair order no.'))}</span><input value="${esc(order.work_order_id)}" readonly></label><label><span>${esc(t('Section'))}</span><input value="${esc(department)}" readonly></label><label><span>${esc(t('Date'))}</span><input type="date" value="${esc(String(order.planned_date || '').slice(0, 10))}" readonly></label></div><div class="job-crew"><b>${esc(crew)}</b></div><label class="job-block"><span>${esc(t('Fault'))}</span><textarea readonly>${esc(order.problem_description || '')}</textarea></label><label class="job-block"><span>${esc(t('Action taken'))}</span><textarea name="corrective_action">${esc(order.corrective_action || '')}</textarea></label><div class="job-block"><span>${esc(t('Technician signature'))}</span><input value="${esc(getSavedUser()?.full_name || assigneeNames(order))}" readonly></div><section class="daily-parts"><h3>${esc(t('Parts used'))}</h3><table class="lube-table"><thead><tr><th>${esc(t('No.'))}</th><th>${esc(t('Parts used'))}</th><th>${esc(t('Part No.'))}</th></tr></thead><tbody id="job-parts">${partRows}</tbody></table></section><label class="job-block"><span>${esc(t('Result'))}</span><textarea name="verification">${esc(order.verification || '')}</textarea></label><label class="job-result-date"><span>${esc(t('Date'))}</span><input name="result_date" type="date" value="${esc(resultDate)}"></label><p id="live-form-error" class="form-error"></p><div class="lube-actions"><button type="button" id="job-back">${esc(t('Back'))}</button><button type="submit">${esc(t('Save'))}</button></div></form>`;
   }
   const equipment = store.equipment.map((item) => `<option value="${esc(item.name)}"></option><option value="${esc(item.equipment_id)}"></option>`).join('');
-  return `<form id="live-form" class="lube-paper job-order"><header class="lube-head"><img src="logo-rayan.png?v=2" alt="Rayan"><div><h2>${esc(t('Maintenance Job Order'))}</h2><p class="job-kind"><label><input type="radio" name="work_order_type" value="Preventive" required> ${esc(t('Preventive'))}</label><label><input type="radio" name="work_order_type" value="Corrective" checked> ${esc(t('Curative'))}</label></p><small>Maintenance Job Order</small></div><dl><div><dt>${esc(t('Form No.:'))}</dt><dd>PMF 17-04</dd></div><div><dt>${esc(t('Rev.'))}</dt><dd>a</dd></div></dl></header><div class="lube-meta"><label><span>${esc(t('Machine name'))}</span><input name="machine_name" id="job-equipment" list="job-equipment-list" required autocomplete="off" placeholder="${esc(t('Equipment name or number'))}"><datalist id="job-equipment-list">${equipment}</datalist></label><label><span>${esc(t('Repair order no.'))}</span><input value="${esc(t('Created when saved'))}" readonly></label><label><span>${esc(t('Section'))}</span><input id="job-department" readonly></label><label><span>${esc(t('Date'))}</span><input name="planned_date" type="date" value="${today}" required></label></div><div class="job-crew"><label><input type="radio" name="crew_type" value="Company" checked> ${esc(t('Company maintenance team'))}</label><label><input type="radio" name="crew_type" value="External"> ${esc(t('External maintenance team'))}</label></div><label class="job-block"><span>${esc(t('Fault'))}</span><textarea name="problem_description" required></textarea></label><label class="job-block"><span>${esc(t('Action taken'))}</span><textarea name="corrective_action"></textarea></label><div class="job-block"><span>${esc(t('Technician signature'))}</span>${technicianChecks([])}</div><section class="daily-parts"><h3>${esc(t('Parts used'))}</h3><table class="lube-table"><thead><tr><th>${esc(t('No.'))}</th><th>${esc(t('Parts used'))}</th><th>${esc(t('Part No.'))}</th></tr></thead><tbody id="job-parts">${partRows}</tbody></table></section><label class="job-block"><span>${esc(t('Result'))}</span><textarea name="verification"></textarea></label><label class="job-result-date"><span>${esc(t('Date'))}</span><input name="result_date" type="date"></label><p id="live-form-error" class="form-error"></p><div class="lube-actions"><button type="button" id="job-back">${esc(t('Back'))}</button><button type="submit">${esc(t('Save'))}</button></div></form>`;
+  return `<form id="live-form" class="lube-paper job-order"><header class="lube-head"><img src="logo-rayan.png?v=2" alt="Rayan"><div><h2>${esc(t('Maintenance Job Order'))}</h2><p class="job-kind"><label><input type="radio" name="work_order_type" value="Preventive" required> ${esc(t('Preventive'))}</label><label><input type="radio" name="work_order_type" value="Corrective" checked> ${esc(t('Curative'))}</label></p><small>Maintenance Job Order</small></div><dl><div><dt>${esc(t('Form No.:'))}</dt><dd>${esc(formNo('job_order'))}</dd></div><div><dt>${esc(t('Rev.'))}</dt><dd>a</dd></div></dl></header><div class="lube-meta"><label><span>${esc(t('Machine name'))}</span><input name="machine_name" id="job-equipment" list="job-equipment-list" required autocomplete="off" placeholder="${esc(t('Equipment name or number'))}"><datalist id="job-equipment-list">${equipment}</datalist></label><label><span>${esc(t('Repair order no.'))}</span><input value="${esc(t('Created when saved'))}" readonly></label><label><span>${esc(t('Section'))}</span><input id="job-department" readonly></label><label><span>${esc(t('Date'))}</span><input name="planned_date" type="date" value="${today}" required></label></div><div class="job-crew"><label><input type="radio" name="crew_type" value="Company" checked> ${esc(t('Company maintenance team'))}</label><label><input type="radio" name="crew_type" value="External"> ${esc(t('External maintenance team'))}</label></div><label class="job-block"><span>${esc(t('Fault'))}</span><textarea name="problem_description" required></textarea></label><label class="job-block"><span>${esc(t('Action taken'))}</span><textarea name="corrective_action"></textarea></label><div class="job-block"><span>${esc(t('Technician signature'))}</span>${technicianChecks([])}</div><section class="daily-parts"><h3>${esc(t('Parts used'))}</h3><table class="lube-table"><thead><tr><th>${esc(t('No.'))}</th><th>${esc(t('Parts used'))}</th><th>${esc(t('Part No.'))}</th></tr></thead><tbody id="job-parts">${partRows}</tbody></table></section><label class="job-block"><span>${esc(t('Result'))}</span><textarea name="verification"></textarea></label><label class="job-result-date"><span>${esc(t('Date'))}</span><input name="result_date" type="date"></label><p id="live-form-error" class="form-error"></p><div class="lube-actions"><button type="button" id="job-back">${esc(t('Back'))}</button><button type="submit">${esc(t('Save'))}</button></div></form>`;
 }
 
 function planForm() {
@@ -2001,7 +2017,7 @@ async function drawLubrication() {
     : `<select id="lube-tech">${store.technicians.map((item) => `<option value="${esc(item.technician_id)}"${item.technician_id === current?.technician_id ? ' selected' : ''}>${esc(item.name)}</option>`).join('')}</select>`;
   const list = lubeCache.map((row) => `<button type="button" class="lube-open${current?.report_id === row.report_id ? ' selected' : ''}" data-lube="${esc(row.report_id)}"><b>${esc(fmtDate(row.report_date))}</b><small>${esc(row.technician_name)} · ${esc(t(row.shift))} · ${row.line_count}</small></button>`).join('') || `<p class="live-note">${esc(t('No lubrication reports yet.'))}</p>`;
   document.getElementById('workspace').className = 'workspace lube-board';
-  document.getElementById('workspace').innerHTML = `<aside class="panel lube-list"><div class="lube-list-head"><b>${esc(t('Reports'))}</b><button type="button" class="detail-button" id="lube-new">${esc(t('New report'))}</button></div>${list}</aside><form id="lube-form" class="lube-paper"><header class="lube-head"><img src="logo-rayan.png?v=2" alt="Rayan"><div><h2>${esc(t('Daily report for the lubrication technician'))}</h2><p>${esc(t('Oil and grease change log'))}</p><small>${esc(t('Mechanical Maintenance Department'))}</small></div><dl><div><dt>${esc(t('Form No.:'))}</dt><dd>PMF 17-05 rev.a</dd></div><div><dt>${esc(t('Report No.'))}</dt><dd>${esc(current?.report_id || t('New'))}</dd></div></dl></header><div class="lube-meta"><label><span>${esc(t('Shift'))}</span><select id="lube-shift">${LUBE_SHIFTS.map((shift) => `<option value="${esc(shift)}"${shift === (current?.shift || LUBE_SHIFTS[0]) ? ' selected' : ''}>${esc(t(shift))}</option>`).join('')}</select></label><label><span>${esc(t("Technician's name"))}</span>${techField}</label><label><span>${esc(t('Day'))}</span><input id="lube-day" value="${esc(t(current?.day_name || lubeDayName(reportDate)))}" readonly></label><label><span>${esc(t('Date'))}</span><input id="lube-date" type="date" value="${esc(reportDate)}" required></label></div><table class="lube-table"><thead><tr><th>${esc(t('Seq.'))}</th><th>${esc(t('Machine'))}</th><th>${esc(t('Work type'))}</th><th>${esc(t('Component'))}</th><th>${esc(t('Qty'))}</th><th>${esc(t('Oil or grease name'))}</th><th>${esc(t('Remarks'))}</th></tr></thead><tbody id="lube-rows">${lines.map(lubeRow).join('')}</tbody></table><div class="lube-foot"><span>PMF 17-05 rev.a</span><span>${esc(t('Mechanical Maintenance Department'))}</span></div><p class="lube-help no-print">${esc(t('An equipment number that is not registered is sent to the maintenance engineer for approval.'))}</p><p id="lube-error" class="form-error"></p><div class="lube-actions no-print"><button type="button" id="lube-add">${esc(t('Add row'))}</button><button type="button" id="lube-print">${esc(t('Print'))}</button>${current && canMaintain() ? `<button type="button" class="detail-button danger" data-delete="/lubrication-reports" data-delete-id="${esc(current.report_id)}">${esc(t('Delete'))}</button>` : ''}</div></form>`;
+  document.getElementById('workspace').innerHTML = `<aside class="panel lube-list"><div class="lube-list-head"><b>${esc(t('Reports'))}</b><button type="button" class="detail-button" id="lube-new">${esc(t('New report'))}</button></div>${list}</aside><form id="lube-form" class="lube-paper"><header class="lube-head"><img src="logo-rayan.png?v=2" alt="Rayan"><div><h2>${esc(t('Daily report for the lubrication technician'))}</h2><p>${esc(t('Oil and grease change log'))}</p><small>${esc(t('Mechanical Maintenance Department'))}</small></div><dl><div><dt>${esc(t('Form No.:'))}</dt><dd>${esc(formNo('lubrication'))}</dd></div><div><dt>${esc(t('Report No.'))}</dt><dd>${esc(current?.report_id || t('New'))}</dd></div></dl></header><div class="lube-meta"><label><span>${esc(t('Shift'))}</span><select id="lube-shift">${LUBE_SHIFTS.map((shift) => `<option value="${esc(shift)}"${shift === (current?.shift || LUBE_SHIFTS[0]) ? ' selected' : ''}>${esc(t(shift))}</option>`).join('')}</select></label><label><span>${esc(t("Technician's name"))}</span>${techField}</label><label><span>${esc(t('Day'))}</span><input id="lube-day" value="${esc(t(current?.day_name || lubeDayName(reportDate)))}" readonly></label><label><span>${esc(t('Date'))}</span><input id="lube-date" type="date" value="${esc(reportDate)}" required></label></div><table class="lube-table"><thead><tr><th>${esc(t('Seq.'))}</th><th>${esc(t('Machine'))}</th><th>${esc(t('Work type'))}</th><th>${esc(t('Component'))}</th><th>${esc(t('Qty'))}</th><th>${esc(t('Oil or grease name'))}</th><th>${esc(t('Remarks'))}</th></tr></thead><tbody id="lube-rows">${lines.map(lubeRow).join('')}</tbody></table><div class="lube-foot"><span>PMF 17-05 rev.a</span><span>${esc(t('Mechanical Maintenance Department'))}</span></div><p class="lube-help no-print">${esc(t('An equipment number that is not registered is sent to the maintenance engineer for approval.'))}</p><p id="lube-error" class="form-error"></p><div class="lube-actions no-print"><button type="button" id="lube-add">${esc(t('Add row'))}</button><button type="button" id="lube-print">${esc(t('Print'))}</button>${current && canMaintain() ? `<button type="button" class="detail-button danger" data-delete="/lubrication-reports" data-delete-id="${esc(current.report_id)}">${esc(t('Delete'))}</button>` : ''}</div></form>`;
   if (viewer) document.querySelectorAll('#lube-form input, #lube-form select, #lube-add').forEach((node) => { node.disabled = true; });
   document.querySelectorAll('#lube-rows tr').forEach((row) => {
     const code = row.querySelector('[data-field="equipment_code"]');
@@ -2378,7 +2394,7 @@ async function drawDailyReport() {
   const list = dailyListHtml(visibleReports(), report?.report_id || '', techName);
   const workspace = document.getElementById('workspace');
   workspace.className = 'workspace lube-board';
-  workspace.innerHTML = `<aside class="panel lube-list"><div class="lube-list-head"><b>${esc(t('Reports'))}</b><button type="button" class="detail-button" id="daily-new">${esc(t('New report'))}</button></div><label class="daily-filter"><span>${esc(t('Date'))}</span><input id="daily-filter" type="date" value="${esc(ui.dailyFilter || '')}"></label>${rejectedFieldHtml(dailyCache, report?.report_id || '')}${windowLock ? `<p class="daily-window no-print">${esc(t('You can send one report a day. A new report opens 24 hours after the last one was sent.'))}</p>` : ''}<div id="daily-report-list">${list}</div></aside><form id="daily-form" class="lube-paper daily-paper" data-report-id="${esc(report?.report_id || '')}" data-status="${esc(report?.status || 'Draft')}"><header class="lube-head"><img src="logo-rayan.png?v=2" alt="Rayan"><div><h2>${esc(t('DAILY MAINTENANCE REPORT'))}</h2><p>${esc(t(report?.status || 'Draft report'))}</p><small>${esc(t('Mechanical Maintenance Department'))}</small></div><dl><div><dt>${esc(t('Form No.:'))}</dt><dd>DR</dd></div><div><dt>${esc(t('Approved by'))}</dt><dd>${esc(report?.approved_by || '—')}</dd></div></dl></header><div class="lube-meta"><label><span>${esc(t('Shift'))}</span><select id="daily-shift">${LUBE_SHIFTS.map((shift) => `<option value="${esc(shift)}"${shift === (report?.shift || LUBE_SHIFTS[0]) ? ' selected' : ''}>${esc(t(shift))}</option>`).join('')}</select></label><label><span>${esc(t("Technician's name"))}</span><input id="daily-tech" value="${esc(techName)}" readonly></label><label><span>${esc(t('Plant'))}</span><select id="daily-plant">${plants}</select></label><label><span>${esc(t('Date'))}</span><input id="daily-date" type="date" value="${esc(reportDate)}" required></label></div><div class="sheet-scroll"><table class="lube-table"><thead><tr><th>${esc(t('Seq.'))}</th><th>${esc(t('Machine'))}</th><th>${esc(t('Maintenance Type'))}</th><th>${esc(t('Repair Actions'))}</th><th>${esc(t('Start Time'))}</th><th>${esc(t('End Time'))}</th><th>${esc(t('Downtime (hrs)'))}</th></tr></thead><tbody id="daily-rows">${items.map(dailyRow).join('')}</tbody></table></div><section class="daily-parts"><div class="lube-list-head"><h3>${esc(t('SPARE PARTS USED'))}</h3><button type="button" class="no-print" id="daily-add-part">${esc(t('Add part'))}</button></div><div class="sheet-scroll"><table class="lube-table"><thead><tr><th>${esc(t('No.'))}</th><th>${esc(t('Part'))}</th><th>${esc(t('Part No.'))}</th><th>${esc(t('Qty'))}</th></tr></thead><tbody id="daily-parts">${parts.map(dailyPartRow).join('')}</tbody></table></div></section><label class="daily-notes"><span>${esc(t('GENERAL NOTES'))}</span><div class="daily-note-box"><textarea id="daily-notes">${esc(report?.general_notes || '')}</textarea><b class="daily-tdt">TDT: <span id="daily-total">0.00</span></b></div></label><p id="daily-error" class="form-error"></p><div class="lube-actions no-print"><button type="button" id="daily-add">${esc(t('Add row'))}</button>${returned ? `<button type="button" id="daily-resend">${esc(t('Resend the report'))}</button>` : ''}<button type="button" id="daily-print">${esc(t('Print'))}</button></div></form>`;
+  workspace.innerHTML = `<aside class="panel lube-list"><div class="lube-list-head"><b>${esc(t('Reports'))}</b><button type="button" class="detail-button" id="daily-new">${esc(t('New report'))}</button></div><label class="daily-filter"><span>${esc(t('Date'))}</span><input id="daily-filter" type="date" value="${esc(ui.dailyFilter || '')}"></label>${rejectedFieldHtml(dailyCache, report?.report_id || '')}${windowLock ? `<p class="daily-window no-print">${esc(t('You can send one report a day. A new report opens 24 hours after the last one was sent.'))}</p>` : ''}<div id="daily-report-list">${list}</div></aside><form id="daily-form" class="lube-paper daily-paper" data-report-id="${esc(report?.report_id || '')}" data-status="${esc(report?.status || 'Draft')}"><header class="lube-head"><img src="logo-rayan.png?v=2" alt="Rayan"><div><h2>${esc(t('DAILY MAINTENANCE REPORT'))}</h2><p>${esc(t(report?.status || 'Draft report'))}</p><small>${esc(t('Mechanical Maintenance Department'))}</small></div><dl><div><dt>${esc(t('Form No.:'))}</dt><dd>${esc(formNo('daily'))}</dd></div><div><dt>${esc(t('Approved by'))}</dt><dd>${esc(report?.approved_by || '—')}</dd></div></dl></header><div class="lube-meta"><label><span>${esc(t('Shift'))}</span><select id="daily-shift">${LUBE_SHIFTS.map((shift) => `<option value="${esc(shift)}"${shift === (report?.shift || LUBE_SHIFTS[0]) ? ' selected' : ''}>${esc(t(shift))}</option>`).join('')}</select></label><label><span>${esc(t("Technician's name"))}</span><input id="daily-tech" value="${esc(techName)}" readonly></label><label><span>${esc(t('Plant'))}</span><select id="daily-plant">${plants}</select></label><label><span>${esc(t('Date'))}</span><input id="daily-date" type="date" value="${esc(reportDate)}" required></label></div><div class="sheet-scroll"><table class="lube-table"><thead><tr><th>${esc(t('Seq.'))}</th><th>${esc(t('Machine'))}</th><th>${esc(t('Maintenance Type'))}</th><th>${esc(t('Repair Actions'))}</th><th>${esc(t('Start Time'))}</th><th>${esc(t('End Time'))}</th><th>${esc(t('Downtime (hrs)'))}</th></tr></thead><tbody id="daily-rows">${items.map(dailyRow).join('')}</tbody></table></div><section class="daily-parts"><div class="lube-list-head"><h3>${esc(t('SPARE PARTS USED'))}</h3><button type="button" class="no-print" id="daily-add-part">${esc(t('Add part'))}</button></div><div class="sheet-scroll"><table class="lube-table"><thead><tr><th>${esc(t('No.'))}</th><th>${esc(t('Part'))}</th><th>${esc(t('Part No.'))}</th><th>${esc(t('Qty'))}</th></tr></thead><tbody id="daily-parts">${parts.map(dailyPartRow).join('')}</tbody></table></div></section><label class="daily-notes"><span>${esc(t('GENERAL NOTES'))}</span><div class="daily-note-box"><textarea id="daily-notes">${esc(report?.general_notes || '')}</textarea><b class="daily-tdt">TDT: <span id="daily-total">0.00</span></b></div></label><p id="daily-error" class="form-error"></p><div class="lube-actions no-print"><button type="button" id="daily-add">${esc(t('Add row'))}</button>${returned ? `<button type="button" id="daily-resend">${esc(t('Resend the report'))}</button>` : ''}<button type="button" id="daily-print">${esc(t('Print'))}</button></div></form>`;
   if (locked) document.querySelectorAll('#daily-form input, #daily-form select, #daily-form textarea, #daily-add, #daily-add-part').forEach((node) => { node.disabled = true; });
   if (returned) {
     ['daily-shift', 'daily-plant', 'daily-date', 'daily-notes'].forEach((id) => {
@@ -2437,6 +2453,41 @@ async function drawDailyReport() {
   document.getElementById('daily-form')?.addEventListener('submit', (event) => { event.preventDefault(); saveDailyReport(false); });
 }
 
+const ISO_DOCUMENTS = [
+  ['daily', 'DAILY MAINTENANCE REPORT'],
+  ['job_order', 'Maintenance Job Order'],
+  ['lubrication', 'Oil and grease change log'],
+  ['motor', 'Motor condition'],
+  ['equipment_log', 'Equipment maintenance log'],
+  ['annual_plan', 'Annual preventive maintenance plan'],
+];
+
+function drawIso() {
+  document.getElementById('metric-grid').innerHTML = '';
+  document.getElementById('workspace').className = 'workspace';
+  document.getElementById('workspace').innerHTML = `<form id="iso-form" class="panel iso-form">${ISO_DOCUMENTS.map(([key, label]) => `<label><span>${esc(t(label))}</span><input name="${esc(key)}" maxlength="80" value="${esc(formNo(key))}" autocomplete="off"></label>`).join('')}</form>`;
+  document.getElementById('iso-form')?.addEventListener('submit', (event) => {
+    event.preventDefault();
+    saveIsoForms();
+  });
+}
+
+async function saveIsoForms() {
+  const form = document.getElementById('iso-form');
+  if (!form || !canMaintain()) return;
+  const forms = {};
+  [...form.elements].forEach((field) => {
+    if (field.name) forms[field.name] = field.value.trim();
+  });
+  try {
+    isoForms = await apiRequest('/form-numbers', { method: 'PUT', body: JSON.stringify({ forms }) });
+    toast(t('Saved.'));
+    drawIso();
+  } catch (error) {
+    toast(error.message);
+  }
+}
+
 async function draw(page) {
   if (page === 'dashboard') await drawDashboard();
   else if (page === 'work-orders') drawWorkOrders();
@@ -2447,6 +2498,7 @@ async function draw(page) {
   else if (page === 'lubrication') await drawLubrication();
   else if (page === 'motor-condition') await drawMotorCondition();
   else if (page === 'daily-reports') await drawDailyReport();
+  else if (page === 'iso') drawIso();
   else drawRecords();
 }
 
@@ -2496,6 +2548,7 @@ document.getElementById('primary-action').addEventListener('click', (event) => {
   else if (ui.page === 'lubrication') saveLubrication();
   else if (ui.page === 'motor-condition') saveMotorCondition();
   else if (ui.page === 'daily-reports') saveDailyReport(true);
+  else if (ui.page === 'iso') saveIsoForms();
   else openCreate();
 }, true);
 
@@ -2527,6 +2580,8 @@ render = function liveRender(page) {
     name = 'dashboard';
   } else if (name === 'new-equipment' || name === 'equipment') {
     name = canMaintain() ? 'equipment' : 'dashboard';
+  } else if (name === 'iso' && !canMaintain()) {
+    name = 'dashboard';
   }
   if (name !== ui.page) {
     ui.tab = openReports ? 'From reports' : DEFAULT_TAB[name];
