@@ -186,15 +186,21 @@ def ensure_additive_columns():
                 if machine and (length is None or length < 150):
                     conn.execute(text('ALTER TABLE motor_condition_readings ALTER COLUMN machine TYPE VARCHAR(150)'))
         if 'equipment' in tables:
-            existing = {c['name'] for c in inspector.get_columns('equipment')}
+            columns = {c['name']: c for c in inspector.get_columns('equipment')}
             additions = {
                 'section_id': 'VARCHAR(80)',
                 'commissioning_date': 'DATE',
             }
             with engine.begin() as conn:
                 for name, sql_type in additions.items():
-                    if name not in existing:
+                    if name not in columns:
                         conn.execute(text(f'ALTER TABLE equipment ADD COLUMN {name} {sql_type}'))
+                criticality = columns.get('criticality') or {}
+                column_type = criticality.get('type') if isinstance(criticality, dict) else None
+                length = getattr(column_type, 'length', None)
+                if criticality and (length is None or length < 40):
+                    conn.execute(text('ALTER TABLE equipment ALTER COLUMN criticality TYPE VARCHAR(40)'))
+                    conn.execute(text("ALTER TABLE equipment ALTER COLUMN criticality SET DEFAULT 'Important'"))
     except Exception:
         # Do not prevent the API from starting because of an optional migration.
         # The error will be visible in the application logs.
@@ -633,6 +639,11 @@ EQUIPMENT_STATUSES = {
     "Under Maintenance",
     "Out of Service",
 }
+EQUIPMENT_CRITICALITY = {
+    "Critical",
+    "Very important",
+    "Important",
+}
 
 def as_dict(obj):
     return {column.name: getattr(obj, column.name) for column in obj.__table__.columns}
@@ -646,6 +657,8 @@ def create_equipment(data:EquipmentCreate,db:Session=Depends(get_db),u=Depends(a
     if not db.query(PlantLine).filter_by(line_id=data.line_id, plant_id=data.plant_id).first():
         raise HTTPException(400, 'The line number does not belong to the selected plant')
     section = section_for_line(db, data.line_id, data.section_id)
+    if data.criticality not in EQUIPMENT_CRITICALITY:
+        raise HTTPException(400, 'Choose the equipment importance')
     if data.status not in EQUIPMENT_STATUSES: raise HTTPException(400,'Invalid equipment status')
     if db.query(Equipment).filter_by(equipment_id=data.equipment_id).first(): raise HTTPException(409,'Equipment ID already exists')
     payload = data.model_dump()
@@ -701,7 +714,7 @@ def pending_equipment(db: Session = Depends(get_db), u=Depends(auth)):
     return [as_dict(row) for row in rows]
 
 @app.post('/pending-equipment/{item_id}/approve')
-def approve_pending_equipment(item_id: int, plant_id: str | None = None, line_id: str | None = None, name: str | None = None, section_id: str | None = None, db: Session = Depends(get_db), u=Depends(role(*ENGINEER))):
+def approve_pending_equipment(item_id: int, plant_id: str | None = None, line_id: str | None = None, name: str | None = None, section_id: str | None = None, criticality: str | None = None, db: Session = Depends(get_db), u=Depends(role(*ENGINEER))):
     row = db.get(PendingEquipment, item_id)
     if not row or row.status != 'Pending':
         raise HTTPException(404, 'Pending equipment was not found')
@@ -727,6 +740,9 @@ def approve_pending_equipment(item_id: int, plant_id: str | None = None, line_id
         raise HTTPException(400, 'Select a plant and a line before approving this equipment.')
     active_plant_or_404(db, row.plant_id)
     section = section_for_line(db, line.line_id, section_id)
+    level = (criticality or '').strip() or 'Important'
+    if level not in EQUIPMENT_CRITICALITY:
+        raise HTTPException(400, 'Choose the equipment importance')
     equipment = Equipment(
         equipment_id=row.equipment_code,
         name=row.equipment_name,
@@ -735,7 +751,7 @@ def approve_pending_equipment(item_id: int, plant_id: str | None = None, line_id
         line_id=line.line_id,
         section_id=section.section_id if section else None,
         status='Running',
-        criticality='B',
+        criticality=level,
     )
     db.add(equipment)
     row.status = 'Approved'
@@ -804,7 +820,7 @@ def register_plan_equipment(db, user, plant_id: str, code: str, name: str, maint
         name=name,
         equipment_type='Machine',
         plant_id=plant_id,
-        criticality='B',
+        criticality='Important',
         status='Running',
         notes='Added from the preventive maintenance plan.',
     )

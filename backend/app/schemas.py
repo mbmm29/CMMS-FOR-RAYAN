@@ -99,7 +99,7 @@ class EquipmentBase(BaseModel):
     commissioning_date: date | None = None
     model: str | None = None
     serial_number: str | None = None
-    criticality: str = "B"
+    criticality: str = "Important"
     status: str = "Running"
     capacity: float | None = None
     capacity_unit: str | None = None

@@ -54,7 +54,7 @@ class Equipment(Base):
     commissioning_date: Mapped[date|None]=mapped_column(Date,nullable=True)
     model: Mapped[str|None]=mapped_column(String(100),nullable=True)
     serial_number: Mapped[str|None]=mapped_column(String(100),nullable=True)
-    criticality: Mapped[str]=mapped_column(String(1),default='B')
+    criticality: Mapped[str]=mapped_column(String(40),default='Important')
     status: Mapped[str]=mapped_column(String(50),default='Running')
     capacity: Mapped[float|None]=mapped_column(Float,nullable=True)
     capacity_unit: Mapped[str|None]=mapped_column(String(30),nullable=True)

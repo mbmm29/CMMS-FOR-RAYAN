@@ -24,12 +24,23 @@ function esc(value) {
   return String(value ?? '').replace(/[&<>"']/g, (ch) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch]));
 }
 
+const CRITICALITY_LEVELS = ['Critical', 'Very important', 'Important'];
+
+function criticalityLabel(value) {
+  return { A: 'Critical', B: 'Very important', C: 'Important' }[value] || value || '—';
+}
+
+function isCriticalAsset(item) {
+  const level = criticalityLabel(item?.criticality);
+  return level === 'Critical';
+}
+
 function liveBadge(text) {
   const value = text == null || text === '' ? '—' : String(text);
   let tone = 'blue';
   if (/Completed|Operational|Published|Good|Running|Closed|Active|Approved/i.test(value)) tone = 'green';
-  else if (/Overdue|Out of|High|Rejected|Cancelled/i.test(value)) tone = 'red';
-  else if (/Progress|Maintenance|Due|Medium|Upcoming|Returned|Submitted/i.test(value)) tone = 'orange';
+  else if (/Overdue|Out of|High|Rejected|Cancelled|^Critical$/i.test(value)) tone = 'red';
+  else if (/Progress|Maintenance|Due|Medium|Upcoming|Returned|Submitted|Very important/i.test(value)) tone = 'orange';
   else if (/Draft|Approval|Hold|Inactive|Low/i.test(value)) tone = 'purple';
   return `<span class="badge ${tone}">${esc(t(value))}</span>`;
 }
@@ -1287,7 +1298,7 @@ function equipmentDetail(selected) {
   return detailPanel('Equipment Details', selected?.status || '—', selected?.equipment_id || '—', selected?.name || '', [
     ['Category', selected?.equipment_type], ['Location', placeOf(selected)], ['Section', sectionName(selected?.section_id) || '—'], ['Area', selected?.area],
     ['Manufacturer', selected?.manufacturer], ['Model', selected?.model], ['Serial number', selected?.serial_number],
-    ['Criticality', selected?.criticality], ['Condition', selected?.condition], ['Capacity', capacity],
+    ['Criticality', criticalityLabel(selected?.criticality)], ['Condition', selected?.condition], ['Capacity', capacity],
     ['Motor power (kW)', selected?.motor_power_kw ?? '—'], ['Operating hours', selected?.operating_hours ?? '—'],
     ['Notes', selected?.notes],
   ]);
@@ -1299,7 +1310,7 @@ function drawEquipment() {
     return;
   }
   const rows = visibleEquipment().filter((item) => {
-    if (ui.tab === 'Critical Assets') return item.criticality === 'A';
+    if (ui.tab === 'Critical Assets') return isCriticalAsset(item);
     if (ui.tab === 'Out of Service') return item.status === 'Out of Service';
     if (ui.tab === 'Under Maintenance') return item.status === 'Under Maintenance';
     return true;
@@ -1312,9 +1323,9 @@ function drawEquipment() {
     ['Under Maintenance', String(all.filter((item) => item.status === 'Under Maintenance').length), '⚒', 'orange', ''],
     ['Out of Service', String(all.filter((item) => item.status === 'Out of Service').length), '×', 'red', ''],
     ['From reports', String((store.pending || []).length), '＋', 'purple', ''],
-    ['Critical Assets', String(all.filter((item) => item.criticality === 'A').length), '◈', 'red', ''],
+    ['Critical Assets', String(all.filter(isCriticalAsset).length), '◈', 'red', ''],
   ]);
-  const body = rows.map((item) => `<tr data-row="${esc(item.equipment_id)}" class="${selected && selected.equipment_id === item.equipment_id ? 'selected' : ''}">${cell(esc(item.equipment_id), true)}${cell(esc(item.name))}${cell(esc(item.equipment_type))}${cell(esc(placeOf(item)))}${cell(liveBadge(item.status))}${cell(liveBadge(item.condition || '—'))}${cell(liveBadge(item.criticality))}</tr>`);
+  const body = rows.map((item) => `<tr data-row="${esc(item.equipment_id)}" class="${selected && selected.equipment_id === item.equipment_id ? 'selected' : ''}">${cell(esc(item.equipment_id), true)}${cell(esc(item.name))}${cell(esc(item.equipment_type))}${cell(esc(placeOf(item)))}${cell(liveBadge(item.status))}${cell(liveBadge(item.condition || '—'))}${cell(liveBadge(criticalityLabel(item.criticality)))}</tr>`);
   const detail = ui.mode === 'create' ? equipmentForm() : equipmentDetail(selected);
   document.getElementById('workspace').className = 'workspace';
   document.getElementById('workspace').innerHTML = `<section class="panel">${filtersHtml()}${equipmentTabs()}${tableShell(['Equipment Code', 'Equipment Name', 'Category', 'Location (Plant / Line)', 'Status', 'Condition', 'Criticality'], body, shown(rows.length, all.length, 'equipment'))}</section>${detail}`;
@@ -1556,12 +1567,12 @@ function equipmentForm() {
     field('Plant', selectField('plant_id', plants, true)),
     field('Line number', '<select name="line_id" required><option value=""></option></select>'),
     field('Section', '<select name="section_id"><option value=""></option></select>'),
+    field('Criticality', selectField('criticality', equipmentChoice(CRITICALITY_LEVELS))),
     field('Area', '<input name="area">'),
     field('Manufacturer', '<input name="manufacturer">'),
     field('Model', '<input name="model">'),
     field('Serial number', '<input name="serial_number">'),
     field('Status', selectField('status', equipmentChoice(['Running', 'Under Maintenance', 'Out of Service'], 'Running'))),
-    field('Criticality', selectField('criticality', equipmentChoice(['A', 'B', 'C'], 'B'))),
     field('Condition', selectField('condition', equipmentChoice(['Good', 'Fair', 'Poor']), false)),
     field('Capacity', '<input name="capacity" type="number" min="0" step="any">'),
     field('Capacity unit', '<input name="capacity_unit">'),
@@ -1774,7 +1785,7 @@ function drawEquipmentFromReports() {
     const plant = store.plants.find((item) => item.plant_id === row.plant_id)?.name || row.plant_id || '—';
     return `<tr data-row="${esc(row.id)}" class="${selected && selected.id === row.id ? 'selected' : ''}">${cell(esc(row.equipment_code), true)}${cell(esc(row.equipment_name))}${cell(esc(plant))}${cell(esc(row.line_number || '—'))}${cell(esc(technicianName(row.technician_id)))}</tr>`;
   });
-  const reviewForm = `<form class="live-form" id="pending-review"><label>${esc(t('Equipment name'))}<input id="pending-name" value="${esc(selected?.equipment_name || '')}" required></label><label>${esc(t('Plant'))}<select id="pending-plant"><option value="">${esc(t('Select'))}</option>${openPlants().map((plant) => `<option value="${esc(plant.plant_id)}"${plant.plant_id === selected?.plant_id ? ' selected' : ''}>${esc(plant.name)}</option>`).join('')}</select></label><label>${esc(t('Line number'))}<select id="pending-line"><option value="">${esc(t('Select'))}</option></select></label><label>${esc(t('Section'))}<select id="pending-section"><option value="">${esc(t('No section'))}</option></select></label><div class="summary-row"><span>${esc(t('Technician'))}</span><b>${esc(technicianName(selected?.technician_id))}</b></div><div class="summary-row"><span>${esc(t('Report'))}</span><b>${esc(pendingSource(selected))} ${esc(selected?.report_id || '')}</b></div></form><div class="assign-block"><button class="detail-button primary" type="button" id="approve-equipment">${esc(t('Approve'))}</button><button class="detail-button" type="button" id="reject-equipment">${esc(t('Reject'))}</button><p id="pending-error" class="form-error"></p></div>`;
+  const reviewForm = `<form class="live-form" id="pending-review"><label>${esc(t('Equipment name'))}<input id="pending-name" value="${esc(selected?.equipment_name || '')}" required></label><label>${esc(t('Plant'))}<select id="pending-plant"><option value="">${esc(t('Select'))}</option>${openPlants().map((plant) => `<option value="${esc(plant.plant_id)}"${plant.plant_id === selected?.plant_id ? ' selected' : ''}>${esc(plant.name)}</option>`).join('')}</select></label><label>${esc(t('Line number'))}<select id="pending-line"><option value="">${esc(t('Select'))}</option></select></label><label>${esc(t('Section'))}<select id="pending-section"><option value="">${esc(t('No section'))}</option></select></label><label>${esc(t('Criticality'))}<select id="pending-criticality" required><option value="">${esc(t('Select'))}</option>${equipmentChoice(CRITICALITY_LEVELS)}</select></label><div class="summary-row"><span>${esc(t('Technician'))}</span><b>${esc(technicianName(selected?.technician_id))}</b></div><div class="summary-row"><span>${esc(t('Report'))}</span><b>${esc(pendingSource(selected))} ${esc(selected?.report_id || '')}</b></div></form><div class="assign-block"><button class="detail-button primary" type="button" id="approve-equipment">${esc(t('Approve'))}</button><button class="detail-button" type="button" id="reject-equipment">${esc(t('Reject'))}</button><p id="pending-error" class="form-error"></p></div>`;
   const review = selected ? reviewForm : `<p class="live-note">${esc(t('No new equipment'))}</p>`;
   const detail = ui.mode === 'create' ? equipmentForm() : `<aside class="panel detail pending-review"><h2>${esc(t('From reports'))}</h2><div class="detail-top"><div class="machine">⚙</div>${selected ? liveBadge('Pending') : ''}<h3>${esc(selected?.equipment_code || '—')}</h3></div>${review}</aside>`;
   document.getElementById('workspace').className = 'workspace';
@@ -1813,12 +1824,13 @@ async function decidePending(row, decision) {
       const plant = document.getElementById('pending-plant')?.value || '';
       const line = document.getElementById('pending-line')?.value || '';
       const section = document.getElementById('pending-section')?.value || '';
+      const criticality = document.getElementById('pending-criticality')?.value || '';
       const name = document.getElementById('pending-name')?.value.trim() || '';
-      if (!name || !plant || !line) {
-        if (error) error.textContent = t('Enter the name, plant, and line before approving this equipment.');
+      if (!name || !plant || !line || !criticality) {
+        if (error) error.textContent = t(!criticality ? 'Choose the equipment importance' : 'Enter the name, plant, and line before approving this equipment.');
         return;
       }
-      const params = new URLSearchParams({ plant_id: plant, line_id: line, name });
+      const params = new URLSearchParams({ plant_id: plant, line_id: line, name, criticality });
       if (section) params.set('section_id', section);
       path += `?${params}`;
     }

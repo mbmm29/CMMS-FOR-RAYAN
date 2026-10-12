@@ -632,6 +632,10 @@ const CMMS_AR = {
   'Delete this section? Equipment stays on the line.': 'حذف هذا القسم؟ تبقى المعدات على الخط.',
   'No sections on this line yet.': 'لا توجد أقسام على هذا الخط بعد.',
   'Choose a line before assigning a section': 'اختر خطاً قبل تعيين القسم',
+  'Critical': 'حرج',
+  'Very important': 'مهمة جداً',
+  'Important': 'مهمة',
+  'Choose the equipment importance': 'اختر أهمية المعدة',
 };
 
 function currentLang() {
