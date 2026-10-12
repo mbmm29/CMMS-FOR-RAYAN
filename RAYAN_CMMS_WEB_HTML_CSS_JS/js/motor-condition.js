@@ -1,6 +1,36 @@
 let motorCatalog = null;
 let motorSheets = [];
+let motorDayTimer = 0;
 const motorUi = { group: 'pm', place: 'sheet', date: '', id: '', query: '' };
+
+function plantClock(options) {
+  const parts = new Intl.DateTimeFormat('en-GB', { timeZone: 'Asia/Baghdad', ...options }).formatToParts(new Date());
+  return Object.fromEntries(parts.map((part) => [part.type, part.value]));
+}
+
+function plantToday() {
+  const value = plantClock({ year: 'numeric', month: '2-digit', day: '2-digit' });
+  return `${value.year}-${value.month}-${value.day}`;
+}
+
+function msUntilPlantMidnight() {
+  const value = plantClock({ hour: '2-digit', minute: '2-digit', second: '2-digit', hourCycle: 'h23' });
+  const hour = Number(value.hour) % 24;
+  const minute = Number(value.minute);
+  const second = Number(value.second);
+  return ((23 - hour) * 3600 + (59 - minute) * 60 + (60 - second)) * 1000;
+}
+
+function armMotorMidnight() {
+  window.clearTimeout(motorDayTimer);
+  motorDayTimer = window.setTimeout(() => {
+    motorUi.date = plantToday();
+    motorUi.id = '';
+    motorUi.group = 'pm';
+    motorUi.place = 'sheet';
+    drawMotorCondition();
+  }, Math.max(1000, msUntilPlantMidnight()));
+}
 
 function motorGroup(key) {
   return motorCatalog?.groups.find((group) => group.key === key) || null;
@@ -217,7 +247,7 @@ function motorTableRow(row, index) {
 async function drawMotorCondition() {
   if (!motorCatalog) motorCatalog = await apiRequest('/motor-condition/catalog');
   motorSheets = await apiRequest('/motor-condition');
-  if (!motorUi.date) motorUi.date = isoDate(new Date());
+  if (!motorUi.date) motorUi.date = plantToday();
   if (!motorUi.place) motorUi.place = 'sheet';
   if (!motorUi.group) motorUi.group = 'pm';
   let current = null;
@@ -255,11 +285,15 @@ async function drawMotorCondition() {
   ])}${motorHighlights(highlights)}`;
   const emptyNote = ready.length ? 'No equipment matches this filter.' : 'No equipment is scheduled from preventive maintenance for this day.';
   const rows = `${matched.length ? matched.map(motorTableRow).join('') : `<tr><td class="live-note" colspan="9">${esc(t(emptyNote))}</td></tr>`}${kept.map((row, index) => motorTableRow(row, index + 1000).replace('<tr>', '<tr class="motor-kept">')).join('')}`;
+  const openToday = motorUi.date === plantToday();
+  const dayNote = openToday
+    ? 'This report can be updated until midnight. A new form opens at 12:00 AM.'
+    : "This day's report is closed. A new form opens at 12:00 AM.";
   const inspector = current?.inspector_name || getSavedUser()?.full_name || '';
   const groupKey = current?.group_key || motorUi.group || 'pm';
   const placeKey = current?.place_key || motorUi.place || 'sheet';
   document.getElementById('workspace').className = 'workspace lube-board';
-  document.getElementById('workspace').innerHTML = `${typeof filtersHtml === 'function' ? filtersHtml() : ''}<aside class="panel lube-list motor-reports"><div class="lube-list-head"><b>${esc(t('Reports'))}</b><button type="button" class="detail-button" id="motor-new">${esc(t('New report'))}</button></div><label class="daily-filter"><span>${esc(t('Search reports'))}</span><input id="motor-search" type="search" value="${esc(motorUi.query)}" placeholder="${esc(t('Date, equipment, plant, or inspector'))}"></label><div id="motor-sheet-list"></div></aside><form id="motor-form" class="lube-paper daily-paper motor-paper" data-report-id="${esc(current?.report_id || '')}"><header class="lube-head"><img src="logo-rayan.png?v=2" alt="Rayan"><div><h2>${esc(t('Motor condition'))}</h2><p>${esc(t(motorCatalog.inspection))}</p><small>${esc(t('Mechanical Maintenance Department'))}</small></div><dl><div><dt>${esc(t('Form No.:'))}</dt><dd>${esc(motorCatalog.form_no)}</dd></div><div><dt>${esc(t('Rev.'))}</dt><dd>${esc(motorCatalog.revision)}</dd></div></dl></header><div class="lube-meta"><label><span>${esc(t('Date'))}</span><input id="motor-date" type="date" value="${esc(motorUi.date)}" required></label><label><span>${esc(t('Inspector'))}</span><input id="motor-inspector" value="${esc(inspector)}" required></label></div><input type="hidden" id="motor-group" value="${esc(groupKey)}"><input type="hidden" id="motor-place" value="${esc(placeKey)}"><div class="sheet-scroll"><table class="lube-table motor-table"><colgroup><col class="m-code"><col class="m-name"><col class="m-plant"><col class="m-line"><col class="m-temp"><col class="m-temp"><col class="m-oil"><col class="m-oil"><col class="m-time"></colgroup><thead><tr><th>${esc(t('Equipment number'))}</th><th>${esc(t('Equipment name'))}</th><th>${esc(t('Plant'))}</th><th>${esc(t('Line'))}</th><th>${esc(t('Temperature 1'))}</th><th>${esc(t('Temperature 2'))}</th><th>${esc(t('Oil level'))}</th><th>${esc(t('Oil condition'))}</th><th>${esc(t('Inspection time'))}</th></tr></thead><tbody>${rows}</tbody></table></div><label class="daily-notes"><span>${esc(t('General notes'))}</span><textarea id="motor-notes">${esc(current?.notes || '')}</textarea></label>${current && typeof canMaintain === 'function' && canMaintain() ? `<div class="lube-actions no-print"><button type="button" class="detail-button danger" id="motor-delete">${esc(t('Delete'))}</button></div>` : ''}<p id="motor-error" class="form-error"></p></form>`;
+  document.getElementById('workspace').innerHTML = `${typeof filtersHtml === 'function' ? filtersHtml() : ''}<aside class="panel lube-list motor-reports"><div class="lube-list-head"><b>${esc(t('Reports'))}</b><button type="button" class="detail-button" id="motor-new">${esc(t('New report'))}</button></div><label class="daily-filter"><span>${esc(t('Search reports'))}</span><input id="motor-search" type="search" value="${esc(motorUi.query)}" placeholder="${esc(t('Date, equipment, plant, or inspector'))}"></label><div id="motor-sheet-list"></div></aside><form id="motor-form" class="lube-paper daily-paper motor-paper" data-report-id="${esc(current?.report_id || '')}"><header class="lube-head"><img src="logo-rayan.png?v=2" alt="Rayan"><div><h2>${esc(t('Motor condition'))}</h2><p>${esc(t(motorCatalog.inspection))}</p><small>${esc(t('Mechanical Maintenance Department'))}</small></div><dl><div><dt>${esc(t('Form No.:'))}</dt><dd>${esc(motorCatalog.form_no)}</dd></div><div><dt>${esc(t('Rev.'))}</dt><dd>${esc(motorCatalog.revision)}</dd></div></dl></header><div class="lube-meta"><label><span>${esc(t('Date'))}</span><input id="motor-date" type="date" value="${esc(motorUi.date)}" required></label><label><span>${esc(t('Inspector'))}</span><input id="motor-inspector" value="${esc(inspector)}" required></label></div><p class="motor-day no-print">${esc(t(dayNote))}</p><input type="hidden" id="motor-group" value="${esc(groupKey)}"><input type="hidden" id="motor-place" value="${esc(placeKey)}"><div class="sheet-scroll"><table class="lube-table motor-table"><colgroup><col class="m-code"><col class="m-name"><col class="m-plant"><col class="m-line"><col class="m-temp"><col class="m-temp"><col class="m-oil"><col class="m-oil"><col class="m-time"></colgroup><thead><tr><th>${esc(t('Equipment number'))}</th><th>${esc(t('Equipment name'))}</th><th>${esc(t('Plant'))}</th><th>${esc(t('Line'))}</th><th>${esc(t('Temperature 1'))}</th><th>${esc(t('Temperature 2'))}</th><th>${esc(t('Oil level'))}</th><th>${esc(t('Oil condition'))}</th><th>${esc(t('Inspection time'))}</th></tr></thead><tbody>${rows}</tbody></table></div><label class="daily-notes"><span>${esc(t('General notes'))}</span><textarea id="motor-notes">${esc(current?.notes || '')}</textarea></label>${current && typeof canMaintain === 'function' && canMaintain() ? `<div class="lube-actions no-print"><button type="button" class="detail-button danger" id="motor-delete">${esc(t('Delete'))}</button></div>` : ''}<p id="motor-error" class="form-error"></p></form>`;
   document.getElementById('motor-date').addEventListener('change', (event) => {
     motorUi.date = event.target.value;
     motorUi.group = 'pm';
@@ -271,7 +305,7 @@ async function drawMotorCondition() {
     motorUi.id = '';
     motorUi.group = 'pm';
     motorUi.place = 'sheet';
-    motorUi.date = isoDate(new Date());
+    motorUi.date = plantToday();
     drawMotorCondition();
   });
   paintMotorReports(current?.report_id || '');
@@ -288,12 +322,22 @@ async function drawMotorCondition() {
     event.preventDefault();
     saveMotorCondition();
   });
+  if (!openToday) {
+    document.querySelectorAll('#motor-form input, #motor-form select, #motor-form textarea').forEach((node) => {
+      if (node.id !== 'motor-date') node.disabled = true;
+    });
+  }
+  armMotorMidnight();
 }
 
 async function saveMotorCondition() {
   const form = document.getElementById('motor-form');
   const error = document.getElementById('motor-error');
   if (!form) return;
+  if (document.getElementById('motor-date').value !== plantToday()) {
+    if (error) error.textContent = t("This day's report is closed. A new form opens at 12:00 AM.");
+    return;
+  }
   const readings = [...form.querySelectorAll('tbody tr')].map((row) => {
     const value = (name) => row.querySelector(`[data-motor="${name}"]`)?.value.trim() || '';
     return {

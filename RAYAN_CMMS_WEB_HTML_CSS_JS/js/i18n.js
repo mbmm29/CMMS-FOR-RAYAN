@@ -195,6 +195,8 @@ const CMMS_AR = {
   'No oil changes yet.': 'لا توجد تبديلات زيت بعد.',
   'No grease changes yet.': 'لا توجد تبديلات شحم بعد.',
   'Delete this motor report?': 'حذف تقرير حالة المحرك هذا؟',
+  'This report can be updated until midnight. A new form opens at 12:00 AM.': 'يمكن تحديث هذا التقرير حتى منتصف الليل. يفتح نموذج جديد عند الساعة 12 صباحاً.',
+  "This day's report is closed. A new form opens at 12:00 AM.": 'تقرير هذا اليوم مغلق. يفتح نموذج جديد عند الساعة 12 صباحاً.',
   'No equipment matches this filter.': 'لا توجد معدات مطابقة لهذا الفلتر.',
   'times': 'مرات',
   'Weekly motor temperature, oil level and oil condition': 'قياس أسبوعي لحرارة المحركات ومستوى الزيت وحالته',

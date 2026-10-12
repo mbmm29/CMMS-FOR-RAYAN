@@ -1,5 +1,5 @@
 import os
-from datetime import date, datetime, timedelta
+from datetime import date, datetime, timedelta, timezone
 import json
 import secrets
 import threading
@@ -4341,8 +4341,15 @@ def motor_sheet(report_id: str, db: Session = Depends(get_db), u=Depends(role(*M
     return motor_payload(db, row)
 
 
+def plant_today():
+    """The plant day runs until midnight in Baghdad (UTC+3)."""
+    return datetime.now(timezone(timedelta(hours=3))).date()
+
+
 @app.put('/motor-condition')
 def save_motor_sheet(data: MotorConditionSave, db: Session = Depends(get_db), u=Depends(role(*MOTOR))):
+    if data.report_date != plant_today():
+        raise HTTPException(400, "This day's report is closed. A new form opens at 12:00 AM.")
     if not motor_sheet_allowed(data.group_key, data.place_key):
         raise HTTPException(400, 'Choose a group from the form')
     incoming = []

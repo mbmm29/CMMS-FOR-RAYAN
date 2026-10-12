@@ -208,6 +208,7 @@ body .workspace.lube-board > .live-filters{margin:0 0 12px}
 .motor-delete{border:1px solid #8a3038;border-radius:10px;background:#3a161b;color:#ffb4b8;font:12px Arial,sans-serif;font-weight:800;padding:0 8px;cursor:pointer}
 .motor-delete:hover{background:#5a2028}
 body .motor-table tr.motor-kept{display:none}
+.motor-day{margin:8px 0 0;color:#8a4b00;font-size:12px;font-weight:700;line-height:1.45}
 body .lube-actions .detail-button.danger{width:auto;height:36px;margin:0;padding:0 14px}
 .lube-list-head{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:8px}
 .daily-filter{display:grid;gap:4px;margin:0 0 8px;color:#c5d6f4;font-size:12px;font-weight:700}
