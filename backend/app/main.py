@@ -191,6 +191,7 @@ def ensure_additive_columns():
             additions = {
                 'section_id': 'VARCHAR(80)',
                 'commissioning_date': 'DATE',
+                'temp_limit_c': 'DOUBLE PRECISION',
             }
             with engine.begin() as conn:
                 for name, sql_type in additions.items():
@@ -706,6 +707,27 @@ def update_equipment_log_facts(equipment_id: str, data: EquipmentLogFacts, db: S
     db.commit()
     db.refresh(equipment)
     return equipment
+
+@app.get('/equipment/{equipment_id}/motor-history')
+def equipment_motor_history_route(equipment_id: str, db: Session = Depends(get_db), u=Depends(auth)):
+    equipment = db.query(Equipment).filter_by(equipment_id=equipment_id).first()
+    if not equipment:
+        raise HTTPException(404, 'Equipment not found')
+    return equipment_motor_history(db, equipment)
+
+@app.put('/equipment/{equipment_id}/temp-limit')
+def update_equipment_temp_limit(equipment_id: str, data: EquipmentTempLimit, db: Session = Depends(get_db), u=Depends(role(*ENGINEER))):
+    equipment = db.query(Equipment).filter_by(equipment_id=equipment_id).first()
+    if not equipment:
+        raise HTTPException(404, 'Equipment not found')
+    limit = None if data.temp_limit_c is None else round(float(data.temp_limit_c), 1)
+    if limit is not None and (limit < 1 or limit > 400):
+        raise HTTPException(400, 'Enter an allowed temperature between 1 and 400')
+    old = equipment.temp_limit_c
+    equipment.temp_limit_c = limit
+    audit(db, u, 'UPDATE', 'Equipment', equipment_id, old={'temp_limit_c': old}, new={'temp_limit_c': limit})
+    db.commit()
+    return {'equipment_id': equipment.equipment_id, 'temp_limit_c': equipment.temp_limit_c}
 
 @app.get('/pending-equipment')
 def pending_equipment(db: Session = Depends(get_db), u=Depends(auth)):
@@ -3748,6 +3770,106 @@ def motor_chart(db, plant_id, line_id, equipment_id, start, end):
         ],
         'oil_level': bump_series(level_bucket),
         'oil_condition': bump_series(condition_bucket),
+    }
+
+
+def equipment_motor_history(db, equipment):
+    """Temperature and oil history for one equipment page. The KPI motor chart is unchanged."""
+    code = (equipment.equipment_id or '').strip().lower()
+    rows = db.query(MotorConditionReading, MotorConditionReport).join(
+        MotorConditionReport, MotorConditionReport.id == MotorConditionReading.report_id
+    ).order_by(MotorConditionReport.report_date.asc(), MotorConditionReading.id.asc()).all()
+    matched = []
+    for reading, report in rows:
+        linked = (reading.equipment_id or (reading.machine or '').split('—')[0]).strip().lower()
+        if linked == code:
+            matched.append((reading, report))
+    limit = equipment.temp_limit_c
+    empty = {
+        'included': False,
+        'temp_limit_c': limit,
+        'temperature': [],
+        'oil_level': [],
+        'oil_condition': [],
+        'latest': None,
+    }
+    if not matched:
+        return empty
+    level_scores = {'good': ('Oil good', 2), 'add': ('Needs adding', 1)}
+    condition_scores = {'good': ('Oil good', 3), 'critical': ('Oil critical', 2), 'change': ('Needs replacement', 1)}
+    by_day = {}
+    for reading, report in matched:
+        day = report.report_date.isoformat()
+        bucket = by_day.setdefault(day, {'t1': [], 't2': [], 'level': [], 'condition': []})
+        first = _motor_temp(reading.temp_1)
+        second = _motor_temp(reading.temp_2)
+        if first is not None:
+            bucket['t1'].append(first)
+        if second is not None:
+            bucket['t2'].append(second)
+        level = level_scores.get((reading.oil_level or '').strip())
+        if level:
+            bucket['level'].append(level)
+        condition = condition_scores.get((reading.oil_condition or '').strip())
+        if condition:
+            bucket['condition'].append(condition)
+
+    def average(values):
+        if not values:
+            return None
+        return round(sum(values) / len(values), 1)
+
+    def temp_series(key, name):
+        days = sorted(day for day, bucket in by_day.items() if bucket['t1'] or bucket['t2'])[-12:]
+        if not any(by_day[day][key] for day in days):
+            return None
+        points = []
+        for day in days:
+            value = average(by_day[day][key])
+            point = {'date': day, 'hours': value}
+            if value is not None and limit is not None and value > limit:
+                point['high'] = True
+            points.append(point)
+        return {'id': key, 'name': name, 'points': points}
+
+    def oil_series(key, name):
+        days = sorted(day for day, bucket in by_day.items() if bucket[key])[-12:]
+        if not days:
+            return []
+        points = []
+        for day in days:
+            label, score = min(by_day[day][key], key=lambda item: item[1])
+            points.append({'date': day, 'hours': score, 'status': label})
+        return [{'id': key, 'name': name, 'points': points}]
+
+    latest_reading, latest_report = max(matched, key=lambda pair: (pair[1].report_date, pair[0].id or 0))
+    temps = [value for value in (_motor_temp(latest_reading.temp_1), _motor_temp(latest_reading.temp_2)) if value is not None]
+    if limit is None or not temps:
+        state = ''
+    elif any(value > limit for value in temps):
+        state = 'high'
+    else:
+        state = 'within'
+    level_label = level_scores.get((latest_reading.oil_level or '').strip())
+    condition_label = condition_scores.get((latest_reading.oil_condition or '').strip())
+    temperature = [row for row in (
+        temp_series('t1', 'Temperature 1'),
+        temp_series('t2', 'Temperature 2'),
+    ) if row]
+    return {
+        'included': True,
+        'temp_limit_c': limit,
+        'temperature': temperature,
+        'oil_level': oil_series('level', 'Oil level'),
+        'oil_condition': oil_series('condition', 'Oil condition'),
+        'latest': {
+            'date': latest_report.report_date.isoformat(),
+            'temp_1': _motor_temp(latest_reading.temp_1),
+            'temp_2': _motor_temp(latest_reading.temp_2),
+            'oil_level': level_label[0] if level_label else '',
+            'oil_condition': condition_label[0] if condition_label else '',
+            'state': state,
+        },
     }
 
 

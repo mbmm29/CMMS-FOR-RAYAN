@@ -510,3 +510,19 @@ body .workspace .iso-form input{width:100%;max-width:none;height:40px;margin:0;p
   body .workspace .iso-form .iso-head{display:none}
   body .workspace .iso-form .iso-row{grid-template-columns:minmax(0,1fr);gap:6px}
 }
+@media(min-width:1100px){
+  body[data-live-page="equipment"] .workspace{grid-template-columns:minmax(0,1fr) minmax(340px,440px)}
+}
+.equipment-motor{display:grid;gap:12px;margin:14px 0 4px;padding-top:12px;border-top:1px solid #23406e;min-width:0}
+.equipment-motor h3,.equipment-motor h4{margin:0;color:#f4f8ff}
+.equipment-motor h3{font-size:14px}
+.equipment-motor h4{font-size:12px;color:#9eb4d6}
+.equipment-motor .motor-chart{display:grid;gap:6px;min-width:0}
+.equipment-motor .motor-status{margin:0;color:#d5e4ff;font-size:13px;font-weight:700}
+.equipment-motor .temp-state{margin:0;font-size:13px;font-weight:800}
+.equipment-motor .temp-state.high{color:#ffb4b8}
+.equipment-motor .temp-state.ok{color:#8ee0c2}
+.equipment-motor .live-note{margin:0;color:#9eb4d6;font-size:12px;line-height:1.4}
+.equipment-motor .area-chart{width:100%;max-width:100%;height:auto}
+.equipment-motor .live-form{display:grid;gap:8px}
+body .equipment-motor .live-form input{width:100%;max-width:none;height:38px;margin:0;padding:0 10px;border:1px solid #8eabda;border-radius:8px;background:#fff;color:#102d60;color-scheme:light;font:14px Arial,sans-serif}

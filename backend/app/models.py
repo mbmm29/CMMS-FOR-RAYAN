@@ -62,6 +62,7 @@ class Equipment(Base):
     operating_hours: Mapped[float|None]=mapped_column(Float,nullable=True)
     condition: Mapped[str|None]=mapped_column(String(50),nullable=True)
     notes: Mapped[str|None]=mapped_column(Text,nullable=True)
+    temp_limit_c: Mapped[float|None]=mapped_column(Float,nullable=True)
 
 class Component(Base):
     __tablename__='components'

@@ -87,6 +87,10 @@ class EquipmentLogFacts(BaseModel):
     commissioning_date: date | None = None
 
 
+class EquipmentTempLimit(BaseModel):
+    temp_limit_c: float | None = None
+
+
 class EquipmentBase(BaseModel):
     equipment_id: str
     name: str

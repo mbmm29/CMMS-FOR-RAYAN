@@ -404,7 +404,8 @@ function equipmentOptions() {
   return store.equipment.map((item) => `<option value="${esc(item.equipment_id)}">${esc(item.equipment_id)} — ${esc(item.name)}</option>`).join('');
 }
 
-function areaChart(series, unit = 'h') {
+function areaChart(series, unit = 'h', options = {}) {
+  const settings = options && typeof options === 'object' ? options : {};
   const palette = ['#075cf5', '#009c63', '#ff710d', '#7439f5', '#fa3038', '#17adae', '#0b2558', '#d4a017', '#0ea5e9', '#c026d3'];
   const rows = (series || []).filter((row) => row.points?.length);
   if (!rows.length) return '';
@@ -415,7 +416,10 @@ function areaChart(series, unit = 'h') {
   const innerH = height - pad.top - pad.bottom;
   const dates = rows[0].points.map((point) => point.date);
   const count = dates.length;
-  const max = Math.max(...rows.flatMap((row) => row.points.map((point) => Number(point.hours) || 0)), 1);
+  const limit = Number(settings.limit);
+  const hasLimit = Number.isFinite(limit) && limit > 0;
+  const max = Math.max(...rows.flatMap((row) => row.points.map((point) => Number(point.hours) || 0)), hasLimit ? limit : 0, 1);
+  const chartId = `area${Math.random().toString(36).slice(2, 8)}`;
   const xAt = (index) => pad.left + (count === 1 ? innerW / 2 : (index / (count - 1)) * innerW);
   const yAt = (value) => pad.top + innerH - ((Number(value) || 0) / max) * innerH;
   const base = (pad.top + innerH).toFixed(1);
@@ -448,19 +452,28 @@ function areaChart(series, unit = 'h') {
     const area = missing || !line ? '' : `${line} L${coords[count - 1][0].toFixed(1)},${base} L${coords[0][0].toFixed(1)},${base} Z`;
     const dots = coords.map((coord, index) => {
       if (coord[1] == null) return '';
-      const hours = Number(row.points[index].hours) || 0;
+      const point = row.points[index];
+      const hours = Number(point.hours) || 0;
       if (!hours) return '';
-      return `<circle cx="${coord[0].toFixed(1)}" cy="${coord[1].toFixed(1)}" r="3.2" fill="#fff" stroke="${color}"><title>${esc(row.name)} · ${esc(fmtDate(row.points[index].date))}: ${numberText(hours, 1)} ${esc(unit)}</title></circle>`;
+      const hot = point.high === true;
+      const stroke = hot ? '#fa3038' : color;
+      const title = point.status
+        ? `${esc(t(row.name))} · ${esc(fmtDate(point.date))}: ${esc(t(point.status))}`
+        : `${esc(t(row.name))} · ${esc(fmtDate(point.date))}: ${numberText(hours, 1)} ${esc(unit)}`;
+      return `<circle cx="${coord[0].toFixed(1)}" cy="${coord[1].toFixed(1)}" r="3.2" fill="${hot ? '#fa3038' : '#fff'}" stroke="${stroke}"><title>${title}</title></circle>`;
     }).join('');
-    const fill = area ? `<path class="area-fill" d="${area}" style="fill:url(#downArea${seriesIndex})"></path>` : '';
+    const fill = area ? `<path class="area-fill" d="${area}" style="fill:url(#${chartId}${seriesIndex})"></path>` : '';
     return `${fill}<path class="area-line" d="${line}" style="stroke:${color}"></path>${dots}`;
   }).join('');
   const gradients = rows.map((row, seriesIndex) => {
     const color = palette[seriesIndex % palette.length];
-    return `<linearGradient id="downArea${seriesIndex}" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="${color}" stop-opacity="0.34"></stop><stop offset="100%" stop-color="${color}" stop-opacity="0.03"></stop></linearGradient>`;
+    return `<linearGradient id="${chartId}${seriesIndex}" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="${color}" stop-opacity="0.34"></stop><stop offset="100%" stop-color="${color}" stop-opacity="0.03"></stop></linearGradient>`;
   }).join('');
   const legend = rows.map((row, seriesIndex) => `<li><i style="background:${palette[seriesIndex % palette.length]}"></i><span>${esc(t(row.name))}</span></li>`).join('');
-  return `<svg class="area-chart" viewBox="0 0 ${width} ${height}" role="img" aria-label="Downtime trend"><defs>${gradients}</defs><g class="area-grid">${grid}</g>${shapes}${labels}</svg><ul class="area-legend">${legend}</ul>`;
+  const limitLine = hasLimit
+    ? `<line x1="${pad.left}" y1="${yAt(limit).toFixed(1)}" x2="${width - pad.right}" y2="${yAt(limit).toFixed(1)}" stroke="#fa3038" stroke-width="1.4" stroke-dasharray="4 3"><title>${esc(t('Allowed temperature (°C)'))}: ${numberText(limit, 1)}</title></line>`
+    : '';
+  return `<svg class="area-chart" viewBox="0 0 ${width} ${height}" role="img" aria-label="${esc(settings.label || 'Downtime trend')}"><defs>${gradients}</defs><g class="area-grid">${grid}</g>${limitLine}${shapes}${labels}</svg><ul class="area-legend">${legend}</ul>`;
 }
 
 function donut(parts, total) {
@@ -1471,6 +1484,78 @@ function equipmentDetail(selected) {
   ]);
 }
 
+let equipmentMotorToken = 0;
+
+function motorChartBlock(title, svg, status) {
+  if (!svg && !status) return '';
+  const latest = status ? `<p class="motor-status">${esc(t(status))}</p>` : '';
+  const chart = svg || `<p class="chart-empty">${esc(t('No temperature or oil readings yet.'))}</p>`;
+  return `<section class="motor-chart"><h4>${esc(t(title))}</h4>${latest}${chart}</section>`;
+}
+
+function equipmentMotorHtml(data) {
+  const limit = data.temp_limit_c;
+  const latest = data.latest || {};
+  const state = latest.state === 'high'
+    ? `<p class="temp-state high">${esc(t('Temperature is high'))}${latest.date ? ` · ${esc(fmtDate(latest.date))}` : ''}</p>`
+    : latest.state === 'within'
+      ? `<p class="temp-state ok">${esc(t('Within the allowed limit'))}${latest.date ? ` · ${esc(fmtDate(latest.date))}` : ''}</p>`
+      : '';
+  const form = canMaintain()
+    ? `<form id="motor-limit" class="live-form"><label>${esc(t('Allowed temperature (°C)'))}<input name="temp_limit_c" type="number" min="1" max="400" step="0.1" value="${limit == null ? '' : esc(String(limit))}"></label><button class="detail-button primary" type="submit">${esc(t('Save'))}</button><p class="live-note">${esc(t('A reading above this value is high. Leave it empty to clear the limit.'))}</p><p id="motor-limit-error" class="form-error"></p></form>`
+    : (limit == null ? '' : `<p class="motor-status">${esc(t('Allowed temperature (°C)'))}: ${esc(String(limit))}</p>`);
+  const temperature = areaChart(data.temperature || [], '°C', { limit, label: t('Temperature') });
+  const level = areaChart(data.oil_level || [], '', { label: t('Oil level') });
+  const condition = areaChart(data.oil_condition || [], '', { label: t('Oil condition') });
+  const charts = [
+    motorChartBlock('Temperature', temperature, ''),
+    motorChartBlock('Oil level', level, latest.oil_level || ''),
+    motorChartBlock('Oil condition', condition, latest.oil_condition || ''),
+  ].join('');
+  const empty = charts.trim() ? '' : `<p class="live-note">${esc(t('No temperature or oil readings yet.'))}</p>`;
+  return `<h3>${esc(t('Motor condition'))}</h3>${form}${state}${charts}${empty}`;
+}
+
+async function loadEquipmentMotor(selected) {
+  const token = ++equipmentMotorToken;
+  const box = document.getElementById('equipment-motor');
+  if (!box || !selected?.equipment_id) return;
+  try {
+    const data = await apiRequest(`/equipment/${encodeURIComponent(selected.equipment_id)}/motor-history`);
+    if (token !== equipmentMotorToken || !box.isConnected) return;
+    if (!data?.included) {
+      box.remove();
+      return;
+    }
+    box.innerHTML = equipmentMotorHtml(data);
+    document.getElementById('motor-limit')?.addEventListener('submit', (event) => saveEquipmentTempLimit(event, selected.equipment_id));
+  } catch (exception) {
+    if (token === equipmentMotorToken && box.isConnected) box.innerHTML = `<p class="form-error">${esc(t(exception.message || 'Could not load the chart'))}</p>`;
+  }
+}
+
+async function saveEquipmentTempLimit(event, equipmentId) {
+  event.preventDefault();
+  const error = document.getElementById('motor-limit-error');
+  const raw = String(new FormData(event.currentTarget).get('temp_limit_c') || '').trim().replace(',', '.');
+  const value = raw === '' ? null : Number(raw);
+  if (value !== null && (!Number.isFinite(value) || value < 1 || value > 400)) {
+    if (error) error.textContent = t('Enter an allowed temperature between 1 and 400');
+    return;
+  }
+  try {
+    await apiRequest(`/equipment/${encodeURIComponent(equipmentId)}/temp-limit`, {
+      method: 'PUT',
+      body: JSON.stringify({ temp_limit_c: value }),
+    });
+    toast(t('Saved.'));
+    const selected = (store.equipment || []).find((item) => item.equipment_id === equipmentId);
+    if (selected) loadEquipmentMotor(selected);
+  } catch (exception) {
+    if (error) error.textContent = t(exception.message);
+  }
+}
+
 function drawEquipment() {
   if (ui.tab === 'From reports') {
     drawEquipmentFromReports();
@@ -1496,6 +1581,10 @@ function drawEquipment() {
   const detail = ui.mode === 'create' ? equipmentForm() : equipmentDetail(selected);
   document.getElementById('workspace').className = 'workspace';
   document.getElementById('workspace').innerHTML = `<section class="panel">${filtersHtml()}${equipmentTabs()}${tableShell(['Equipment Code', 'Equipment Name', 'Category', 'Location (Plant / Line)', 'Status', 'Condition', 'Criticality'], body, shown(rows.length, all.length, 'equipment'))}</section>${detail}`;
+  if (selected && ui.mode !== 'create') {
+    document.querySelector('.detail')?.insertAdjacentHTML('beforeend', '<div id="equipment-motor" class="equipment-motor"></div>');
+    loadEquipmentMotor(selected);
+  }
   if (selected && canMaintain() && ui.mode !== 'create') {
     const sectionForm = lineSections(selected.line_id).length ? `<form id="equipment-section" class="live-form"><label>${esc(t('Section'))}<select name="section_id">${sectionOptions(selected.line_id, selected.section_id || '')}</select></label><button class="detail-button primary" type="submit">${esc(t('Save'))}</button><p id="equipment-section-error" class="form-error"></p></form>` : `<p class="live-note">${esc(t('No sections on this line yet.'))}</p>`;
     document.querySelector('.detail')?.insertAdjacentHTML('beforeend', `${sectionForm}<button type="button" class="detail-button danger" data-delete="/equipment" data-delete-id="${esc(selected.equipment_id)}" data-delete-note="Delete this equipment? Its maintenance history and KPI charts will be removed.">${esc(t('Delete'))}</button>`);
