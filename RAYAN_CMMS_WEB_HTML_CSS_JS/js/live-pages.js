@@ -1323,9 +1323,7 @@ async function drawAnnualPlan() {
   const locked = !canMaintain();
   const items = ui.annualItems.length || !ui.annualPlant || locked ? ui.annualItems : [{}];
   document.getElementById('page-subtitle').textContent = t('Choose a plant, then set the annual plan.');
-  const action = document.getElementById('primary-action');
-  action.hidden = locked;
-  action.textContent = t('Save plan');
+  document.getElementById('primary-action').hidden = true;
   let overview = { today: { count: 0, items: [] }, week: { count: 0, items: [] }, month: { count: 0, items: [] }, plants: [], in_year: true, on: isoDate(new Date()), month_number: new Date().getMonth() + 1 };
   try {
     const params = new URLSearchParams({ year: String(ui.annualYear) });
@@ -1348,6 +1346,7 @@ async function drawAnnualPlan() {
       <label>${esc(t('Year'))}<input id="annual-year" type="number" min="2000" max="2100" value="${esc(ui.annualYear)}"${locked ? ' disabled' : ''}></label>
       ${locked ? '' : `<button type="button" id="annual-add" class="detail-button">${esc(t('Add task'))}</button><button type="button" id="annual-copy" class="detail-button">${esc(t('Copy plan'))}</button><button type="button" id="annual-paste" class="detail-button"${ui.annualCopy ? '' : ' disabled'}>${esc(ui.annualCopy ? `${t('Paste plan')} · ${ui.annualCopy.plantName}` : t('Paste plan'))}</button>`}
       <button type="button" id="annual-export" class="detail-button">${esc(t('Export'))}</button>
+      ${locked ? '' : `<button type="button" id="annual-save" class="detail-button primary">${esc(t('Save plan'))}</button>`}
     </div>
     <h2 class="annual-title">${esc(t('Annual preventive maintenance plan'))}${formNo('annual_plan') ? ` · ${esc(formNo('annual_plan'))}` : ''}</h2>
     <div class="annual-scroll"><table class="annual-sheet">
@@ -1397,6 +1396,7 @@ async function drawAnnualPlan() {
   document.getElementById('annual-copy')?.addEventListener('click', copyAnnualPlan);
   document.getElementById('annual-paste')?.addEventListener('click', () => { pasteAnnualPlan(); });
   document.getElementById('annual-export')?.addEventListener('click', () => { exportAnnualPlan(); });
+  document.getElementById('annual-save')?.addEventListener('click', () => { saveAnnualPlan(); });
   document.querySelectorAll('#annual-rows tr[data-line]').forEach((row) => {
     applyRowRepeat(row);
     row.querySelector('[data-field="frequency_time"]')?.addEventListener('input', () => applyRowRepeat(row));
