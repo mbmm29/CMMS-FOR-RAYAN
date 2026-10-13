@@ -425,14 +425,22 @@ def bootstrap_system(db: Session) -> bool:
             programmer.password_hash = hash_password(password)
         created = True
 
-    if not db.query(Plant).filter(Plant.plant_id == 'PLANT-01').first():
+    # Baseline sample plant/line/equipment is for first install only.
+    # Never recreate rows the user already deleted — that made Main Plant
+    # return after every API restart while ALLOW_DEMO_SEED stayed enabled.
+    if db.query(Plant).count() == 0:
         db.add(Plant(plant_id='PLANT-01', name='Main Plant', order_code='PLANT1'))
-    if not db.query(PlantLine).filter(PlantLine.line_id == 'LINE-01').first():
-        db.add(PlantLine(line_id='LINE-01',plant_id='PLANT-01',name='Production Line 01'))
-    if not db.query(Technician).filter(Technician.technician_id == 'TECH-001').first():
-        db.add(Technician(technician_id='TECH-001',name='Maintenance Technician'))
-    if not db.query(Equipment).filter(Equipment.equipment_id == 'HM-001').first():
-        db.add(Equipment(equipment_id='HM-001',name='Hammer Mill 01',equipment_type='Hammer Mill',plant_id='PLANT-01',line_id='LINE-01',status='Running'))
+        db.add(PlantLine(line_id='LINE-01', plant_id='PLANT-01', name='Production Line 01'))
+        db.add(Equipment(
+            equipment_id='HM-001',
+            name='Hammer Mill 01',
+            equipment_type='Hammer Mill',
+            plant_id='PLANT-01',
+            line_id='LINE-01',
+            status='Running',
+        ))
+    if db.query(Technician).count() == 0:
+        db.add(Technician(technician_id='TECH-001', name='Maintenance Technician'))
     db.commit()
     return created
 
@@ -4002,10 +4010,14 @@ def purge_kpi_history(db, equipment_ids=None, plant_id=None, line_ids=None):
         db.query(SOPManual).filter(SOPManual.equipment_id.in_(equipment_ids)).delete(synchronize_session=False)
         db.query(Measurement).filter(Measurement.equipment_id.in_(equipment_ids)).delete(synchronize_session=False)
         db.query(PartUsed).filter(PartUsed.equipment_id.in_(equipment_ids)).delete(synchronize_session=False)
+        db.query(SparePartEquipment).filter(SparePartEquipment.equipment_id.in_(equipment_ids)).delete(synchronize_session=False)
         db.query(MotorConditionReading).filter(or_(
             MotorConditionReading.equipment_id.in_(equipment_ids),
             MotorConditionReading.machine.in_(equipment_ids),
         )).delete(synchronize_session=False)
+        db.query(DailyReport).filter(DailyReport.equipment_id.in_(equipment_ids)).update(
+            {DailyReport.equipment_id: None}, synchronize_session=False,
+        )
     target_filters = []
     if equipment_ids:
         target_filters.append(KpiTarget.equipment_id.in_(equipment_ids))
@@ -4042,7 +4054,7 @@ def delete_plant(plant_id: str, db: Session = Depends(get_db), u=Depends(role(*E
     db.delete(plant)
     audit(db, u, 'DELETE', 'Plant', plant_id)
     db.commit()
-    return {'ok': True}
+    return {'ok': True, 'deleted': plant_id}
 
 
 @app.delete('/lines/{line_id}')
