@@ -2190,20 +2190,327 @@ function bindForm() {
   });
 }
 
-function exportRecords() {
+function crc32(bytes) {
+  let crc = 0xffffffff;
+  for (let index = 0; index < bytes.length; index += 1) {
+    crc ^= bytes[index];
+    for (let bit = 0; bit < 8; bit += 1) crc = (crc >>> 1) ^ (0xedb88320 & -(crc & 1));
+  }
+  return (crc ^ 0xffffffff) >>> 0;
+}
+
+function zipStore(entries) {
+  const encoder = new TextEncoder();
+  const parts = [];
+  const central = [];
+  let offset = 0;
+  const bytesOf = (values) => new Uint8Array(values);
+  const u16 = (value) => [value & 255, (value >> 8) & 255];
+  const u32 = (value) => [value & 255, (value >> 8) & 255, (value >> 16) & 255, (value >> 24) & 255];
+  entries.forEach((entry) => {
+    const name = encoder.encode(entry.name);
+    const data = entry.data;
+    const crc = crc32(data);
+    const local = bytesOf([
+      0x50, 0x4b, 0x03, 0x04, 20, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+      ...u32(crc), ...u32(data.length), ...u32(data.length), ...u16(name.length), 0, 0,
+    ]);
+    parts.push(local, name, data);
+    central.push(bytesOf([
+      0x50, 0x4b, 0x01, 0x02, 20, 0, 20, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+      ...u32(crc), ...u32(data.length), ...u32(data.length), ...u16(name.length),
+      0, 0, 0, 0, 0, 0, 0, 0, 0, 0, ...u32(offset),
+    ]), name);
+    offset += local.length + name.length + data.length;
+  });
+  const centralStart = offset;
+  const centralSize = central.reduce((sum, part) => sum + part.length, 0);
+  const end = bytesOf([
+    0x50, 0x4b, 0x05, 0x06, 0, 0, 0, 0,
+    ...u16(entries.length), ...u16(entries.length), ...u32(centralSize), ...u32(centralStart), 0, 0,
+  ]);
+  return new Blob([...parts, ...central, end], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+}
+
+function xmlText(value) {
+  return String(value ?? '').replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F]/g, '').replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;').replaceAll('"', '&quot;');
+}
+
+function columnLetters(index) {
+  let number = index;
+  let letters = '';
+  while (number > 0) {
+    const remainder = (number - 1) % 26;
+    letters = String.fromCharCode(65 + remainder) + letters;
+    number = Math.floor((number - 1) / 26);
+  }
+  return letters;
+}
+
+function workbookStyles() {
+  return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
+<fonts count="7">
+<font><sz val="11"/><color rgb="FF102D60"/><name val="Calibri"/></font>
+<font><b/><sz val="18"/><color rgb="FF102D60"/><name val="Calibri"/></font>
+<font><b/><sz val="12"/><color rgb="FF102D60"/><name val="Calibri"/></font>
+<font><b/><sz val="11"/><color rgb="FF102D60"/><name val="Calibri"/></font>
+<font><b/><sz val="10"/><color rgb="FF102D60"/><name val="Calibri"/></font>
+<font><sz val="10"/><color rgb="FF102D60"/><name val="Calibri"/></font>
+<font><b/><sz val="12"/><color rgb="FFFFFFFF"/><name val="Calibri"/></font>
+</fonts>
+<fills count="4">
+<fill><patternFill patternType="none"/></fill>
+<fill><patternFill patternType="gray125"/></fill>
+<fill><patternFill patternType="solid"><fgColor rgb="FFE7F0FF"/><bgColor indexed="64"/></patternFill></fill>
+<fill><patternFill patternType="solid"><fgColor rgb="FF102D60"/><bgColor indexed="64"/></patternFill></fill>
+</fills>
+<borders count="3">
+<border><left/><right/><top/><bottom/><diagonal/></border>
+<border><left style="thin"><color rgb="FF2A5287"/></left><right style="thin"><color rgb="FF2A5287"/></right><top style="thin"><color rgb="FF2A5287"/></top><bottom style="thin"><color rgb="FF2A5287"/></bottom><diagonal/></border>
+<border><left/><right/><top/><bottom style="thin"><color rgb="FF8EABDA"/></bottom><diagonal/></border>
+</borders>
+<cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs>
+<cellXfs count="15">
+<xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/>
+<xf numFmtId="0" fontId="1" fillId="0" borderId="0" xfId="0" applyFont="1" applyAlignment="1"><alignment horizontal="center" vertical="center" wrapText="1"/></xf>
+<xf numFmtId="0" fontId="2" fillId="0" borderId="0" xfId="0" applyFont="1" applyAlignment="1"><alignment horizontal="center" vertical="center" wrapText="1"/></xf>
+<xf numFmtId="0" fontId="3" fillId="0" borderId="0" xfId="0" applyFont="1" applyAlignment="1"><alignment horizontal="center" vertical="center" wrapText="1"/></xf>
+<xf numFmtId="0" fontId="6" fillId="3" borderId="1" xfId="0" applyFont="1" applyFill="1" applyBorder="1" applyAlignment="1"><alignment horizontal="center" vertical="center" wrapText="1"/></xf>
+<xf numFmtId="0" fontId="3" fillId="0" borderId="2" xfId="0" applyFont="1" applyBorder="1" applyAlignment="1"><alignment horizontal="left" vertical="center" wrapText="1"/></xf>
+<xf numFmtId="0" fontId="0" fillId="0" borderId="2" xfId="0" applyBorder="1" applyAlignment="1"><alignment horizontal="left" vertical="center" wrapText="1"/></xf>
+<xf numFmtId="0" fontId="3" fillId="0" borderId="1" xfId="0" applyFont="1" applyBorder="1" applyAlignment="1"><alignment horizontal="center" vertical="center" wrapText="1"/></xf>
+<xf numFmtId="0" fontId="0" fillId="0" borderId="1" xfId="0" applyBorder="1" applyAlignment="1"><alignment horizontal="center" vertical="center" wrapText="1"/></xf>
+<xf numFmtId="0" fontId="4" fillId="2" borderId="1" xfId="0" applyFont="1" applyFill="1" applyBorder="1" applyAlignment="1"><alignment horizontal="center" vertical="center" wrapText="1"/></xf>
+<xf numFmtId="0" fontId="5" fillId="0" borderId="1" xfId="0" applyBorder="1" applyAlignment="1"><alignment horizontal="center" vertical="center" wrapText="1"/></xf>
+<xf numFmtId="0" fontId="5" fillId="0" borderId="1" xfId="0" applyBorder="1" applyAlignment="1"><alignment horizontal="left" vertical="center" wrapText="1"/></xf>
+<xf numFmtId="0" fontId="3" fillId="0" borderId="2" xfId="0" applyFont="1" applyBorder="1" applyAlignment="1"><alignment horizontal="right" vertical="center" wrapText="1"/></xf>
+<xf numFmtId="0" fontId="0" fillId="0" borderId="2" xfId="0" applyBorder="1" applyAlignment="1"><alignment horizontal="right" vertical="center" wrapText="1"/></xf>
+<xf numFmtId="0" fontId="5" fillId="0" borderId="1" xfId="0" applyBorder="1" applyAlignment="1"><alignment horizontal="right" vertical="center" wrapText="1"/></xf>
+</cellXfs>
+</styleSheet>`;
+}
+
+function buildMaintenanceLogWorkbook(model) {
+  const encoder = new TextEncoder();
+  const rtl = model.rtl;
+  const labelStyle = rtl ? 12 : 5;
+  const valueStyle = rtl ? 13 : 6;
+  const textStyle = rtl ? 14 : 11;
+  const cells = [];
+  const merges = [];
+  const place = (row, column, value, style) => cells.push({ r: row, c: column, v: value, s: style });
+  const merge = (row, column, rowTo, columnTo, value, style) => {
+    place(row, column, value, style);
+    if (row !== rowTo || column !== columnTo) merges.push(`${columnLetters(column)}${row}:${columnLetters(columnTo)}${rowTo}`);
+  };
+  merge(1, 3, 2, 7, model.title, 1);
+  merge(3, 3, 4, 7, model.department, 2);
+  model.meta.forEach((item, index) => {
+    merge(index + 1, 8, index + 1, 9, item.label, 7);
+    merge(index + 1, 10, index + 1, 11, item.value, 8);
+  });
+  merge(6, 1, 6, 11, model.approved, 3);
+  merge(8, 1, 8, 7, model.equipmentTitle, 4);
+  merge(8, 8, 8, 11, model.keyTitle, 4);
+  model.facts.forEach((item, index) => {
+    const row = 9 + index;
+    merge(row, 1, row, 3, item.label, labelStyle);
+    merge(row, 4, row, 7, item.value, valueStyle);
+  });
+  merge(9, 8, 9, 10, model.typeHeading, 9);
+  place(9, 11, model.symbolHeading, 9);
+  model.key.forEach((item, index) => {
+    const row = 10 + index;
+    merge(row, 8, row, 10, item.label, 8);
+    place(row, 11, item.value, 10);
+  });
+  merge(15, 1, 15, 11, model.tableTitle, 4);
+  const headings = model.headings;
+  headings.forEach((heading, index) => place(16, index + 1, heading, 9));
+  const heights = { 1: 24, 2: 24, 3: 22, 4: 22, 6: 22, 8: 22, 15: 24, 16: 30 };
+  model.lines.forEach((line, index) => {
+    const row = 17 + index;
+    heights[row] = 28;
+    line.forEach((value, column) => place(row, column + 1, value, column === 3 || column === 4 || column === 6 || column === 10 ? textStyle : 10));
+  });
+  if (!model.lines.length) {
+    heights[17] = 24;
+    merge(17, 1, 17, 11, model.empty, textStyle);
+  }
+  const lastRow = Math.max(17, 16 + model.lines.length);
+  const byRow = new Map();
+  cells.forEach((cell) => {
+    if (!byRow.has(cell.r)) byRow.set(cell.r, []);
+    byRow.get(cell.r).push(cell);
+  });
+  const sheetRows = [...byRow.keys()].sort((a, b) => a - b).map((row) => {
+    const body = byRow.get(row).sort((a, b) => a.c - b.c).map((cell) => {
+      const ref = `${columnLetters(cell.c)}${row}`;
+      if (cell.v === '' || cell.v == null) return `<c r="${ref}" s="${cell.s}"/>`;
+      return `<c r="${ref}" s="${cell.s}" t="inlineStr"><is><t xml:space="preserve">${xmlText(cell.v)}</t></is></c>`;
+    }).join('');
+    return `<row r="${row}" ht="${heights[row] || 20}" customHeight="1">${body}</row>`;
+  }).join('');
+  const drawing = model.logo ? '<drawing r:id="rId1"/>' : '';
+  const sheet = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">
+<sheetPr><pageSetUpPr fitToPage="1"/></sheetPr>
+<dimension ref="A1:K${lastRow}"/>
+<sheetViews><sheetView showGridLines="0" rightToLeft="${rtl ? 1 : 0}" workbookViewId="0"/></sheetViews>
+<sheetFormatPr defaultRowHeight="18"/>
+<cols>
+<col min="1" max="1" width="8" customWidth="1"/>
+<col min="2" max="2" width="14" customWidth="1"/>
+<col min="3" max="3" width="12" customWidth="1"/>
+<col min="4" max="4" width="24" customWidth="1"/>
+<col min="5" max="5" width="28" customWidth="1"/>
+<col min="6" max="6" width="16" customWidth="1"/>
+<col min="7" max="7" width="20" customWidth="1"/>
+<col min="8" max="8" width="16" customWidth="1"/>
+<col min="9" max="9" width="14" customWidth="1"/>
+<col min="10" max="10" width="14" customWidth="1"/>
+<col min="11" max="11" width="18" customWidth="1"/>
+</cols>
+<sheetData>${sheetRows}</sheetData>
+<mergeCells count="${merges.length}">${merges.map((ref) => `<mergeCell ref="${ref}"/>`).join('')}</mergeCells>
+<pageMargins left="0.4" right="0.4" top="0.4" bottom="0.4" header="0.2" footer="0.2"/>
+<pageSetup orientation="landscape" paperSize="9" fitToWidth="1" fitToHeight="0"/>
+${drawing}
+</worksheet>`;
+  const files = [
+    { name: '[Content_Types].xml', data: encoder.encode(`<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">
+<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>
+<Default Extension="xml" ContentType="application/xml"/>
+<Default Extension="png" ContentType="image/png"/>
+<Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/>
+<Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>
+<Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/>
+${model.logo ? '<Override PartName="/xl/drawings/drawing1.xml" ContentType="application/vnd.openxmlformats-officedocument.drawing+xml"/>' : ''}
+</Types>`) },
+    { name: '_rels/.rels', data: encoder.encode(`<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/>
+</Relationships>`) },
+    { name: 'xl/workbook.xml', data: encoder.encode(`<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">
+<sheets><sheet name="${xmlText(model.sheetName)}" sheetId="1" r:id="rId1"/></sheets>
+</workbook>`) },
+    { name: 'xl/_rels/workbook.xml.rels', data: encoder.encode(`<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/>
+<Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/>
+</Relationships>`) },
+    { name: 'xl/styles.xml', data: encoder.encode(workbookStyles()) },
+    { name: 'xl/worksheets/sheet1.xml', data: encoder.encode(sheet) },
+  ];
+  if (model.logo) {
+    files.push(
+      { name: 'xl/worksheets/_rels/sheet1.xml.rels', data: encoder.encode(`<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/drawing" Target="../drawings/drawing1.xml"/>
+</Relationships>`) },
+      { name: 'xl/drawings/drawing1.xml', data: encoder.encode(`<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<xdr:wsDr xmlns:xdr="http://schemas.openxmlformats.org/drawingml/2006/spreadsheetDrawing" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">
+<xdr:twoCellAnchor editAs="oneCell">
+<xdr:from><xdr:col>0</xdr:col><xdr:colOff>80000</xdr:colOff><xdr:row>0</xdr:row><xdr:rowOff>40000</xdr:rowOff></xdr:from>
+<xdr:to><xdr:col>2</xdr:col><xdr:colOff>0</xdr:colOff><xdr:row>4</xdr:row><xdr:rowOff>0</xdr:rowOff></xdr:to>
+<xdr:pic>
+<xdr:nvPicPr><xdr:cNvPr id="1" name="Logo"/><xdr:cNvPicPr><a:picLocks noChangeAspect="1"/></xdr:cNvPicPr></xdr:nvPicPr>
+<xdr:blipFill><a:blip xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" r:embed="rId1"/><a:stretch><a:fillRect/></a:stretch></xdr:blipFill>
+<xdr:spPr><a:prstGeom prst="rect"><a:avLst/></a:prstGeom></xdr:spPr>
+</xdr:pic>
+<xdr:clientData/>
+</xdr:twoCellAnchor>
+</xdr:wsDr>`) },
+      { name: 'xl/drawings/_rels/drawing1.xml.rels', data: encoder.encode(`<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="../media/logo.png"/>
+</Relationships>`) },
+      { name: 'xl/media/logo.png', data: model.logo },
+    );
+  }
+  return zipStore(files);
+}
+
+async function exportRecords() {
   const chosen = ui.equipmentId;
-  const rows = scoped(store.records).filter(isLogEntry).filter((row) => !chosen || row.equipment_id === chosen);
-  const header = ['No.', 'Date', 'Type', 'Reason', 'Work performed', 'Work order', 'Parts', 'Part No.', 'Quantity', 'Downtime', 'Technician', 'Equipment'];
+  const equipment = (store.equipment || []).find((item) => item.equipment_id === chosen) || null;
+  if (!equipment) {
+    toast(t('Select a machine to open its maintenance log.'));
+    return;
+  }
+  const listed = scoped(store.records).filter(isLogEntry).filter((row) => row.equipment_id === chosen);
+  const rows = listed.filter((row) => ui.tab === 'All' || maintenanceKind(row) === ui.tab)
+    .slice()
+    .sort((a, b) => String(a.record_date || '').localeCompare(String(b.record_date || '')) || a.id - b.id);
+  const form = document.getElementById('machine-log');
+  const commissioning = form?.querySelector('[name="commissioning_date"]')?.value || String(equipment.commissioning_date || '').slice(0, 10);
+  const manufacturer = form?.querySelector('[name="manufacturer"]')?.value ?? equipment.manufacturer ?? '';
+  const formNumber = formNo('equipment_log');
+  const meta = [];
+  if (formNumber) meta.push({ label: t('Form No.:'), value: formNumber });
+  meta.push({ label: t('Document no.'), value: equipment.equipment_id || '—' });
+  meta.push({ label: t('Revision no.'), value: '00' });
+  meta.push({ label: t('Issue date'), value: fmtDate(rows[0]?.record_date) });
   const lines = rows.map((row, index) => {
     const kind = maintenanceKind(row);
-    const parts = kind === 'Oil change' ? oilChangeParts(row) : { ...logParts(row.spare_parts), quantity: '', work: row.action || row.description || '' };
-    return [index + 1, row.record_date, logCode(kind), kind === 'Oil change' ? 'Oil change' : (row.cause || ''), parts.work, workOrderNumber(row), parts.names, parts.numbers, parts.quantity, row.downtime_h ?? '', technicianName(row.technician_id), row.equipment_id];
+    const parts = kind === 'Oil change' ? oilChangeParts(row) : { ...logParts(row.spare_parts), quantity: '—', work: row.action || row.description || '—' };
+    const downtime = row.downtime_h == null || row.downtime_h === '' ? '—' : numberText(row.downtime_h, 2);
+    return [
+      index + 1,
+      fmtDate(row.record_date),
+      logCode(kind),
+      kind === 'Oil change' ? t('Oil change') : (row.cause || '—'),
+      parts.work || '—',
+      workOrderNumber(row) || '—',
+      parts.names || '—',
+      parts.numbers || '—',
+      parts.quantity || '—',
+      downtime,
+      technicianName(row.technician_id) || '—',
+    ];
   });
-  const csv = [header, ...lines].map((line) => line.map((value) => `"${String(value ?? '').replaceAll('"', '""')}"`).join(',')).join('\n');
-  const blob = new Blob([csv], { type: 'text/csv' });
+  let logo = null;
+  try {
+    const response = await fetch('logo-rayan.png?v=2');
+    if (response.ok) logo = new Uint8Array(await response.arrayBuffer());
+  } catch (_) {
+    logo = null;
+  }
+  const blob = buildMaintenanceLogWorkbook({
+    rtl: document.documentElement.dir === 'rtl',
+    sheetName: t('Equipment maintenance log').slice(0, 31),
+    title: t('Equipment maintenance log'),
+    department: t('Mechanical Maintenance Department'),
+    approved: `${t('Approved according to')}: ${t('Mechanical Maintenance Department')}`,
+    equipmentTitle: t('Equipment data'),
+    keyTitle: t('Maintenance type key'),
+    typeHeading: t('Maintenance type'),
+    symbolHeading: t('Symbol'),
+    tableTitle: t('Maintenance work and details'),
+    empty: t('No log lines for this machine yet.'),
+    meta,
+    facts: [
+      { label: t('Log machine name'), value: equipment.name || '—' },
+      { label: t('Machine number'), value: equipment.equipment_id || '—' },
+      { label: t('Location / section'), value: machinePlace(equipment) },
+      { label: t('Commissioning date'), value: fmtDate(commissioning) },
+      { label: t('Manufacturer'), value: manufacturer || '—' },
+    ],
+    key: [
+      { label: t('Corrective'), value: 'CM' },
+      { label: t('Emergency'), value: 'EM' },
+      { label: t('Oil change'), value: 'OC' },
+    ],
+    headings: [t('No.'), t('Maintenance date'), t('Maintenance type'), t('Reason for maintenance'), t('Work performed'), t('Work order no.'), t('Parts used'), t('Part No.'), t('Quantity'), t('Downtime time'), t('Technician name')],
+    lines,
+    logo,
+  });
   const link = document.createElement('a');
   link.href = URL.createObjectURL(blob);
-  link.download = 'machine-records.csv';
+  link.download = `maintenance-log-${equipment.equipment_id}.xlsx`;
   link.click();
   URL.revokeObjectURL(link.href);
 }
