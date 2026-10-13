@@ -1555,7 +1555,7 @@ function equipmentDetail(selected) {
     ['Category', selected?.equipment_type], ['Location', placeOf(selected)], ['Section', sectionName(selected?.section_id) || '—'], ['Area', selected?.area],
     ['Manufacturer', selected?.manufacturer], ['Model', selected?.model], ['Serial number', selected?.serial_number],
     ['Criticality', criticalityLabel(selected?.criticality)], ['Condition', selected?.condition], ['Capacity', capacity],
-    ['Motor power (kW)', selected?.motor_power_kw ?? '—'], ['Operating hours', selected?.operating_hours ?? '—'],
+    ['Motor power (kW)', selected?.motor_power_kw ?? '—'],
     ['Notes', selected?.notes],
   ]);
 }
@@ -2304,7 +2304,6 @@ function equipmentForm() {
     field('Capacity', '<input name="capacity" type="number" min="0" step="any">'),
     field('Capacity unit', '<input name="capacity_unit">'),
     field('Motor power (kW)', '<input name="motor_power_kw" type="number" min="0" step="any">'),
-    field('Operating hours', '<input name="operating_hours" type="number" min="0" step="any">'),
     field('Notes', '<textarea name="notes" rows="3"></textarea>'),
   ].join(''));
 }
@@ -2475,7 +2474,7 @@ function bindForm() {
         await apiRequest('/pm', { method: 'POST', body: JSON.stringify(data) });
       } else if (ui.page === 'equipment') {
         if (!data.plant_id || !data.line_id) throw new Error('Select a plant and then a line number.');
-        ['capacity', 'motor_power_kw', 'operating_hours'].forEach((key) => {
+        ['capacity', 'motor_power_kw'].forEach((key) => {
           if (data[key] != null) data[key] = Number(data[key]);
         });
         await apiRequest('/equipment', { method: 'POST', body: JSON.stringify(data) });
