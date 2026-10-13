@@ -238,7 +238,7 @@ body .lube-form-actions #lube-print{height:40px;padding:0 14px}
 .lube-open small{color:#9eb4d6}
 .lube-paper{background:#fff;color:#102d60;border:1px solid #d5e2f4;border-radius:12px;padding:16px 18px}
 .lube-head{display:grid;grid-template-columns:minmax(180px,240px) minmax(0,1fr) 168px;gap:12px;align-items:center;padding-bottom:10px;border-bottom:2px solid #2a5287}
-.lube-head img{width:100%;max-width:240px;height:auto;object-fit:contain}
+.lube-head img{width:100%;max-width:240px;height:auto;object-fit:contain;background:transparent;border:0;box-shadow:none;outline:0}
 .lube-head h2,.lube-head p,.lube-head small{display:block;margin:0;text-align:center;color:#102d60}
 .lube-head h2{font-size:20px}
 .lube-head p{margin-top:4px;font-weight:800}
@@ -246,9 +246,8 @@ body .lube-form-actions #lube-print{height:40px;padding:0 14px}
 .lube-head dl{margin:0;border:1px solid #2a5287}
 .lube-head dl div{display:grid;grid-template-columns:1fr 1.2fr;min-height:32px;align-items:center;padding:0 8px;border-bottom:1px solid #2a5287;font-size:12px;font-weight:700}
 .lube-head dl div:last-child{border-bottom:0}
-.lube-head dt{margin:0}
-.lube-head dd{margin:0;text-align:center}
-.lube-head dd.approved-name{color:#000}
+.lube-head dt{margin:0;color:#102d60}
+.lube-head dd,.lube-head dd.form-no,.lube-head dd.approved-name{margin:0;text-align:center;color:#000!important;-webkit-text-fill-color:#000!important}
 .lube-meta{display:grid;grid-template-columns:1fr 1fr;gap:8px 16px;margin:12px 0}
 .lube-meta label{display:grid;grid-template-columns:140px minmax(0,1fr);gap:8px;align-items:center;font-size:13px;font-weight:800}
 body .lube-paper input,body .lube-paper select{width:100%;height:32px;border:0;border-bottom:1px solid #8eabda;border-radius:0;background:#fff;color:#102d60;font:14px Arial,sans-serif}
@@ -484,7 +483,7 @@ body .detail-button.job-open-detail .job-open-glyph{font-size:16px;line-height:1
   body:has(.lube-paper) .lube-paper{margin:8mm!important;padding:0!important;border:0!important;box-shadow:none!important}
   body:has(.lube-sheet) .lube-sheet{page:lubesheet;width:auto!important;max-width:none!important;margin:0!important;padding:0!important;border:0!important;border-radius:0!important;box-shadow:none!important;background:#fff!important;print-color-adjust:exact;-webkit-print-color-adjust:exact}
   body:has(.lube-sheet) .lube-sheet .lube-head{display:grid!important;grid-template-columns:42mm minmax(0,1fr) 48mm!important;gap:3mm;align-items:center;justify-items:stretch;text-align:initial;padding-bottom:2mm;border-bottom:0.5mm solid #2a5287}
-  body:has(.lube-sheet) .lube-sheet .lube-head img{width:40mm!important;max-width:40mm!important;height:auto;justify-self:start}
+  body:has(.lube-sheet) .lube-sheet .lube-head img{width:40mm!important;max-width:40mm!important;height:auto;justify-self:start;background:transparent!important;border:0!important;box-shadow:none!important;mix-blend-mode:multiply}
   body:has(.lube-sheet) .lube-sheet .lube-head h2{font-size:12pt;line-height:1.2;margin:0}
   body:has(.lube-sheet) .lube-sheet .lube-head p{font-size:9pt;margin-top:1mm;font-weight:800}
   body:has(.lube-sheet) .lube-sheet .lube-head small{font-size:8pt;margin-top:0.5mm}
@@ -536,7 +535,7 @@ body .detail-button.job-open-detail .job-open-glyph{font-size:16px;line-height:1
   body:has(.daily-paper) .lube-head,
   body:has(.daily-paper) .lube-meta{direction:ltr}
   body:has(.daily-paper) .lube-head{display:grid!important;grid-template-columns:36mm minmax(0,1fr) 42mm!important;gap:3mm;align-items:center;justify-items:stretch;flex:0 0 auto;padding-bottom:2mm;border-bottom:0.45mm solid #2a5287}
-  body:has(.daily-paper) .lube-head img{width:34mm!important;max-width:34mm!important;height:auto;justify-self:start}
+  body:has(.daily-paper) .lube-head img{width:34mm!important;max-width:34mm!important;height:auto;justify-self:start;background:transparent!important;border:0!important;box-shadow:none!important;outline:0!important;mix-blend-mode:multiply}
   body:has(.daily-paper) .lube-head h2{font-size:12pt;line-height:1.2;margin:0;text-align:center;color:#102d60!important}
   body:has(.daily-paper) .lube-head p{font-size:9pt;margin-top:0.8mm;font-weight:800;text-align:center;color:#102d60!important}
   body:has(.daily-paper) .lube-head small{font-size:8pt;margin-top:0.4mm;text-align:center;color:#31517f!important}
@@ -544,8 +543,8 @@ body .detail-button.job-open-detail .job-open-glyph{font-size:16px;line-height:1
   body:has(.daily-paper) .lube-head dl div{display:grid!important;grid-template-columns:1fr 1.2fr!important;min-height:6mm;align-items:center;padding:0 2mm;font-size:8pt;font-weight:700;border-bottom:0.3mm solid #2a5287;color:#102d60!important}
   body:has(.daily-paper) .lube-head dl div:last-child{border-bottom:0}
   body:has(.daily-paper) .lube-head dt{margin:0;color:#102d60!important}
-  body:has(.daily-paper) .lube-head dd{margin:0;text-align:center;font-weight:800;overflow-wrap:anywhere;color:#102d60!important}
-  body:has(.daily-paper) .lube-head dd.approved-name{color:#000!important}
+  body:has(.daily-paper) .lube-head dd,
+  body:has(.daily-paper) .lube-head dd.approved-name{margin:0;text-align:center;font-weight:800;overflow-wrap:anywhere;color:#000!important;-webkit-text-fill-color:#000!important;print-color-adjust:exact;-webkit-print-color-adjust:exact}
   body:has(.daily-paper) .lube-meta{display:grid!important;grid-template-columns:1fr 1fr!important;gap:2mm 7mm;margin:2.5mm 0 2mm;flex:0 0 auto}
   body:has(.daily-paper) .lube-meta label{display:grid!important;grid-template-columns:30mm minmax(0,1fr)!important;gap:2mm;align-items:end;font-size:9pt;color:#102d60!important}
   body:has(.daily-paper) .lube-meta input,
