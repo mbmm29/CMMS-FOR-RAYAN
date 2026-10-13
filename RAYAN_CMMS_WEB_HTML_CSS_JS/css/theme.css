@@ -260,6 +260,9 @@ body[data-live-page="equipment"] .panel.detail,body[data-live-page="new-equipmen
 .pending-review .detail-button{width:auto;flex:1}
 #draft-action[hidden],#workspace[hidden],#daily-new[hidden]{display:none!important}
 .daily-window{margin:0 0 8px;color:#ffc48a;font-size:12px;line-height:1.45}
+.send-watch{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px 12px;margin:0 0 12px;padding:12px 14px;border:1px solid #2a4f88;border-radius:12px;background:#0c1e40;color:#e7eefc}
+.send-watch span{flex:1 1 180px;font-size:13px;font-weight:800;color:#ffc48a}
+.send-watch b{flex:0 0 auto;font:800 28px/1 Consolas,ui-monospace,monospace;font-variant-numeric:tabular-nums;letter-spacing:1px;color:#fff;direction:ltr}
 .daily-return{margin:10px 0 0;color:#b42318;font-weight:800}
 .daily-rejected{margin:0 0 12px;padding:10px;border:1px solid #2a4f88;border-radius:12px;background:#0c1e40;color:#e7eefc}
 .daily-rejected h3{margin:0 0 8px;font-size:13px;color:#f4f8ff}

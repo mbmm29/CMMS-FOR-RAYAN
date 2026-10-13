@@ -2767,17 +2767,28 @@ def create_report(
     if not data.items:
         raise HTTPException(400, 'Daily Report must contain at least one equipment item')
 
-    # One daily report per technician/date.
-    existing = db.query(DailyReport).filter(
+    # A draft for this date is continued. The next send waits 10 hours.
+    draft = db.query(DailyReport).filter(
         DailyReport.report_date == data.report_date,
         DailyReport.technician_id == technician_id,
-        DailyReport.status != 'Returned',
+        DailyReport.status == 'Draft',
     ).first()
-    if existing:
+    if draft:
         raise HTTPException(
             409,
-            f'Daily Report already exists for this technician/date: {existing.report_id}'
+            f'Daily Report already exists for this technician/date: {draft.report_id}'
         )
+    if not is_technician_account(u):
+        existing = db.query(DailyReport).filter(
+            DailyReport.report_date == data.report_date,
+            DailyReport.technician_id == technician_id,
+            DailyReport.status != 'Returned',
+        ).first()
+        if existing:
+            raise HTTPException(
+                409,
+                f'Daily Report already exists for this technician/date: {existing.report_id}'
+            )
 
     rid = f'DR-{data.report_date.year}-{db.query(DailyReport).count()+1:05d}'
 
@@ -3073,7 +3084,7 @@ def update_report(
 
 
 def assert_daily_send_window(db: Session, technician_id: str, report_id: str | None = None):
-    """A technician sends one report, then waits 24 hours for the next one."""
+    """A technician sends one report, then waits 10 hours for the next one."""
     latest = db.query(DailyReport).filter(
         DailyReport.technician_id == technician_id,
         DailyReport.submitted_at.isnot(None),
@@ -3083,10 +3094,10 @@ def assert_daily_send_window(db: Session, technician_id: str, report_id: str | N
         return
     if report_id and latest.report_id == report_id:
         return
-    if datetime.utcnow() < latest.submitted_at + timedelta(hours=24):
+    if datetime.utcnow() < latest.submitted_at + timedelta(hours=10):
         raise HTTPException(
             409,
-            'You can send one report a day. A new report opens 24 hours after the last one was sent.',
+            'A new report can be sent 10 hours after the last one.',
         )
 
 

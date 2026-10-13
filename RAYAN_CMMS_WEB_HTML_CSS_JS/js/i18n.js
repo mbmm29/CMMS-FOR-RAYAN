@@ -636,6 +636,8 @@ const CMMS_AR = {
   'Add part': 'إضافة فقرة',
   'No reports on this date.': 'لا توجد تقارير في هذا التاريخ.',
   'You can send one report a day. A new report opens 24 hours after the last one was sent.': 'يمكنك إرسال تقرير واحد في اليوم. يفتح تقرير جديد بعد 24 ساعة من آخر إرسال.',
+  'A new report can be sent 10 hours after the last one.': 'يمكن إرسال تقرير جديد بعد 10 ساعات من آخر إرسال.',
+  'Time left before the next report': 'الوقت المتبقي لإرسال تقرير جديد',
   'Reject report': 'رفض التقرير',
   'Rejection reason': 'سبب الرفض',
   'Enter the reason for rejecting this report.': 'أدخل سبب رفض التقرير.',

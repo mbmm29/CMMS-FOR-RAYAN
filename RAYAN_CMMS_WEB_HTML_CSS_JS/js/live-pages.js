@@ -2462,26 +2462,49 @@ function reportSentAt(row) {
   return Number.isNaN(stamp) ? null : stamp;
 }
 
+const REPORT_GAP_MS = 10 * 60 * 60 * 1000;
+let sendWatchTimer = 0;
+
+function remainText(ms) {
+  const total = Math.max(0, Math.ceil(ms / 1000));
+  const hours = Math.floor(total / 3600);
+  const minutes = Math.floor((total % 3600) / 60);
+  const seconds = total % 60;
+  return [hours, minutes, seconds].map((part) => String(part).padStart(2, '0')).join(':');
+}
+
+function startSendWatch(opens) {
+  window.clearInterval(sendWatchTimer);
+  const tick = () => {
+    const node = document.getElementById('send-watch-time');
+    if (!node) {
+      window.clearInterval(sendWatchTimer);
+      return;
+    }
+    const left = opens - Date.now();
+    if (left <= 0) {
+      window.clearInterval(sendWatchTimer);
+      if (ui.page === 'daily-reports') drawDailyReport();
+      return;
+    }
+    node.textContent = remainText(left);
+  };
+  tick();
+  sendWatchTimer = window.setInterval(tick, 1000);
+}
+
 function dailySendLock(rows) {
   const sent = rows
     .map((row) => ({ row, at: reportSentAt(row) }))
     .filter((item) => item.at && ['Submitted', 'Approved'].includes(item.row.status))
     .sort((a, b) => b.at - a.at)[0];
   if (!sent) return null;
-  const opens = sent.at + 24 * 60 * 60 * 1000;
+  const opens = sent.at + REPORT_GAP_MS;
   if (Date.now() >= opens) return null;
   return { reportId: sent.row.report_id, status: sent.row.status, opens };
 }
 
-function openReportDate(rows) {
-  const cursor = new Date();
-  cursor.setHours(12, 0, 0, 0);
-  for (let step = 0; step < 21; step += 1) {
-    const day = isoDate(cursor);
-    const taken = rows.some((row) => String(row.report_date).slice(0, 10) === day && row.status !== 'Returned');
-    if (!taken) return day;
-    cursor.setDate(cursor.getDate() + 1);
-  }
+function openReportDate() {
   return isoDate(new Date());
 }
 
@@ -2667,7 +2690,7 @@ async function saveDailyReport(submit) {
   const status = form.dataset.status || 'Draft';
   const sendLock = isTechnician() ? dailySendLock(dailyCache) : null;
   if (submit && sendLock && reportId !== sendLock.reportId) {
-    if (error) error.textContent = t('You can send one report a day. A new report opens 24 hours after the last one was sent.');
+    if (error) error.textContent = t('A new report can be sent 10 hours after the last one.');
     return;
   }
   if (reportId && status !== 'Draft' && status !== 'Returned') {
@@ -2722,11 +2745,7 @@ async function drawDailyReport() {
   const today = isoDate(new Date());
   const windowLock = isTechnician() ? dailySendLock(dailyCache) : null;
   window.clearTimeout(dailyOpenTimer);
-  if (windowLock) {
-    dailyOpenTimer = window.setTimeout(() => {
-      if (ui.page === 'daily-reports') drawDailyReport();
-    }, Math.max(1000, windowLock.opens - Date.now()));
-  }
+  window.clearInterval(sendWatchTimer);
   let detail = null;
   if (ui.dailyId && ui.dailyId !== 'new') {
     detail = await apiRequest(`/daily-reports/${encodeURIComponent(ui.dailyId)}`);
@@ -2752,7 +2771,7 @@ async function drawDailyReport() {
   const sendButton = document.getElementById('primary-action');
   if (draftButton) draftButton.hidden = locked || returned;
   if (sendButton) {
-    sendButton.hidden = locked || returned;
+    sendButton.hidden = locked || returned || Boolean(windowLock);
     if (!sendButton.hidden) sendButton.textContent = t('Send report');
   }
   const reportDate = String(report?.report_date || openReportDate(dailyCache)).slice(0, 10);
@@ -2765,8 +2784,9 @@ async function drawDailyReport() {
   const list = dailyListHtml(visibleReports(), report?.report_id || '', techName);
   const workspace = document.getElementById('workspace');
   workspace.className = 'workspace lube-board';
-  workspace.innerHTML = `<aside class="panel lube-list"><div class="lube-list-head"><b>${esc(t('Reports'))}</b><button type="button" class="detail-button" id="daily-new">${esc(t('New report'))}</button></div><label class="daily-filter"><span>${esc(t('Date'))}</span><input id="daily-filter" type="date" value="${esc(ui.dailyFilter || '')}"></label>${rejectedFieldHtml(dailyCache, report?.report_id || '')}${windowLock ? `<p class="daily-window no-print">${esc(t('You can send one report a day. A new report opens 24 hours after the last one was sent.'))}</p>` : ''}<div id="daily-report-list">${list}</div></aside><form id="daily-form" class="lube-paper daily-paper" data-report-id="${esc(report?.report_id || '')}" data-status="${esc(report?.status || 'Draft')}"><header class="lube-head"><img src="logo-rayan.png?v=2" alt="Rayan"><div><h2>${esc(t('DAILY MAINTENANCE REPORT'))}</h2><p>${esc(t(report?.status || 'Draft report'))}</p><small>${esc(t('Mechanical Maintenance Department'))}</small></div><dl><div><dt>${esc(t('Form No.:'))}</dt><dd>${esc(formNo('daily'))}</dd></div><div><dt>${esc(t('Approved by'))}</dt><dd>${esc(report?.approved_by || '—')}</dd></div></dl></header><div class="lube-meta"><label><span>${esc(t('Shift'))}</span><select id="daily-shift">${LUBE_SHIFTS.map((shift) => `<option value="${esc(shift)}"${shift === (report?.shift || LUBE_SHIFTS[0]) ? ' selected' : ''}>${esc(t(shift))}</option>`).join('')}</select></label><label><span>${esc(t("Technician's name"))}</span><input id="daily-tech" value="${esc(techName)}" readonly></label><label><span>${esc(t('Plant'))}</span><select id="daily-plant">${plants}</select></label><label><span>${esc(t('Date'))}</span><input id="daily-date" type="date" value="${esc(reportDate)}" required></label></div><div class="sheet-scroll"><table class="lube-table"><thead><tr><th>${esc(t('Seq.'))}</th><th>${esc(t('Machine'))}</th><th>${esc(t('Maintenance Type'))}</th><th>${esc(t('Repair Actions'))}</th><th>${esc(t('Start Time'))}</th><th>${esc(t('End Time'))}</th><th>${esc(t('Downtime (hrs)'))}</th></tr></thead><tbody id="daily-rows">${items.map(dailyRow).join('')}</tbody></table></div><section class="daily-parts"><div class="lube-list-head"><h3>${esc(t('SPARE PARTS USED'))}</h3><button type="button" class="no-print" id="daily-add-part">${esc(t('Add part'))}</button></div><div class="sheet-scroll"><table class="lube-table"><thead><tr><th>${esc(t('No.'))}</th><th>${esc(t('Part'))}</th><th>${esc(t('Part No.'))}</th><th>${esc(t('Qty'))}</th></tr></thead><tbody id="daily-parts">${parts.map(dailyPartRow).join('')}</tbody></table></div></section><label class="daily-notes"><span>${esc(t('GENERAL NOTES'))}</span><div class="daily-note-box"><textarea id="daily-notes">${esc(report?.general_notes || '')}</textarea><b class="daily-tdt">TDT: <span id="daily-total">0.00</span></b></div></label><p id="daily-error" class="form-error"></p><div class="lube-actions no-print"><button type="button" id="daily-add">${esc(t('Add row'))}</button>${returned ? `<button type="button" id="daily-resend">${esc(t('Resend the report'))}</button>` : ''}<button type="button" id="daily-print">${esc(t('Print'))}</button></div></form>`;
+  workspace.innerHTML = `<aside class="panel lube-list"><div class="lube-list-head"><b>${esc(t('Reports'))}</b><button type="button" class="detail-button" id="daily-new">${esc(t('New report'))}</button></div><label class="daily-filter"><span>${esc(t('Date'))}</span><input id="daily-filter" type="date" value="${esc(ui.dailyFilter || '')}"></label>${rejectedFieldHtml(dailyCache, report?.report_id || '')}<div id="daily-report-list">${list}</div></aside><form id="daily-form" class="lube-paper daily-paper" data-report-id="${esc(report?.report_id || '')}" data-status="${esc(report?.status || 'Draft')}">${windowLock ? `<div class="send-watch no-print" id="send-watch"><span>${esc(t('Time left before the next report'))}</span><b id="send-watch-time">00:00:00</b></div>` : ''}<header class="lube-head"><img src="logo-rayan.png?v=2" alt="Rayan"><div><h2>${esc(t('DAILY MAINTENANCE REPORT'))}</h2><p>${esc(t(report?.status || 'Draft report'))}</p><small>${esc(t('Mechanical Maintenance Department'))}</small></div><dl><div><dt>${esc(t('Form No.:'))}</dt><dd>${esc(formNo('daily'))}</dd></div><div><dt>${esc(t('Approved by'))}</dt><dd>${esc(report?.approved_by || '—')}</dd></div></dl></header><div class="lube-meta"><label><span>${esc(t('Shift'))}</span><select id="daily-shift">${LUBE_SHIFTS.map((shift) => `<option value="${esc(shift)}"${shift === (report?.shift || LUBE_SHIFTS[0]) ? ' selected' : ''}>${esc(t(shift))}</option>`).join('')}</select></label><label><span>${esc(t("Technician's name"))}</span><input id="daily-tech" value="${esc(techName)}" readonly></label><label><span>${esc(t('Plant'))}</span><select id="daily-plant">${plants}</select></label><label><span>${esc(t('Date'))}</span><input id="daily-date" type="date" value="${esc(reportDate)}" required></label></div><div class="sheet-scroll"><table class="lube-table"><thead><tr><th>${esc(t('Seq.'))}</th><th>${esc(t('Machine'))}</th><th>${esc(t('Maintenance Type'))}</th><th>${esc(t('Repair Actions'))}</th><th>${esc(t('Start Time'))}</th><th>${esc(t('End Time'))}</th><th>${esc(t('Downtime (hrs)'))}</th></tr></thead><tbody id="daily-rows">${items.map(dailyRow).join('')}</tbody></table></div><section class="daily-parts"><div class="lube-list-head"><h3>${esc(t('SPARE PARTS USED'))}</h3><button type="button" class="no-print" id="daily-add-part">${esc(t('Add part'))}</button></div><div class="sheet-scroll"><table class="lube-table"><thead><tr><th>${esc(t('No.'))}</th><th>${esc(t('Part'))}</th><th>${esc(t('Part No.'))}</th><th>${esc(t('Qty'))}</th></tr></thead><tbody id="daily-parts">${parts.map(dailyPartRow).join('')}</tbody></table></div></section><label class="daily-notes"><span>${esc(t('GENERAL NOTES'))}</span><div class="daily-note-box"><textarea id="daily-notes">${esc(report?.general_notes || '')}</textarea><b class="daily-tdt">TDT: <span id="daily-total">0.00</span></b></div></label><p id="daily-error" class="form-error"></p><div class="lube-actions no-print"><button type="button" id="daily-add">${esc(t('Add row'))}</button>${returned && !windowLock ? `<button type="button" id="daily-resend">${esc(t('Resend the report'))}</button>` : ''}<button type="button" id="daily-print">${esc(t('Print'))}</button></div></form>`;
   workspace.insertAdjacentHTML('beforeend', spareDataLists());
+  if (windowLock) startSendWatch(windowLock.opens);
   if (locked) document.querySelectorAll('#daily-form input, #daily-form select, #daily-form textarea, #daily-add, #daily-add-part').forEach((node) => { node.disabled = true; });
   if (returned) {
     ['daily-shift', 'daily-plant', 'daily-date', 'daily-notes'].forEach((id) => {
@@ -2787,7 +2807,7 @@ async function drawDailyReport() {
     document.querySelectorAll('#daily-rows tr').forEach(showDailyLineName);
   });
   document.getElementById('daily-date')?.addEventListener('change', (event) => {
-    const found = dailyCache.find((row) => String(row.report_date).slice(0, 10) === event.target.value && row.status !== 'Returned');
+    const found = dailyCache.find((row) => String(row.report_date).slice(0, 10) === event.target.value && row.status === 'Draft');
     if (found && found.report_id !== document.getElementById('daily-form')?.dataset.reportId) {
       ui.dailyId = found.report_id;
       drawDailyReport();
