@@ -4,6 +4,7 @@ The calculations follow the approved SMRP-adapted definitions and use the
 records the project actually stores: PM plans, work orders, daily reports,
 machine records, and component history.
 """
+import math
 from datetime import date, datetime, timedelta
 
 from sqlalchemy.orm import Session
@@ -20,7 +21,7 @@ RECEIVED_REPORTS = {'Submitted', 'Approved', 'Returned'}
 REPORT_SHIFT_HOURS = 8
 HIGHER_IS_BETTER = {
     'availability', 'mtbf', 'pm_compliance', 'planned_pm', 'preventive_pct',
-    'wo_schedule', 'wo_completion', 'utilization',
+    'wo_schedule', 'wo_completion', 'utilization', 'reliability',
 }
 
 
@@ -60,6 +61,14 @@ def _per(part, whole):
     if not whole:
         return None
     return round(part / whole, 2)
+
+
+def _reliability(operating_hours, mtbf):
+    if operating_hours <= 0:
+        return None
+    if not mtbf:
+        return 100.0
+    return round(math.exp(-(operating_hours / mtbf)) * 100, 1)
 
 
 def _in_period(value, start, end):
@@ -366,6 +375,7 @@ def compute_kpi(db: Session, plant_id=None, line_id=None, equipment_id=None, tec
             'utilization_available_h': utilization_available,
             'utilization_reports': utilization_reports,
             'mtbf': _per(max(operating, 0), failures) if available else None,
+            'reliability': _reliability(max(operating, 0) if available else 0, _per(max(operating, 0), failures) if available else None),
             'mttr': _per(corrective_hours, len(corrective_orders)) if corrective_orders else None,
             'failures': failures,
             'corrective_events': len(corrective_orders),
