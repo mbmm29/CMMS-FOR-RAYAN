@@ -4558,7 +4558,7 @@ def save_lubrication_report(data: LubricationSave, db: Session = Depends(get_db)
         if plant_id and not db.query(Plant).filter_by(plant_id=plant_id).first():
             raise HTTPException(400, 'Select a plant')
         if line_id:
-            plant_line = db.query(Line).filter_by(line_id=line_id).first()
+            plant_line = db.query(PlantLine).filter_by(line_id=line_id).first()
             if not plant_line:
                 raise HTTPException(400, 'Select a line')
             if plant_id and plant_line.plant_id != plant_id:
