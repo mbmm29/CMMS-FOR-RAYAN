@@ -490,6 +490,12 @@ class SOPParagraphSave(BaseModel):
     items: list[SOPParagraphIn] = Field(default_factory=list)
 
 
+class PushSubscribe(BaseModel):
+    endpoint: str
+    p256dh: str
+    auth: str
+
+
 class LubricationLineIn(BaseModel):
     equipment_code: str = ''
     equipment_name: str = ''

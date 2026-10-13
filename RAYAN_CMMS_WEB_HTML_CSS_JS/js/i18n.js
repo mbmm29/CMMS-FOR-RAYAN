@@ -757,6 +757,9 @@ const CMMS_AR = {
   'A paragraph is too long.': 'الفقرة طويلة جداً.',
   'Equipment not found': 'المعدة غير موجودة',
   'Standard operating procedure': 'إجراء التشغيل القياسي',
+  'Phone notices': 'إشعارات الهاتف',
+  'Only a technician can receive phone notices.': 'إشعارات الهاتف لحسابات الفنيين.',
+  'The phone could not be registered for notices.': 'تعذر تسجيل الهاتف لاستقبال الإشعارات.',
 };
 
 function currentLang() {

@@ -468,6 +468,29 @@ class Notification(Base):
     is_read: Mapped[bool]=mapped_column(Boolean,default=False)
     created_at: Mapped[datetime]=mapped_column(DateTime,default=datetime.utcnow)
 
+class PushSubscription(Base):
+    __tablename__='push_subscriptions'
+    id: Mapped[int]=mapped_column(Integer,primary_key=True)
+    user_id: Mapped[int]=mapped_column(Integer,ForeignKey('users.id'),index=True)
+    endpoint: Mapped[str]=mapped_column(Text,unique=True)
+    p256dh: Mapped[str]=mapped_column(String(255))
+    auth: Mapped[str]=mapped_column(String(255))
+    created_at: Mapped[datetime]=mapped_column(DateTime,default=datetime.utcnow)
+
+class PushDelivery(Base):
+    __tablename__='push_deliveries'
+    id: Mapped[int]=mapped_column(Integer,primary_key=True)
+    user_id: Mapped[int]=mapped_column(Integer,index=True)
+    kind: Mapped[str]=mapped_column(String(40))
+    ref: Mapped[str]=mapped_column(String(80))
+    created_at: Mapped[datetime]=mapped_column(DateTime,default=datetime.utcnow)
+    __table_args__=(UniqueConstraint('user_id','kind','ref',name='uq_push_delivery'),)
+
+class AppSecret(Base):
+    __tablename__='app_secrets'
+    key: Mapped[str]=mapped_column(String(40),primary_key=True)
+    value: Mapped[str]=mapped_column(Text)
+
 class AuditTrail(Base):
     __tablename__='audit_trail'
     id: Mapped[int]=mapped_column(Integer,primary_key=True)

@@ -1,4 +1,4 @@
-const CACHE = 'rayan-cmms-shell-3';
+const CACHE = 'rayan-cmms-shell-4';
 const SHELL = [
   '/login.html',
   '/index.html',
@@ -20,6 +20,36 @@ self.addEventListener('activate', (event) => {
       .then((keys) => Promise.all(keys.filter((key) => key !== CACHE).map((key) => caches.delete(key))))
       .then(() => self.clients.claim())
   );
+});
+
+self.addEventListener('push', (event) => {
+  let payload = { title: 'RAYAN CMMS', body: '', url: '/index.html#work-orders' };
+  try {
+    payload = { ...payload, ...(event.data ? event.data.json() : {}) };
+  } catch (_) {
+    payload.body = event.data ? event.data.text() : '';
+  }
+  event.waitUntil(self.registration.showNotification(payload.title, {
+    body: payload.body,
+    icon: '/icons/icon-192.png',
+    badge: '/icons/icon-192.png',
+    lang: 'ar',
+    dir: 'rtl',
+    data: { url: payload.url || '/index.html#work-orders' },
+  }));
+});
+
+self.addEventListener('notificationclick', (event) => {
+  event.notification.close();
+  const target = new URL(event.notification.data?.url || '/index.html#work-orders', self.location.origin).href;
+  event.waitUntil(self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((windows) => {
+    const open = windows.find((client) => client.url.startsWith(self.location.origin));
+    if (open) {
+      if ('navigate' in open) open.navigate(target);
+      return open.focus();
+    }
+    return self.clients.openWindow(target);
+  }));
 });
 
 self.addEventListener('fetch', (event) => {

@@ -4,7 +4,6 @@ from datetime import date, datetime, timedelta, timezone
 import json
 import secrets
 import threading
-import time
 from pathlib import Path
 from fastapi import FastAPI, Depends, HTTPException, File, UploadFile
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
@@ -19,6 +18,7 @@ from .schemas import *
 from .security import *
 from .kpi import compute_kpi, save_kpi_target
 from .motor_catalog import OIL_CONDITIONS, OIL_LEVELS, motor_catalog_payload, motor_place, motor_sheet_allowed
+from .push_notices import clear_work_order_push, public_key as push_public_key, queue_work_order_pushes, save_subscription, start_phone_notices
 
 Base.metadata.create_all(bind=engine)
 
@@ -277,6 +277,7 @@ def ensure_additive_columns():
 
 ensure_additive_columns()
 assign_missing_order_codes()
+start_phone_notices()
 
 app=FastAPI(title='Mechanical Maintenance CMMS API',version='2.0.0')
 
@@ -1629,8 +1630,9 @@ def start_corrective_release_worker():
     start_corrective_release_worker.started = True
 
     def loop():
+        import time as sleeper
         while True:
-            time.sleep(900)
+            sleeper.sleep(900)
             session = SessionLocal()
             try:
                 release_due_corrective_orders(session)
@@ -2108,6 +2110,7 @@ def apply_assignment(db, actor, work_order, technician_ids, had_assignees):
     added, removed = replace_assignees(db, work_order, technician_ids)
     for technician_id in removed:
         retract_assignment(db, work_order, technician_id)
+        clear_work_order_push(db, technician_id, work_order.work_order_id)
     for technician_id in added:
         account = db.query(User).filter(User.technician_id == technician_id, User.is_active == True).first()
         if account:
@@ -2154,8 +2157,12 @@ def create_work_order(data:WOCreate,db:Session=Depends(get_db),u=Depends(role(*E
     if not ids and data.assigned_technician_id:
         ids = [data.assigned_technician_id]
     if ids:
-        apply_assignment(db, u, o, ids, had_assignees=False)
-    audit(db,u,'CREATE','WorkOrder',wid,new=data.model_dump()); db.commit(); db.refresh(o); return o
+        added = apply_assignment(db, u, o, ids, had_assignees=False)
+    else:
+        added = []
+    audit(db,u,'CREATE','WorkOrder',wid,new=data.model_dump()); db.commit(); db.refresh(o)
+    queue_work_order_pushes(added, o)
+    return o
 
 @app.post('/work-orders/from-activity', response_model=WOOut)
 def issue_activity_work_order(data: ActivityWorkOrderCreate, db: Session = Depends(get_db), u=Depends(auth)):
@@ -2324,11 +2331,14 @@ def update_work_order(wo_id:str,data:WOUpdate,db:Session=Depends(get_db),u=Depen
         o.closed_by=u.username
         if not o.closing_date:
             o.closing_date=plant_now()
+    added = []
     if wanted is not None:
-        apply_assignment(db, u, o, wanted, had_assignees)
+        added = apply_assignment(db, u, o, wanted, had_assignees)
     if is_technician_account(u):
         accept_saved_job(db, u, o)
-    audit(db,u,'UPDATE','WorkOrder',wo_id,old=old,new=data.model_dump(exclude_unset=True)); db.commit(); db.refresh(o); return o
+    audit(db,u,'UPDATE','WorkOrder',wo_id,old=old,new=data.model_dump(exclude_unset=True)); db.commit(); db.refresh(o)
+    queue_work_order_pushes(added, o)
+    return o
 
 @app.post('/work-orders/{wo_id}/respond', response_model=WOOut)
 def respond_work_order(wo_id: str, data: WORespond, db: Session = Depends(get_db), u=Depends(auth)):
@@ -3719,6 +3729,18 @@ def notification_read(nid:int,db:Session=Depends(get_db),u=Depends(auth)):
     n=db.get(Notification,nid)
     if n and (n.user_id is None or n.user_id==u.id): n.is_read=True; db.commit()
     return {'ok':True}
+
+@app.get('/push/key')
+def push_key(db:Session=Depends(get_db), u=Depends(auth)):
+    return {'public_key': push_public_key(db)}
+
+@app.post('/push/subscribe')
+def push_subscribe(data:PushSubscribe, db:Session=Depends(get_db), u=Depends(auth)):
+    if u.role not in TECHNICIAN:
+        raise HTTPException(403, 'Only a technician can receive phone notices.')
+    if not save_subscription(db, u, data.endpoint, data.p256dh, data.auth):
+        raise HTTPException(400, 'The phone could not be registered for notices.')
+    return {'ok': True}
 @app.get('/audit')
 def audit_log(db:Session=Depends(get_db),u=Depends(role(*DEVELOPER))): return db.query(AuditTrail).order_by(AuditTrail.created_at.desc()).limit(500).all()
 
