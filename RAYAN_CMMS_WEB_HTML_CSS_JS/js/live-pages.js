@@ -1765,7 +1765,7 @@ function sopParagraphEditor(equipment, manual) {
   const hasManual = Boolean(manual?.document);
   const write = locked
     ? ''
-    : `<button type="button" id="sop-import" class="detail-button primary">${esc(t(hasManual ? 'Replace SOP file' : 'Publish SOP file'))}</button><input id="sop-import-file" type="file" accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" hidden>`;
+    : `<button type="button" id="sop-import" class="detail-button primary">${esc(t(hasManual ? 'Replace SOP file' : 'Publish SOP file'))}</button><input id="sop-import-file" type="file" accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" hidden>${hasManual ? `<button type="button" class="detail-button danger" data-delete="/equipment" data-delete-id="${esc(equipment.equipment_id)}" data-delete-suffix="/sop" data-delete-note="Delete this equipment SOP? The published file will be removed.">${esc(t('Delete SOP'))}</button>` : ''}`;
   const empty = `<p class="kpi-note">${esc(t('Each machine has one SOP only. Publish it by importing one Excel file.'))}</p>`;
   const viewer = hasManual
     ? `${sopManualHtml(manual)}<p class="kpi-note">${esc(t('This operating manual opens inside the site in the same form as the imported Excel file.'))}</p>`
@@ -1852,7 +1852,7 @@ async function drawSops() {
     ['Compliance', `${visibleEquipment().length ? numberText((published.length / visibleEquipment().length) * 100) : 0}%`, '◈', 'green', ''],
   ]);
   const body = rows.map((sop) => `<tr data-row="${esc(sop.sop_id)}" class="${selected && selected.sop_id === sop.sop_id ? 'selected' : ''}">${cell(esc(sop.sop_id), true)}${cell(esc(sop.title))}${cell(esc(sop.equipment_id || '—'))}${cell(esc(sop.revision || '—'))}${cell(liveBadge(sop.status))}${cell(esc(sop.document_path || '—'))}</tr>`);
-  const detail = selected
+  let detail = selected
     ? detailPanel('SOP Details', selected.status || '—', selected.sop_id || '—', selected.title || '', [
       ['Equipment', selected.equipment_id], ['Category', selected.sop_type], ['Revision', selected.revision],
       ['Effective', fmtDate(selected.effective_date)], ['Imported file', selected.document_path || '—'],
@@ -1863,8 +1863,12 @@ async function drawSops() {
     : `<p class="live-note">${esc(t('Select a machine, then publish one SOP Excel file for it.'))}</p>`;
   document.getElementById('workspace').className = 'workspace';
   document.getElementById('workspace').innerHTML = `<section class="panel"><div class="split">${assetList(chosen)}<div class="asset-view">${tabsHtml(['All SOPs', 'Published'])}${tableShell(['SOP Code', 'SOP Title', 'Equipment', 'Version', 'Status', 'Imported file'], body, shown(rows.length, all.length, 'SOPs'))}</div></div>${sheet}</section>${detail}`;
+  if (canMaintain() && selected?.equipment_id) {
+    document.querySelector('.detail')?.insertAdjacentHTML('beforeend', `<button type="button" class="detail-button danger" data-delete="/equipment" data-delete-id="${esc(selected.equipment_id)}" data-delete-suffix="/sop" data-delete-note="Delete this equipment SOP? The published file will be removed.">${esc(t('Delete SOP'))}</button>`);
+  }
   bindAssets();
   bindRows();
+  bindDeletes();
   const importButton = document.getElementById('sop-import');
   const importFile = document.getElementById('sop-import-file');
   importButton?.addEventListener('click', () => importFile?.click());
@@ -2347,7 +2351,11 @@ function bindDeletes() {
       const note = button.dataset.deleteNote || 'Delete this record? This cannot be undone.';
       if (!window.confirm(t(note))) return;
       try {
-        await apiRequest(`${button.dataset.delete}/${encodeURIComponent(button.dataset.deleteId)}`, { method: 'DELETE' });
+        const suffix = button.dataset.deleteSuffix || '';
+        const path = button.dataset.deleteId
+          ? `${button.dataset.delete}/${encodeURIComponent(button.dataset.deleteId)}${suffix}`
+          : button.dataset.delete;
+        await apiRequest(path, { method: 'DELETE' });
         store = null;
         if (!button.dataset.deleteKeep) ui.rowKey = '';
         if (button.dataset.delete === '/lubrication-reports') ui.lubeId = '';

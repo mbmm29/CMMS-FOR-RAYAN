@@ -2205,6 +2205,22 @@ async def import_sop_paragraphs(
         filename=file.filename or '',
     )
 
+@app.delete('/equipment/{equipment_id}/sop')
+def delete_equipment_sop(equipment_id: str, db: Session = Depends(get_db), u=Depends(role(*ENGINEER))):
+    if not db.query(Equipment).filter_by(equipment_id=equipment_id).first():
+        raise HTTPException(404, 'Equipment not found')
+    manuals = db.query(SOPManual).filter_by(equipment_id=equipment_id).count()
+    paragraphs = db.query(SOPParagraph).filter_by(equipment_id=equipment_id).count()
+    sops = db.query(SOP).filter_by(equipment_id=equipment_id).count()
+    if not manuals and not paragraphs and not sops:
+        raise HTTPException(404, 'SOP not found')
+    db.query(SOPManual).filter_by(equipment_id=equipment_id).delete(synchronize_session=False)
+    db.query(SOPParagraph).filter_by(equipment_id=equipment_id).delete(synchronize_session=False)
+    db.query(SOP).filter_by(equipment_id=equipment_id).delete(synchronize_session=False)
+    audit(db, u, 'DELETE', 'SOP', equipment_id, old={'manuals': manuals, 'paragraphs': paragraphs, 'sops': sops})
+    db.commit()
+    return {'ok': True, 'equipment_id': equipment_id}
+
 def visible_to_technician(query, technician_id):
     """A technician sees a work order only when it was sent to that technician."""
     if not technician_id:
