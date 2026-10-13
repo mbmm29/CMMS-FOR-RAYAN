@@ -239,7 +239,6 @@ body .lube-form-actions #lube-print{height:40px;padding:0 14px}
 .lube-paper{background:#fff;color:#102d60;border:1px solid #d5e2f4;border-radius:12px;padding:16px 18px}
 .lube-head{display:grid;grid-template-columns:minmax(180px,240px) minmax(0,1fr) 168px;gap:12px;align-items:center;padding-bottom:10px;border-bottom:2px solid #2a5287}
 .lube-head img{width:100%;max-width:240px;height:auto;object-fit:contain;background:transparent;border:0;box-shadow:none;outline:0}
-.lube-head dl{align-self:center;height:auto}
 .lube-head h2,.lube-head p,.lube-head small{display:block;margin:0;text-align:center;color:#102d60}
 .lube-head h2{font-size:20px}
 .lube-head p{margin-top:4px;font-weight:800}
