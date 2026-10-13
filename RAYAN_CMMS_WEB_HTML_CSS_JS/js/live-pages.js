@@ -722,14 +722,7 @@ function drawWorkOrders() {
     document.getElementById('workspace').className = 'workspace';
     document.getElementById('workspace').innerHTML = workOrderForm();
     bindForm();
-    const fillJobMachine = () => {
-      const item = matchEquipment(document.getElementById('job-equipment')?.value);
-      const plant = store.plants.find((row) => row.plant_id === item?.plant_id);
-      const department = document.getElementById('job-department');
-      if (department) department.value = plant?.name || '';
-    };
-    document.getElementById('job-equipment')?.addEventListener('input', fillJobMachine);
-    document.getElementById('job-equipment')?.addEventListener('change', fillJobMachine);
+    bindJobPlace(document.getElementById('live-form'));
     document.getElementById('job-back')?.addEventListener('click', () => {
       ui.mode = 'view';
       drawWorkOrders();
@@ -1813,20 +1806,135 @@ function jobPartRows(text) {
   return parsed.map((part, index) => `<tr><td class="lube-no">${index + 1}</td><td><input data-job-part="name" value="${esc(part.name)}"></td><td><input data-job-part="number" value="${esc(part.number)}"></td></tr>`).join('');
 }
 
+function jobTypeLabel(type) {
+  if (type === 'Corrective') return t('Curative');
+  return t(type || '');
+}
+
+function jobTypeOptions(selected = 'Corrective') {
+  return [
+    ['Preventive', 'Preventive'],
+    ['Corrective', 'Curative'],
+    ['Emergency', 'Emergency'],
+    ['Routine', 'Routine'],
+    ['Inspection', 'Inspection'],
+  ].map(([value, label]) => `<option value="${esc(value)}"${value === selected ? ' selected' : ''}>${esc(t(label))}</option>`).join('');
+}
+
+function jobLineLabel(line) {
+  if (!line) return '';
+  const numbered = line.line_number != null && line.line_number !== '' ? `${t('Line')} ${line.line_number}` : '';
+  const ownName = line.name && line.name !== `Line ${line.line_number}` ? line.name : '';
+  if (numbered && ownName) return `${numbered} · ${ownName}`;
+  return numbered || ownName || line.line_id || '';
+}
+
+function jobLocation(order) {
+  const equipment = store.equipment.find((item) => item.equipment_id === order?.equipment_id);
+  const plantId = equipment?.plant_id || order?.manual_plant_id;
+  const lineId = equipment?.line_id || order?.manual_line_id;
+  const sectionId = equipment?.section_id || '';
+  const plant = store.plants.find((item) => item.plant_id === plantId)?.name || '';
+  const line = jobLineLabel(store.lines.find((item) => item.line_id === lineId));
+  return { plant, line, section: sectionName(sectionId) };
+}
+
+function jobField(label, control, extra = '') {
+  return `<label class="${extra}"><span>${esc(t(label))}</span>${control}</label>`;
+}
+
+function jobHead() {
+  return `<header class="lube-head"><img src="logo-rayan.png?v=2" alt="Rayan"><div><h2>${esc(t('Maintenance Job Order'))}</h2><small>Maintenance Job Order</small></div><dl><div><dt>${esc(t('Form No.:'))}</dt><dd>${esc(formNo('job_order'))}</dd></div><div><dt>${esc(t('Rev.'))}</dt><dd>a</dd></div></dl></header>`;
+}
+
+function bindJobPlace(form) {
+  const plantSelect = form.querySelector('#job-plant');
+  const lineSelect = form.querySelector('#job-line');
+  const sectionSelect = form.querySelector('#job-section');
+  const machine = form.querySelector('#job-equipment');
+  const list = form.querySelector('#job-equipment-list');
+  if (!plantSelect || !lineSelect || !sectionSelect || !machine || !list) return;
+  let syncing = false;
+  const fillLines = (keep) => {
+    const lines = store.lines
+      .filter((line) => line.plant_id === plantSelect.value && line.active !== false)
+      .sort((a, b) => Number(a.line_number) - Number(b.line_number));
+    lineSelect.innerHTML = `<option value="">${esc(t(plantSelect.value ? 'Select line number' : 'Select a plant first'))}</option>${lines.map((line) => `<option value="${esc(line.line_id)}"${line.line_id === keep ? ' selected' : ''}>${esc(jobLineLabel(line))}</option>`).join('')}`;
+  };
+  const fillSections = (keep) => {
+    sectionSelect.innerHTML = sectionOptions(lineSelect.value, keep, lineSelect.value ? 'No section' : 'Select a line first');
+  };
+  const fillMachines = () => {
+    const rows = store.equipment.filter((item) => {
+      const plant = store.plants.find((row) => row.plant_id === item.plant_id);
+      if (plant && plant.active === false) return false;
+      if (plantSelect.value && item.plant_id !== plantSelect.value) return false;
+      if (lineSelect.value && item.line_id !== lineSelect.value) return false;
+      if (lineSelect.value && (item.section_id || '') !== sectionSelect.value) return false;
+      return true;
+    });
+    list.innerHTML = rows.map((item) => `<option value="${esc(item.equipment_id)}"></option><option value="${esc(item.name)}"></option>`).join('');
+  };
+  const applyMachine = () => {
+    const item = matchEquipment(machine.value);
+    if (!item || syncing) return;
+    syncing = true;
+    if (item.plant_id && openPlants().some((plant) => plant.plant_id === item.plant_id)) plantSelect.value = item.plant_id;
+    fillLines(item.line_id || '');
+    fillSections(item.section_id || '');
+    syncing = false;
+    fillMachines();
+  };
+  plantSelect.addEventListener('change', () => {
+    if (syncing) return;
+    fillLines('');
+    fillSections('');
+    fillMachines();
+  });
+  lineSelect.addEventListener('change', () => {
+    if (syncing) return;
+    fillSections('');
+    fillMachines();
+  });
+  sectionSelect.addEventListener('change', () => { if (!syncing) fillMachines(); });
+  machine.addEventListener('input', applyMachine);
+  machine.addEventListener('change', applyMachine);
+  fillLines('');
+  fillSections('');
+  fillMachines();
+}
+
 function workOrderForm(order) {
   const today = isoDate(new Date());
   const partRows = order ? jobPartRows(order.parts_used) : Array.from({ length: 5 }, (_, index) => `<tr><td class="lube-no">${index + 1}</td><td><input data-job-part="name"></td><td><input data-job-part="number"></td></tr>`).join('');
+  const parts = `<section class="daily-parts"><h3>${esc(t('Parts used'))}</h3><table class="lube-table"><thead><tr><th>${esc(t('No.'))}</th><th>${esc(t('Parts used'))}</th><th>${esc(t('Part No.'))}</th></tr></thead><tbody id="job-parts">${partRows}</tbody></table></section>`;
+  const actions = `<p id="live-form-error" class="form-error"></p><div class="lube-actions"><button type="button" id="job-back">${esc(t('Back'))}</button><button type="submit">${esc(t('Save'))}</button></div>`;
   if (order) {
-    const equipment = store.equipment.find((item) => item.equipment_id === order.equipment_id);
-    const plantId = equipment?.plant_id || order.manual_plant_id;
-    const department = store.plants.find((item) => item.plant_id === plantId)?.name || '';
-    const kind = order.work_order_type === 'Preventive' ? t('Preventive') : order.work_order_type === 'Corrective' ? t('Curative') : t(order.work_order_type || '');
+    const place = jobLocation(order);
     const crew = order.crew_type === 'External' ? t('External maintenance team') : t('Company maintenance team');
     const resultDate = String(order.closing_date || '').slice(0, 10);
-    return `<form id="live-form" class="lube-paper job-order" data-order-id="${esc(order.work_order_id)}"><header class="lube-head"><img src="logo-rayan.png?v=2" alt="Rayan"><div><h2>${esc(t('Maintenance Job Order'))}</h2><p class="job-kind">${esc(kind)}</p><small>Maintenance Job Order</small></div><dl><div><dt>${esc(t('Form No.:'))}</dt><dd>${esc(formNo('job_order'))}</dd></div><div><dt>${esc(t('Rev.'))}</dt><dd>a</dd></div></dl></header><div class="lube-meta"><label><span>${esc(t('Machine name'))}</span><input value="${esc(equipmentText(order))}" readonly></label><label><span>${esc(t('Repair order no.'))}</span><input value="${esc(order.work_order_id)}" readonly></label><label><span>${esc(t('Section'))}</span><input value="${esc(department)}" readonly></label><label><span>${esc(t('Date'))}</span><input type="date" value="${esc(String(order.planned_date || '').slice(0, 10))}" readonly></label></div><div class="job-crew"><b>${esc(crew)}</b></div><label class="job-block"><span>${esc(t('Fault'))}</span><textarea readonly>${esc(order.problem_description || '')}</textarea></label><label class="job-block"><span>${esc(t('Action taken'))}</span><textarea name="corrective_action">${esc(order.corrective_action || '')}</textarea></label><div class="job-block"><span>${esc(t('Technician signature'))}</span><input value="${esc(getSavedUser()?.full_name || assigneeNames(order))}" readonly></div><section class="daily-parts"><h3>${esc(t('Parts used'))}</h3><table class="lube-table"><thead><tr><th>${esc(t('No.'))}</th><th>${esc(t('Parts used'))}</th><th>${esc(t('Part No.'))}</th></tr></thead><tbody id="job-parts">${partRows}</tbody></table></section><label class="job-block"><span>${esc(t('Result'))}</span><textarea name="verification">${esc(order.verification || '')}</textarea></label><label class="job-result-date"><span>${esc(t('Date'))}</span><input name="result_date" type="date" value="${esc(resultDate)}"></label><p id="live-form-error" class="form-error"></p><div class="lube-actions"><button type="button" id="job-back">${esc(t('Back'))}</button><button type="submit">${esc(t('Save'))}</button></div></form>`;
+    const fields = [
+      jobField('Plant', `<input value="${esc(place.plant)}" readonly>`),
+      jobField('Line', `<input value="${esc(place.line)}" readonly>`),
+      jobField('Section', `<input value="${esc(place.section)}" readonly>`),
+      jobField('Maintenance type', `<input value="${esc(jobTypeLabel(order.work_order_type))}" readonly>`),
+      jobField('Machine name', `<input class="job-code" value="${esc(equipmentText(order))}" readonly>`, 'job-wide'),
+      jobField('Repair order no.', `<input value="${esc(order.work_order_id)}" readonly>`),
+      jobField('Date', `<input type="date" value="${esc(String(order.planned_date || '').slice(0, 10))}" readonly>`),
+    ].join('');
+    return `<form id="live-form" class="lube-paper job-order" data-order-id="${esc(order.work_order_id)}">${jobHead()}<div class="job-fields">${fields}</div><div class="job-crew"><b>${esc(crew)}</b></div><label class="job-block"><span>${esc(t('Fault'))}</span><textarea readonly>${esc(order.problem_description || '')}</textarea></label><label class="job-block"><span>${esc(t('Action taken'))}</span><textarea name="corrective_action">${esc(order.corrective_action || '')}</textarea></label><div class="job-block"><span>${esc(t('Technician signature'))}</span><input value="${esc(getSavedUser()?.full_name || assigneeNames(order))}" readonly></div>${parts}<label class="job-block"><span>${esc(t('Result'))}</span><textarea name="verification">${esc(order.verification || '')}</textarea></label><label class="job-result-date"><span>${esc(t('Date'))}</span><input name="result_date" type="date" value="${esc(resultDate)}"></label>${actions}</form>`;
   }
-  const equipment = store.equipment.map((item) => `<option value="${esc(item.name)}"></option><option value="${esc(item.equipment_id)}"></option>`).join('');
-  return `<form id="live-form" class="lube-paper job-order"><header class="lube-head"><img src="logo-rayan.png?v=2" alt="Rayan"><div><h2>${esc(t('Maintenance Job Order'))}</h2><p class="job-kind"><label><input type="radio" name="work_order_type" value="Preventive" required> ${esc(t('Preventive'))}</label><label><input type="radio" name="work_order_type" value="Corrective" checked> ${esc(t('Curative'))}</label></p><small>Maintenance Job Order</small></div><dl><div><dt>${esc(t('Form No.:'))}</dt><dd>${esc(formNo('job_order'))}</dd></div><div><dt>${esc(t('Rev.'))}</dt><dd>a</dd></div></dl></header><div class="lube-meta"><label><span>${esc(t('Machine name'))}</span><input name="machine_name" id="job-equipment" list="job-equipment-list" required autocomplete="off" placeholder="${esc(t('Equipment name or number'))}"><datalist id="job-equipment-list">${equipment}</datalist></label><label><span>${esc(t('Repair order no.'))}</span><input value="${esc(t('Created when saved'))}" readonly></label><label><span>${esc(t('Section'))}</span><input id="job-department" readonly></label><label><span>${esc(t('Date'))}</span><input name="planned_date" type="date" value="${today}" required></label></div><div class="job-crew"><label><input type="radio" name="crew_type" value="Company" checked> ${esc(t('Company maintenance team'))}</label><label><input type="radio" name="crew_type" value="External"> ${esc(t('External maintenance team'))}</label></div><label class="job-block"><span>${esc(t('Fault'))}</span><textarea name="problem_description" required></textarea></label><label class="job-block"><span>${esc(t('Action taken'))}</span><textarea name="corrective_action"></textarea></label><div class="job-block"><span>${esc(t('Technician signature'))}</span>${technicianChecks([])}</div><section class="daily-parts"><h3>${esc(t('Parts used'))}</h3><table class="lube-table"><thead><tr><th>${esc(t('No.'))}</th><th>${esc(t('Parts used'))}</th><th>${esc(t('Part No.'))}</th></tr></thead><tbody id="job-parts">${partRows}</tbody></table></section><label class="job-block"><span>${esc(t('Result'))}</span><textarea name="verification"></textarea></label><label class="job-result-date"><span>${esc(t('Date'))}</span><input name="result_date" type="date"></label><p id="live-form-error" class="form-error"></p><div class="lube-actions"><button type="button" id="job-back">${esc(t('Back'))}</button><button type="submit">${esc(t('Save'))}</button></div></form>`;
+  const plants = openPlants().map((plant) => `<option value="${esc(plant.plant_id)}">${esc(plant.name)}</option>`).join('');
+  const fields = [
+    jobField('Plant', `<select name="plant_id" id="job-plant" required><option value="">${esc(t('Select a plant first'))}</option>${plants}</select>`),
+    jobField('Line', `<select name="line_id" id="job-line" required><option value="">${esc(t('Select a plant first'))}</option></select>`),
+    jobField('Section', `<select name="section_id" id="job-section"><option value="">${esc(t('Select a line first'))}</option></select>`),
+    jobField('Maintenance type', `<select name="work_order_type" required>${jobTypeOptions('Corrective')}</select>`),
+    jobField('Machine name', `<input class="job-code" name="machine_name" id="job-equipment" list="job-equipment-list" required autocomplete="off" placeholder="${esc(t('Equipment name or number'))}"><datalist id="job-equipment-list"></datalist>`, 'job-wide'),
+    jobField('Repair order no.', `<input value="${esc(t('Created when saved'))}" readonly>`),
+    jobField('Date', `<input name="planned_date" type="date" value="${today}" required>`),
+  ].join('');
+  return `<form id="live-form" class="lube-paper job-order">${jobHead()}<div class="job-fields">${fields}</div><div class="job-crew"><label><input type="radio" name="crew_type" value="Company" checked> ${esc(t('Company maintenance team'))}</label><label><input type="radio" name="crew_type" value="External"> ${esc(t('External maintenance team'))}</label></div><label class="job-block"><span>${esc(t('Fault'))}</span><textarea name="problem_description" required></textarea></label><label class="job-block"><span>${esc(t('Action taken'))}</span><textarea name="corrective_action"></textarea></label><div class="job-block"><span>${esc(t('Technician signature'))}</span>${technicianChecks([])}</div>${parts}<label class="job-block"><span>${esc(t('Result'))}</span><textarea name="verification"></textarea></label><label class="job-result-date"><span>${esc(t('Date'))}</span><input name="result_date" type="date"></label>${actions}</form>`;
 }
 
 function planForm() {
@@ -1988,6 +2096,10 @@ function bindForm() {
         } else {
           const technicians = formData.getAll('assigned_technician_ids').filter(Boolean);
           const knownMachine = matchEquipment(data.machine_name);
+          if (!data.plant_id || !data.line_id) throw new Error(t('Select a plant and then a line number.'));
+          if (knownMachine && data.plant_id !== knownMachine.plant_id) throw new Error(t('The machine does not belong to the selected plant'));
+          if (knownMachine && data.line_id && knownMachine.line_id && data.line_id !== knownMachine.line_id) throw new Error(t('The machine does not belong to the selected line'));
+          if (knownMachine && data.section_id && knownMachine.section_id && data.section_id !== knownMachine.section_id) throw new Error(t('The machine does not belong to the selected section'));
           await apiRequest('/work-orders', { method: 'POST', body: JSON.stringify({
             work_order_type: data.work_order_type,
             equipment_id: knownMachine ? knownMachine.equipment_id : null,
