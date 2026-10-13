@@ -16,9 +16,11 @@ from .models import (
 FAILURE_TYPES = {'Corrective', 'Emergency'}
 CLOSED = {'Closed', 'Completed'}
 HOUR_TYPES = ('Preventive', 'Corrective', 'Routine', 'Inspection', 'Emergency', 'Lubrication')
+RECEIVED_REPORTS = {'Submitted', 'Approved', 'Returned'}
+REPORT_SHIFT_HOURS = 8
 HIGHER_IS_BETTER = {
     'availability', 'mtbf', 'pm_compliance', 'planned_pm', 'preventive_pct',
-    'wo_schedule', 'wo_completion',
+    'wo_schedule', 'wo_completion', 'utilization',
 }
 
 
@@ -189,6 +191,22 @@ def compute_kpi(db: Session, plant_id=None, line_id=None, equipment_id=None, tec
         unscheduled_down = round(hours['Corrective'] + hours['Emergency'], 2)
         total_down = round(scheduled_down + unscheduled_down, 2)
 
+        def report_counts_for_time(report):
+            if report.status not in RECEIVED_REPORTS or not _in_period(report.report_date, window_start, window_end):
+                return False
+            if not scoped:
+                return True
+            linked = [row for row in items if row.report_id == report.id]
+            if any(equipment_ok(row.equipment_id, row.plant_id, row.line_id) for row in linked):
+                return True
+            if line_id or equipment_id:
+                return False
+            return report.plant_id == plant_id
+
+        utilization_reports = len([row for row in reports if report_counts_for_time(row)])
+        utilization_available = round(utilization_reports * REPORT_SHIFT_HOURS, 2)
+        utilization_operating = round(max(utilization_available - total_down, 0), 2)
+
         asset_count = len(equipment_ids) if scoped else len({row.equipment_id for row in equipment})
         if asset_count == 0:
             asset_count = len({row.equipment_id or row.equipment_code for row in window_items if row.equipment_id or row.equipment_code})
@@ -343,6 +361,10 @@ def compute_kpi(db: Session, plant_id=None, line_id=None, equipment_id=None, tec
             'scheduled_downtime_h': scheduled_down,
             'unscheduled_downtime_h': unscheduled_down,
             'operating_h': max(operating, 0) if available else 0,
+            'utilization': _pct(utilization_operating, utilization_available),
+            'utilization_operating_h': utilization_operating,
+            'utilization_available_h': utilization_available,
+            'utilization_reports': utilization_reports,
             'mtbf': _per(max(operating, 0), failures) if available else None,
             'mttr': _per(corrective_hours, len(corrective_orders)) if corrective_orders else None,
             'failures': failures,
