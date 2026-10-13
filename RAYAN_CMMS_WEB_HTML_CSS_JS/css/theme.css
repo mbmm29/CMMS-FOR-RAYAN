@@ -422,7 +422,10 @@ body .machine-log .log-facts-save{width:auto;height:32px;margin:8px 0 0;padding:
 body .daily-paper textarea{width:100%;min-height:64px;border:1px solid #8eabda;border-radius:0;background:#fff;color:#102d60;font:14px Arial,sans-serif;padding:8px 8px 8px 92px}
 .lube-actions{display:flex;justify-content:flex-end;gap:8px;margin-top:10px}
 .lube-actions button{border:1px solid #99baf0;border-radius:6px;background:#fff;color:#0755dc;font-weight:800;padding:8px 12px;cursor:pointer}
-.lube-actions #daily-resend{border:0;background:#075cf5;color:#fff}
+.lube-actions #daily-resend,
+.lube-actions #lube-save{border:0;background:#075cf5;color:#fff}
+body .lube-form-actions{justify-content:flex-start;align-items:center}
+body .lube-form-actions .detail-button.primary{border:0;background:#075cf5;color:#fff}
 .job-order{max-width:980px;margin:0 auto}
 .job-fields{display:grid;grid-template-columns:1fr 1fr;gap:12px 22px;margin:16px 0 6px}
 .job-fields label{display:grid;grid-template-columns:minmax(108px,148px) minmax(0,1fr);gap:8px;align-items:end;min-width:0;color:#102d60;font-size:13px;font-weight:800}
