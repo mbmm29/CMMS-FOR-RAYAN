@@ -2,6 +2,7 @@
   const INSTALL = 'Install app';
   const IOS_HINT = 'Add RAYAN CMMS to your home screen from the browser Share menu.';
   const PHONE = 'Phone notices';
+  const PUSH_FLAG = 'cmms-push-enabled';
   const FALLBACK = {
     'Install app': 'تثبيت التطبيق',
     'Add RAYAN CMMS to your home screen from the browser Share menu.': 'أضف RAYAN CMMS إلى الشاشة الرئيسية من قائمة المشاركة في المتصفح.',
@@ -18,6 +19,30 @@
     const user = getSavedUser();
     if (!user || (user.role !== 'TECHNICIAN' && user.role !== 'LUBRICATION_TECHNICIAN' && user.role !== 'MAINTENANCE_ENGINEER')) return null;
     return user;
+  }
+
+  function isLoginPage() {
+    return Boolean(document.getElementById('loginForm') || document.getElementById('loginPage'));
+  }
+
+  function isPhoneDevice() {
+    const ua = navigator.userAgent || '';
+    if (/Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini|Mobile/i.test(ua)) return true;
+    if (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1) return true;
+    return window.matchMedia('(max-width: 900px) and (pointer: coarse)').matches;
+  }
+
+  function noticesAlreadyOn() {
+    if (localStorage.getItem(PUSH_FLAG) === '1') return true;
+    try {
+      return typeof Notification !== 'undefined' && Notification.permission === 'granted';
+    } catch (_) {
+      return false;
+    }
+  }
+
+  function markNoticesOn() {
+    localStorage.setItem(PUSH_FLAG, '1');
   }
 
   function urlBase64ToUint8Array(value) {
@@ -50,6 +75,7 @@
         auth: json.keys && json.keys.auth,
       }),
     });
+    markNoticesOn();
     return true;
   }
 
@@ -59,7 +85,9 @@
       navigator.serviceWorker.register('/sw.js', { scope: '/' }).then(function () {
         refreshPhone();
         if (typeof Notification !== 'undefined' && Notification.permission === 'granted') {
-          subscribePhone().catch(function () {});
+          subscribePhone().then(function (ok) {
+            if (ok) refreshPhone();
+          }).catch(function () {});
         }
       }).catch(function () {
         refreshPhone();
@@ -67,7 +95,12 @@
     });
   }
 
-  const host = document.querySelector('.header-actions') || document.querySelector('.login-footer');
+  const style = document.createElement('style');
+  style.textContent = '.install-app{border:1px solid #99baf0;background:#fff;color:#062857;border-radius:8px;padding:8px 12px;font:700 13px Arial,sans-serif;cursor:pointer}.header-actions .install-app{margin-inline-end:8px}.login-footer .install-app,.login-footer .install-app-hint{display:block;margin:12px auto 0;text-align:center}.install-app-hint{margin:8px 0 0;max-width:280px;font:12px Arial,sans-serif;color:#d7e4f8}';
+  document.head.appendChild(style);
+
+  // Phone notices: main app header only, phones only, hide after the user enables them.
+  const appHost = document.querySelector('.header-actions');
   const phone = document.createElement('button');
   phone.type = 'button';
   phone.id = 'phone-notices';
@@ -75,21 +108,32 @@
   phone.className = 'install-app';
   phone.setAttribute('data-i18n', PHONE);
   phone.textContent = label(PHONE);
-  if (host) host.prepend(phone);
+  if (appHost && !isLoginPage()) appHost.prepend(phone);
 
   function refreshPhone() {
-    const allowed = Boolean(noticeUser()) && 'Notification' in window && 'PushManager' in window && Notification.permission !== 'granted';
-    phone.hidden = !allowed;
+    const canAsk = Boolean(appHost)
+      && !isLoginPage()
+      && isPhoneDevice()
+      && Boolean(noticeUser())
+      && 'Notification' in window
+      && 'PushManager' in window
+      && !noticesAlreadyOn()
+      && Notification.permission !== 'denied';
+    phone.hidden = !canAsk;
     phone.textContent = label(PHONE);
   }
 
   phone.addEventListener('click', async function () {
-    if (!noticeUser()) return;
+    if (!noticeUser() || !isPhoneDevice() || isLoginPage()) return;
     const permission = await Notification.requestPermission();
-    if (permission !== 'granted') return;
+    if (permission !== 'granted') {
+      refreshPhone();
+      return;
+    }
     try {
       await subscribePhone();
       phone.hidden = true;
+      refreshPhone();
     } catch (error) {
       if (typeof toast === 'function') toast(error.message || label('The phone could not be registered for notices.'));
     }
@@ -97,11 +141,10 @@
 
   refreshPhone();
   document.addEventListener('cmms-language', refreshPhone);
+  window.addEventListener('resize', refreshPhone);
 
-  const style = document.createElement('style');
-  style.textContent = '.install-app{border:1px solid #99baf0;background:#fff;color:#062857;border-radius:8px;padding:8px 12px;font:700 13px Arial,sans-serif;cursor:pointer}.header-actions .install-app{margin-inline-end:8px}.login-footer .install-app,.login-footer .install-app-hint{display:block;margin:12px auto 0;text-align:center}.install-app-hint{margin:8px 0 0;max-width:280px;font:12px Arial,sans-serif;color:#d7e4f8}';
-  document.head.appendChild(style);
-
+  // Install app / iOS hint may still appear on login or the main header.
+  const host = appHost || document.querySelector('.login-footer');
   const standalone = window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true;
   if (standalone || !host) return;
 
