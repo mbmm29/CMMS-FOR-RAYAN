@@ -1301,6 +1301,7 @@ async function drawAnnualPlan() {
       <label>${esc(t('Plant'))}<select id="annual-plant"><option value="">${esc(t('Choose a plant'))}</option>${options}</select></label>
       <label>${esc(t('Year'))}<input id="annual-year" type="number" min="2000" max="2100" value="${esc(ui.annualYear)}"${locked ? ' disabled' : ''}></label>
       ${locked ? '' : `<button type="button" id="annual-add" class="detail-button">${esc(t('Add task'))}</button><button type="button" id="annual-copy" class="detail-button">${esc(t('Copy plan'))}</button><button type="button" id="annual-paste" class="detail-button"${ui.annualCopy ? '' : ' disabled'}>${esc(ui.annualCopy ? `${t('Paste plan')} · ${ui.annualCopy.plantName}` : t('Paste plan'))}</button>`}
+      <button type="button" id="annual-export" class="detail-button">${esc(t('Export'))}</button>
     </div>
     <h2 class="annual-title">${esc(t('Annual preventive maintenance plan'))}${formNo('annual_plan') ? ` · ${esc(formNo('annual_plan'))}` : ''}</h2>
     <div class="annual-scroll"><table class="annual-sheet">
@@ -1349,6 +1350,7 @@ async function drawAnnualPlan() {
   });
   document.getElementById('annual-copy')?.addEventListener('click', copyAnnualPlan);
   document.getElementById('annual-paste')?.addEventListener('click', () => { pasteAnnualPlan(); });
+  document.getElementById('annual-export')?.addEventListener('click', () => { exportAnnualPlan(); });
   document.querySelectorAll('#annual-rows tr[data-line]').forEach((row) => {
     applyRowRepeat(row);
     row.querySelector('[data-field="frequency_time"]')?.addEventListener('input', () => applyRowRepeat(row));
@@ -2250,6 +2252,7 @@ function columnLetters(index) {
 function workbookStyles() {
   return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
+<numFmts count="1"><numFmt numFmtId="164" formatCode="0.##"/></numFmts>
 <fonts count="7">
 <font><sz val="11"/><color rgb="FF102D60"/><name val="Calibri"/></font>
 <font><b/><sz val="18"/><color rgb="FF102D60"/><name val="Calibri"/></font>
@@ -2271,7 +2274,7 @@ function workbookStyles() {
 <border><left/><right/><top/><bottom style="thin"><color rgb="FF8EABDA"/></bottom><diagonal/></border>
 </borders>
 <cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs>
-<cellXfs count="15">
+<cellXfs count="17">
 <xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/>
 <xf numFmtId="0" fontId="1" fillId="0" borderId="0" xfId="0" applyFont="1" applyAlignment="1"><alignment horizontal="center" vertical="center" wrapText="1"/></xf>
 <xf numFmtId="0" fontId="2" fillId="0" borderId="0" xfId="0" applyFont="1" applyAlignment="1"><alignment horizontal="center" vertical="center" wrapText="1"/></xf>
@@ -2287,12 +2290,96 @@ function workbookStyles() {
 <xf numFmtId="0" fontId="3" fillId="0" borderId="2" xfId="0" applyFont="1" applyBorder="1" applyAlignment="1"><alignment horizontal="right" vertical="center" wrapText="1"/></xf>
 <xf numFmtId="0" fontId="0" fillId="0" borderId="2" xfId="0" applyBorder="1" applyAlignment="1"><alignment horizontal="right" vertical="center" wrapText="1"/></xf>
 <xf numFmtId="0" fontId="5" fillId="0" borderId="1" xfId="0" applyBorder="1" applyAlignment="1"><alignment horizontal="right" vertical="center" wrapText="1"/></xf>
+<xf numFmtId="164" fontId="4" fillId="2" borderId="1" xfId="0" applyNumberFormat="1" applyFont="1" applyFill="1" applyBorder="1" applyAlignment="1"><alignment horizontal="center" vertical="center"/></xf>
+<xf numFmtId="164" fontId="3" fillId="0" borderId="1" xfId="0" applyNumberFormat="1" applyFont="1" applyBorder="1" applyAlignment="1"><alignment horizontal="center" vertical="center"/></xf>
 </cellXfs>
 </styleSheet>`;
 }
 
-function buildMaintenanceLogWorkbook(model) {
+function excelNumber(value) {
+  if (typeof value === 'number' && Number.isFinite(value)) return value;
+  const text = String(value ?? '').trim();
+  if (!text || text === '—' || !/^-?\d+(\.\d+)?$/.test(text)) return null;
+  const number = Number(text);
+  return Number.isFinite(number) ? number : null;
+}
+
+function worksheetRows(cells, heights) {
+  const byRow = new Map();
+  cells.forEach((cell) => {
+    if (!byRow.has(cell.r)) byRow.set(cell.r, []);
+    byRow.get(cell.r).push(cell);
+  });
+  return [...byRow.keys()].sort((a, b) => a - b).map((row) => {
+    const body = byRow.get(row).sort((a, b) => a.c - b.c).map((cell) => {
+      const ref = `${columnLetters(cell.c)}${row}`;
+      if (typeof cell.v === 'number' && Number.isFinite(cell.v)) return `<c r="${ref}" s="${cell.s}"><v>${cell.v}</v></c>`;
+      if (cell.v === '' || cell.v == null) return `<c r="${ref}" s="${cell.s}"/>`;
+      return `<c r="${ref}" s="${cell.s}" t="inlineStr"><is><t xml:space="preserve">${xmlText(cell.v)}</t></is></c>`;
+    }).join('');
+    return `<row r="${row}" ht="${heights[row] || 20}" customHeight="1">${body}</row>`;
+  }).join('');
+}
+
+function packWorkbook(sheet, sheetName, logo, logoRows = 4) {
   const encoder = new TextEncoder();
+  const files = [
+    { name: '[Content_Types].xml', data: encoder.encode(`<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">
+<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>
+<Default Extension="xml" ContentType="application/xml"/>
+<Default Extension="png" ContentType="image/png"/>
+<Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/>
+<Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>
+<Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/>
+${logo ? '<Override PartName="/xl/drawings/drawing1.xml" ContentType="application/vnd.openxmlformats-officedocument.drawing+xml"/>' : ''}
+</Types>`) },
+    { name: '_rels/.rels', data: encoder.encode(`<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/>
+</Relationships>`) },
+    { name: 'xl/workbook.xml', data: encoder.encode(`<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">
+<sheets><sheet name="${xmlText(sheetName)}" sheetId="1" r:id="rId1"/></sheets>
+</workbook>`) },
+    { name: 'xl/_rels/workbook.xml.rels', data: encoder.encode(`<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/>
+<Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/>
+</Relationships>`) },
+    { name: 'xl/styles.xml', data: encoder.encode(workbookStyles()) },
+    { name: 'xl/worksheets/sheet1.xml', data: encoder.encode(sheet) },
+  ];
+  if (logo) {
+    files.push(
+      { name: 'xl/worksheets/_rels/sheet1.xml.rels', data: encoder.encode(`<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/drawing" Target="../drawings/drawing1.xml"/>
+</Relationships>`) },
+      { name: 'xl/drawings/drawing1.xml', data: encoder.encode(`<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<xdr:wsDr xmlns:xdr="http://schemas.openxmlformats.org/drawingml/2006/spreadsheetDrawing" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">
+<xdr:twoCellAnchor editAs="oneCell">
+<xdr:from><xdr:col>0</xdr:col><xdr:colOff>80000</xdr:colOff><xdr:row>0</xdr:row><xdr:rowOff>40000</xdr:rowOff></xdr:from>
+<xdr:to><xdr:col>2</xdr:col><xdr:colOff>0</xdr:colOff><xdr:row>${logoRows}</xdr:row><xdr:rowOff>0</xdr:rowOff></xdr:to>
+<xdr:pic>
+<xdr:nvPicPr><xdr:cNvPr id="1" name="Logo"/><xdr:cNvPicPr><a:picLocks noChangeAspect="1"/></xdr:cNvPicPr></xdr:nvPicPr>
+<xdr:blipFill><a:blip xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" r:embed="rId1"/><a:stretch><a:fillRect/></a:stretch></xdr:blipFill>
+<xdr:spPr><a:prstGeom prst="rect"><a:avLst/></a:prstGeom></xdr:spPr>
+</xdr:pic>
+<xdr:clientData/>
+</xdr:twoCellAnchor>
+</xdr:wsDr>`) },
+      { name: 'xl/drawings/_rels/drawing1.xml.rels', data: encoder.encode(`<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="../media/logo.png"/>
+</Relationships>`) },
+      { name: 'xl/media/logo.png', data: logo },
+    );
+  }
+  return zipStore(files);
+}
+
+function buildMaintenanceLogWorkbook(model) {
   const rtl = model.rtl;
   const labelStyle = rtl ? 12 : 5;
   const valueStyle = rtl ? 13 : 6;
@@ -2332,26 +2419,19 @@ function buildMaintenanceLogWorkbook(model) {
   model.lines.forEach((line, index) => {
     const row = 17 + index;
     heights[row] = 28;
-    line.forEach((value, column) => place(row, column + 1, value, column === 3 || column === 4 || column === 6 || column === 10 ? textStyle : 10));
+    line.forEach((value, column) => {
+      const numeric = column === 0 || column === 8 || column === 9;
+      const number = numeric ? excelNumber(value) : null;
+      const textColumn = column === 3 || column === 4 || column === 6 || column === 10;
+      place(row, column + 1, number == null ? value : number, number == null ? (textColumn ? textStyle : 10) : 16);
+    });
   });
   if (!model.lines.length) {
     heights[17] = 24;
     merge(17, 1, 17, 11, model.empty, textStyle);
   }
   const lastRow = Math.max(17, 16 + model.lines.length);
-  const byRow = new Map();
-  cells.forEach((cell) => {
-    if (!byRow.has(cell.r)) byRow.set(cell.r, []);
-    byRow.get(cell.r).push(cell);
-  });
-  const sheetRows = [...byRow.keys()].sort((a, b) => a - b).map((row) => {
-    const body = byRow.get(row).sort((a, b) => a.c - b.c).map((cell) => {
-      const ref = `${columnLetters(cell.c)}${row}`;
-      if (cell.v === '' || cell.v == null) return `<c r="${ref}" s="${cell.s}"/>`;
-      return `<c r="${ref}" s="${cell.s}" t="inlineStr"><is><t xml:space="preserve">${xmlText(cell.v)}</t></is></c>`;
-    }).join('');
-    return `<row r="${row}" ht="${heights[row] || 20}" customHeight="1">${body}</row>`;
-  }).join('');
+  const sheetRows = worksheetRows(cells, heights);
   const drawing = model.logo ? '<drawing r:id="rId1"/>' : '';
   const sheet = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">
@@ -2378,60 +2458,7 @@ function buildMaintenanceLogWorkbook(model) {
 <pageSetup orientation="landscape" paperSize="9" fitToWidth="1" fitToHeight="0"/>
 ${drawing}
 </worksheet>`;
-  const files = [
-    { name: '[Content_Types].xml', data: encoder.encode(`<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">
-<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>
-<Default Extension="xml" ContentType="application/xml"/>
-<Default Extension="png" ContentType="image/png"/>
-<Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/>
-<Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>
-<Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/>
-${model.logo ? '<Override PartName="/xl/drawings/drawing1.xml" ContentType="application/vnd.openxmlformats-officedocument.drawing+xml"/>' : ''}
-</Types>`) },
-    { name: '_rels/.rels', data: encoder.encode(`<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
-<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/>
-</Relationships>`) },
-    { name: 'xl/workbook.xml', data: encoder.encode(`<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">
-<sheets><sheet name="${xmlText(model.sheetName)}" sheetId="1" r:id="rId1"/></sheets>
-</workbook>`) },
-    { name: 'xl/_rels/workbook.xml.rels', data: encoder.encode(`<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
-<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/>
-<Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/>
-</Relationships>`) },
-    { name: 'xl/styles.xml', data: encoder.encode(workbookStyles()) },
-    { name: 'xl/worksheets/sheet1.xml', data: encoder.encode(sheet) },
-  ];
-  if (model.logo) {
-    files.push(
-      { name: 'xl/worksheets/_rels/sheet1.xml.rels', data: encoder.encode(`<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
-<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/drawing" Target="../drawings/drawing1.xml"/>
-</Relationships>`) },
-      { name: 'xl/drawings/drawing1.xml', data: encoder.encode(`<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<xdr:wsDr xmlns:xdr="http://schemas.openxmlformats.org/drawingml/2006/spreadsheetDrawing" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">
-<xdr:twoCellAnchor editAs="oneCell">
-<xdr:from><xdr:col>0</xdr:col><xdr:colOff>80000</xdr:colOff><xdr:row>0</xdr:row><xdr:rowOff>40000</xdr:rowOff></xdr:from>
-<xdr:to><xdr:col>2</xdr:col><xdr:colOff>0</xdr:colOff><xdr:row>4</xdr:row><xdr:rowOff>0</xdr:rowOff></xdr:to>
-<xdr:pic>
-<xdr:nvPicPr><xdr:cNvPr id="1" name="Logo"/><xdr:cNvPicPr><a:picLocks noChangeAspect="1"/></xdr:cNvPicPr></xdr:nvPicPr>
-<xdr:blipFill><a:blip xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" r:embed="rId1"/><a:stretch><a:fillRect/></a:stretch></xdr:blipFill>
-<xdr:spPr><a:prstGeom prst="rect"><a:avLst/></a:prstGeom></xdr:spPr>
-</xdr:pic>
-<xdr:clientData/>
-</xdr:twoCellAnchor>
-</xdr:wsDr>`) },
-      { name: 'xl/drawings/_rels/drawing1.xml.rels', data: encoder.encode(`<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
-<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="../media/logo.png"/>
-</Relationships>`) },
-      { name: 'xl/media/logo.png', data: model.logo },
-    );
-  }
-  return zipStore(files);
+  return packWorkbook(sheet, model.sheetName, model.logo);
 }
 
 async function exportRecords() {
@@ -2511,6 +2538,126 @@ async function exportRecords() {
   const link = document.createElement('a');
   link.href = URL.createObjectURL(blob);
   link.download = `maintenance-log-${equipment.equipment_id}.xlsx`;
+  link.click();
+  URL.revokeObjectURL(link.href);
+}
+
+function buildAnnualPlanWorkbook(model) {
+  const rtl = model.rtl;
+  const textStyle = rtl ? 14 : 11;
+  const cells = [];
+  const merges = [];
+  const place = (row, column, value, style) => cells.push({ r: row, c: column, v: value, s: style });
+  const merge = (row, column, rowTo, columnTo, value, style) => {
+    place(row, column, value, style);
+    if (row !== rowTo || column !== columnTo) merges.push(`${columnLetters(column)}${row}:${columnLetters(columnTo)}${rowTo}`);
+  };
+  const lastColumn = 57;
+  merge(1, 3, 1, 9, model.title, 1);
+  merge(2, 3, 2, 9, model.subtitle, 2);
+  model.headings.forEach((heading, index) => merge(4, index + 1, 5, index + 1, heading, 9));
+  model.months.forEach((month, index) => {
+    const start = 10 + index * 4;
+    merge(4, start, 4, start + 3, month, index % 2 ? 9 : 4);
+    for (let week = 1; week <= 4; week += 1) place(5, start + week - 1, week, 16);
+  });
+  const heights = { 1: 26, 2: 22, 4: 24, 5: 20 };
+  model.lines.forEach((line, index) => {
+    const row = 6 + index;
+    heights[row] = 22;
+    line.values.forEach((value, column) => {
+      const number = excelNumber(value);
+      const numericColumn = column === 0 || column === 3 || column === 7 || column === 8;
+      const useNumber = numericColumn && number != null;
+      const textColumn = column === 2 || column === 4 || column === 5;
+      place(row, column + 1, useNumber ? number : (value || ''), useNumber ? 16 : (textColumn ? textStyle : 10));
+    });
+    const marks = new Set(line.marks || []);
+    for (let month = 1; month <= 12; month += 1) {
+      for (let week = 1; week <= 4; week += 1) {
+        const on = marks.has(`${month}-${week}`);
+        place(row, 9 + (month - 1) * 4 + week, on ? week : '', on ? 15 : 10);
+      }
+    }
+  });
+  const lastData = model.lines.length ? 5 + model.lines.length : 6;
+  if (!model.lines.length) {
+    heights[6] = 24;
+    merge(6, 1, 6, lastColumn, model.empty, textStyle);
+  }
+  const end = columnLetters(lastColumn);
+  const drawing = model.logo ? '<drawing r:id="rId1"/>' : '';
+  const cols = [6, 16, 22, 10, 18, 32, 16, 12, 14].map((width, index) => `<col min="${index + 1}" max="${index + 1}" width="${width}" customWidth="1"/>`).join('')
+    + `<col min="10" max="${lastColumn}" width="4.5" customWidth="1"/>`;
+  const sheet = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">
+<sheetPr><pageSetUpPr fitToPage="1"/></sheetPr>
+<dimension ref="A1:${end}${lastData}"/>
+<sheetViews><sheetView showGridLines="0" rightToLeft="${rtl ? 1 : 0}" workbookViewId="0"><pane xSplit="9" ySplit="5" topLeftCell="J6" activePane="bottomRight" state="frozen"/></sheetView></sheetViews>
+<sheetFormatPr defaultRowHeight="18"/>
+<cols>${cols}</cols>
+<sheetData>${worksheetRows(cells, heights)}</sheetData>
+<mergeCells count="${merges.length}">${merges.map((ref) => `<mergeCell ref="${ref}"/>`).join('')}</mergeCells>
+<pageMargins left="0.35" right="0.35" top="0.4" bottom="0.4" header="0.2" footer="0.2"/>
+<pageSetup orientation="landscape" paperSize="8" fitToWidth="1" fitToHeight="0"/>
+${drawing}
+</worksheet>`;
+  return packWorkbook(sheet, model.sheetName, model.logo, 2);
+}
+
+async function exportAnnualPlan() {
+  if (!ui.annualPlant) {
+    toast(t('Choose a plant, then set the plan.'));
+    return;
+  }
+  const source = document.getElementById('annual-rows') ? readAnnualRows() : (ui.annualItems || []);
+  const items = filledAnnualRows(source);
+  const plant = (store.plants || []).find((item) => item.plant_id === ui.annualPlant);
+  const formNumber = formNo('annual_plan');
+  const subtitle = [
+    `${t('Plant')}: ${plant?.name || ui.annualPlant}`,
+    `${t('Year')}: ${ui.annualYear}`,
+    formNumber ? `${t('Form No.:')} ${formNumber}` : '',
+  ].filter(Boolean).join('    ');
+  const lines = items.map((item, index) => {
+    const line = (store.lines || []).find((row) => row.line_id === item.line_id);
+    return {
+      values: [
+        index + 1,
+        item.machine_code || '',
+        item.machine_name || '',
+        line ? (line.line_number ?? '') : '',
+        line?.name || '',
+        item.task || '',
+        t(item.maintenance_type || 'Preventive'),
+        item.frequency_time || '',
+        item.frequency_hours || '',
+      ],
+      marks: String(item.weeks || '').split(',').map((part) => part.trim()).filter(Boolean),
+    };
+  });
+  let logo = null;
+  try {
+    const response = await fetch('logo-rayan.png?v=2');
+    if (response.ok) logo = new Uint8Array(await response.arrayBuffer());
+  } catch (_) {
+    logo = null;
+  }
+  const blob = buildAnnualPlanWorkbook({
+    rtl: document.documentElement.dir === 'rtl',
+    sheetName: t('Annual preventive maintenance plan').slice(0, 31),
+    title: t('Annual preventive maintenance plan'),
+    subtitle,
+    headings: [t('No.'), t('Machine number'), t('Machine name'), t('Line number'), t('Line name'), t('Task description'), t('Maintenance type'), t('Every (days)'), t('By running hours')],
+    months: ANNUAL_MONTHS.map((month) => t(month)),
+    lines,
+    empty: t('No records yet'),
+    logo,
+  });
+  const safe = String(plant?.name || ui.annualPlant).replace(/[\\/:*?"<>|]/g, '-').slice(0, 40);
+  const link = document.createElement('a');
+  link.href = URL.createObjectURL(blob);
+  link.download = `annual-plan-${ui.annualYear}-${safe}.xlsx`;
   link.click();
   URL.revokeObjectURL(link.href);
 }
