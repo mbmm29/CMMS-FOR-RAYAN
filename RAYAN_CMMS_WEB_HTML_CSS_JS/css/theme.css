@@ -437,6 +437,8 @@ body .job-order textarea{width:100%;min-height:88px;border:1px solid #8eabda;bor
 .job-order .lube-actions button[type=submit]{border:0;background:#075cf5;color:#fff}
 button.job-open{border:0;cursor:pointer}
 button.job-open:hover{filter:brightness(1.12)}
+body .detail-button.job-open-detail{display:inline-flex;align-items:center;justify-content:center;gap:8px;background:#075cf5;border-color:#3b82f6;color:#fff}
+body .detail-button.job-open-detail .job-open-glyph{font-size:16px;line-height:1}
 .lube-paper .form-error{color:#b42318}
 @media(max-width:900px){body .workspace.lube-board{grid-template-columns:minmax(0,1fr)}.lube-head{grid-template-columns:1fr}.machine-log .lube-head{grid-template-columns:180px minmax(180px,1fr) 220px}.lube-meta{grid-template-columns:1fr}}
 @media(max-width:760px){

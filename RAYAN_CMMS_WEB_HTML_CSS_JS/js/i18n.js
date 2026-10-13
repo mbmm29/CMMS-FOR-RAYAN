@@ -468,6 +468,7 @@ const CMMS_AR = {
   'Parts': 'القطع',
   'Send to technicians': 'إرسال إلى الفنيين',
   'Send to selected technicians': 'إرسال إلى الفنيين المختارين',
+  'Open maintenance order': 'فتح أمر الصيانة',
   'No technicians': 'لا يوجد فنيون',
   'All PM Tasks': 'كل المهام الوقائية',
   'Due Today': 'مستحق اليوم',

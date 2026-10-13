@@ -819,7 +819,7 @@ function drawWorkOrders() {
     });
     return;
   }
-  if (ui.mode === 'job' && isTechnician()) {
+  if (ui.mode === 'job') {
     const order = store.orders.find((row) => row.work_order_id === ui.rowKey);
     if (order) {
       document.getElementById('workspace').className = 'workspace';
@@ -843,7 +843,7 @@ function drawWorkOrders() {
   document.getElementById('workspace').className = 'workspace';
   document.getElementById('workspace').innerHTML = `<section class="panel">${tabsHtml(['All Work Orders', 'In Progress', 'Overdue', 'Completed', 'On Hold'])}${tableShell(['WO No.', 'Type', 'Equipment', 'Problem / Description', 'Priority', 'Status', 'Assigned To', 'Due Date', 'Created On'], body, shown(rows.length, scoped(store.orders).length, 'work orders'))}</section>${detail}`;
   if (ui.mode !== 'create' && selected) {
-    document.querySelector('.detail')?.insertAdjacentHTML('beforeend', `<button type="button" class="detail-button" id="job-pdf-export">${esc(t('Export PDF'))}</button>`);
+    document.querySelector('.detail')?.insertAdjacentHTML('beforeend', `<button type="button" class="detail-button primary job-open-detail" data-open="${esc(selected.work_order_id)}" title="${esc(t('Open maintenance order'))}"><span class="job-open-glyph" aria-hidden="true">▣</span><span>${esc(t('Open maintenance order'))}</span></button><button type="button" class="detail-button" id="job-pdf-export">${esc(t('Export PDF'))}</button>`);
     document.getElementById('job-pdf-export')?.addEventListener('click', () => exportJobOrderPdf(selected));
   }
   if (ui.mode !== 'create' && selected && canMaintain()) {
@@ -858,27 +858,6 @@ function drawWorkOrders() {
     drawWorkOrders();
   }));
   bindForm();
-  if (ui.mode !== 'create' && selected && canMaintain()) {
-    document.querySelector('.detail')?.insertAdjacentHTML('beforeend', `<form id="assign-form" class="live-form"><div class="assign-block"><b>${esc(t('Send to technicians'))}</b>${technicianChecks(assigneeIds(selected))}</div><button class="detail-button primary" type="submit">${esc(t('Send to selected technicians'))}</button><p id="assign-error" class="form-error"></p></form>`);
-    document.getElementById('assign-form')?.addEventListener('submit', async (event) => {
-      event.preventDefault();
-      const technicians = [...new FormData(event.currentTarget).getAll('assigned_technician_ids')];
-      const error = document.getElementById('assign-error');
-      if (!technicians.length) {
-        error.textContent = 'Select at least one technician.';
-        return;
-      }
-      try {
-        await apiRequest(`/work-orders/${encodeURIComponent(selected.work_order_id)}`, { method: 'PUT', body: JSON.stringify({ assigned_technician_ids: technicians }) });
-        store = null;
-        ui.rowKey = selected.work_order_id;
-        toast('Work order sent only to the selected technicians.');
-        await paint('work-orders');
-      } catch (exception) {
-        error.textContent = exception.message;
-      }
-    });
-  }
   if (ui.mode !== 'create' && selected && isTechnician()) {
     const response = myResponse(selected);
     const panel = document.querySelector('.detail');
