@@ -2694,48 +2694,86 @@ function buildMaintenanceLogWorkbook(model) {
     place(row, column, value, style);
     if (row !== rowTo || column !== columnTo) merges.push(`${columnLetters(column)}${row}:${columnLetters(columnTo)}${rowTo}`);
   };
-  merge(1, 3, 2, 7, model.title, 1);
-  merge(3, 3, 4, 7, model.department, 2);
-  model.meta.forEach((item, index) => {
-    merge(index + 1, 8, index + 1, 9, item.label, 7);
-    merge(index + 1, 10, index + 1, 11, item.value, 8);
-  });
-  merge(6, 1, 6, 11, model.approved, 3);
-  merge(8, 1, 8, 7, model.equipmentTitle, 4);
-  merge(8, 8, 8, 11, model.keyTitle, 4);
-  model.facts.forEach((item, index) => {
-    const row = 9 + index;
+  const lastCol = 11;
+  let row = 1;
+  const heights = {};
+
+  // Header block matching the on-screen maintenance log form.
+  merge(row, 1, row, lastCol, model.title, 1);
+  heights[row] = 28;
+  row += 1;
+  merge(row, 1, row, lastCol, model.department, 2);
+  heights[row] = 22;
+  row += 1;
+
+  const meta = model.meta || [];
+  meta.forEach((item) => {
     merge(row, 1, row, 3, item.label, labelStyle);
-    merge(row, 4, row, 7, item.value, valueStyle);
+    merge(row, 4, row, lastCol, item.value == null || item.value === '' ? '—' : item.value, valueStyle);
+    heights[row] = 20;
+    row += 1;
   });
-  merge(9, 8, 9, 10, model.typeHeading, 9);
-  place(9, 11, model.symbolHeading, 9);
-  model.key.forEach((item, index) => {
-    const row = 10 + index;
-    merge(row, 8, row, 10, item.label, 8);
-    place(row, 11, item.value, 10);
+
+  merge(row, 1, row, lastCol, model.approved, 3);
+  heights[row] = 22;
+  row += 1;
+
+  merge(row, 1, row, lastCol, model.equipmentTitle, 4);
+  heights[row] = 22;
+  row += 1;
+  (model.facts || []).forEach((item) => {
+    merge(row, 1, row, 3, item.label, labelStyle);
+    merge(row, 4, row, lastCol, item.value == null || item.value === '' ? '—' : item.value, valueStyle);
+    heights[row] = 20;
+    row += 1;
   });
-  merge(15, 1, 15, 11, model.tableTitle, 4);
-  const headings = model.headings;
-  headings.forEach((heading, index) => place(16, index + 1, heading, 9));
-  const heights = { 1: 24, 2: 24, 3: 22, 4: 22, 6: 22, 8: 22, 15: 24, 16: 30 };
-  model.lines.forEach((line, index) => {
-    const row = 17 + index;
-    heights[row] = 28;
+
+  merge(row, 1, row, lastCol, model.keyTitle, 4);
+  heights[row] = 22;
+  row += 1;
+  merge(row, 1, row, 8, model.typeHeading, 9);
+  merge(row, 9, row, lastCol, model.symbolHeading, 9);
+  heights[row] = 20;
+  row += 1;
+  (model.key || []).forEach((item) => {
+    merge(row, 1, row, 8, item.label, 8);
+    merge(row, 9, row, lastCol, item.value, 10);
+    heights[row] = 20;
+    row += 1;
+  });
+
+  row += 1;
+  merge(row, 1, row, lastCol, model.tableTitle, 4);
+  heights[row] = 24;
+  row += 1;
+
+  const headerRow = row;
+  (model.headings || []).forEach((heading, index) => place(headerRow, index + 1, heading, 9));
+  heights[headerRow] = 32;
+  row += 1;
+
+  const dataStart = row;
+  (model.lines || []).forEach((line, index) => {
+    const current = dataStart + index;
+    heights[current] = 28;
     line.forEach((value, column) => {
       const numeric = column === 0 || column === 8 || column === 9;
       const number = numeric ? excelNumber(value) : null;
       const textColumn = column === 3 || column === 4 || column === 6 || column === 10;
-      place(row, column + 1, number == null ? value : number, number == null ? (textColumn ? textStyle : 10) : 16);
+      place(current, column + 1, number == null ? value : number, number == null ? (textColumn ? textStyle : 10) : 16);
     });
   });
-  if (!model.lines.length) {
-    heights[17] = 24;
-    merge(17, 1, 17, 11, model.empty, textStyle);
+  if (!(model.lines || []).length) {
+    heights[dataStart] = 24;
+    merge(dataStart, 1, dataStart, lastCol, model.empty, textStyle);
   }
-  const lastRow = Math.max(17, 16 + model.lines.length);
+
+  const lastRow = Math.max(dataStart, dataStart + Math.max(0, (model.lines || []).length) - 1);
   const sheetRows = worksheetRows(cells, heights);
   const drawing = model.logo ? '<drawing r:id="rId1"/>' : '';
+  const mergeXml = merges.length
+    ? `<mergeCells count="${merges.length}">${merges.map((ref) => `<mergeCell ref="${ref}"/>`).join('')}</mergeCells>`
+    : '';
   const sheet = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">
 <sheetPr><pageSetUpPr fitToPage="1"/></sheetPr>
@@ -2745,23 +2783,23 @@ function buildMaintenanceLogWorkbook(model) {
 <cols>
 <col min="1" max="1" width="8" customWidth="1"/>
 <col min="2" max="2" width="14" customWidth="1"/>
-<col min="3" max="3" width="12" customWidth="1"/>
-<col min="4" max="4" width="24" customWidth="1"/>
+<col min="3" max="3" width="14" customWidth="1"/>
+<col min="4" max="4" width="22" customWidth="1"/>
 <col min="5" max="5" width="28" customWidth="1"/>
 <col min="6" max="6" width="16" customWidth="1"/>
 <col min="7" max="7" width="20" customWidth="1"/>
-<col min="8" max="8" width="16" customWidth="1"/>
-<col min="9" max="9" width="14" customWidth="1"/>
-<col min="10" max="10" width="14" customWidth="1"/>
+<col min="8" max="8" width="14" customWidth="1"/>
+<col min="9" max="9" width="12" customWidth="1"/>
+<col min="10" max="10" width="12" customWidth="1"/>
 <col min="11" max="11" width="18" customWidth="1"/>
 </cols>
 <sheetData>${sheetRows}</sheetData>
-<mergeCells count="${merges.length}">${merges.map((ref) => `<mergeCell ref="${ref}"/>`).join('')}</mergeCells>
+${mergeXml}
 <pageMargins left="0.4" right="0.4" top="0.4" bottom="0.4" header="0.2" footer="0.2"/>
 <pageSetup orientation="landscape" paperSize="9" fitToWidth="1" fitToHeight="0"/>
 ${drawing}
 </worksheet>`;
-  return packWorkbook(sheet, model.sheetName, model.logo);
+  return packWorkbook(sheet, model.sheetName, model.logo, 2);
 }
 
 async function exportRecords() {
@@ -2809,40 +2847,44 @@ async function exportRecords() {
   } catch (_) {
     logo = null;
   }
-  const blob = buildMaintenanceLogWorkbook({
-    rtl: document.documentElement.dir === 'rtl',
-    sheetName: t('Equipment maintenance log').slice(0, 31),
-    title: t('Equipment maintenance log'),
-    department: t('Mechanical Maintenance Department'),
-    approved: `${t('Approved according to')}: ${t('Mechanical Maintenance Department')}`,
-    equipmentTitle: t('Equipment data'),
-    keyTitle: t('Maintenance type key'),
-    typeHeading: t('Maintenance type'),
-    symbolHeading: t('Symbol'),
-    tableTitle: t('Maintenance work and details'),
-    empty: t('No log lines for this machine yet.'),
-    meta,
-    facts: [
-      { label: t('Log machine name'), value: equipment.name || '—' },
-      { label: t('Machine number'), value: equipment.equipment_id || '—' },
-      { label: t('Location / section'), value: machinePlace(equipment) },
-      { label: t('Commissioning date'), value: fmtDate(commissioning) },
-      { label: t('Manufacturer'), value: manufacturer || '—' },
-    ],
-    key: [
-      { label: t('Corrective'), value: 'CM' },
-      { label: t('Emergency'), value: 'EM' },
-      { label: t('Oil change'), value: 'OC' },
-    ],
-    headings: [t('No.'), t('Maintenance date'), t('Maintenance type'), t('Reason for maintenance'), t('Work performed'), t('Work order no.'), t('Parts used'), t('Part No.'), t('Quantity'), t('Downtime time'), t('Technician name')],
-    lines,
-    logo,
-  });
-  const link = document.createElement('a');
-  link.href = URL.createObjectURL(blob);
-  link.download = `maintenance-log-${equipment.equipment_id}.xlsx`;
-  link.click();
-  URL.revokeObjectURL(link.href);
+  try {
+    const blob = buildMaintenanceLogWorkbook({
+      rtl: document.documentElement.dir === 'rtl',
+      sheetName: t('Equipment maintenance log').slice(0, 31),
+      title: t('Equipment maintenance log'),
+      department: t('Mechanical Maintenance Department'),
+      approved: `${t('Approved according to')}: ${t('Mechanical Maintenance Department')}`,
+      equipmentTitle: t('Equipment data'),
+      keyTitle: t('Maintenance type key'),
+      typeHeading: t('Maintenance type'),
+      symbolHeading: t('Symbol'),
+      tableTitle: t('Maintenance work and details'),
+      empty: t('No log lines for this machine yet.'),
+      meta,
+      facts: [
+        { label: t('Log machine name'), value: equipment.name || '—' },
+        { label: t('Machine number'), value: equipment.equipment_id || '—' },
+        { label: t('Location / section'), value: machinePlace(equipment) },
+        { label: t('Commissioning date'), value: fmtDate(commissioning) || '—' },
+        { label: t('Manufacturer'), value: manufacturer || '—' },
+      ],
+      key: [
+        { label: t('Corrective'), value: 'CM' },
+        { label: t('Emergency'), value: 'EM' },
+        { label: t('Oil change'), value: 'OC' },
+      ],
+      headings: [t('No.'), t('Maintenance date'), t('Maintenance type'), t('Reason for maintenance'), t('Work performed'), t('Work order no.'), t('Parts used'), t('Part No.'), t('Quantity'), t('Downtime time'), t('Technician name')],
+      lines,
+      logo,
+    });
+    const link = document.createElement('a');
+    link.href = URL.createObjectURL(blob);
+    link.download = `maintenance-log-${equipment.equipment_id}.xlsx`;
+    link.click();
+    URL.revokeObjectURL(link.href);
+  } catch (exception) {
+    toast(t(exception.message) || t('Could not export the maintenance log.'));
+  }
 }
 
 function buildAnnualPlanWorkbook(model) {

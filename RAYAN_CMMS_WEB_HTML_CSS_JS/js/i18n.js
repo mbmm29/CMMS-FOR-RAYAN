@@ -777,6 +777,7 @@ const CMMS_AR = {
   'No SOP paragraphs yet.': 'لا توجد فقرات لهذا الإجراء.',
   'SOP paragraphs saved.': 'حُفظت فقرات الإجراء.',
   'SOP file imported.': 'تم استيراد ملف دليل التشغيل.',
+  'Could not export the maintenance log.': 'تعذر تصدير سجل الصيانة.',
   'Choose a file to import.': 'اختر ملفاً للاستيراد.',
   'Choose an Excel (.xlsx) or text file.': 'اختر ملف إكسل (.xlsx) أو ملفاً نصياً.',
   'Could not read the Excel file.': 'تعذرت قراءة ملف الإكسل.',
