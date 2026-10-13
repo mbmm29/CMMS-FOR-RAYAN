@@ -51,6 +51,12 @@ body .live-filters select,
 body .live-filters input[type="date"]{
   width:100%;min-width:0;height:38px;padding-inline:10px;color:#f4f8ff;background:#071428;border:1px solid #2c528c;border-radius:10px;
 }
+body .plant-multi{display:grid;gap:6px;grid-column:1 / -1}
+body .plant-multi small{color:#9eb4d6;font-size:11px;line-height:1.35}
+body .plant-checks{display:flex;flex-wrap:wrap;gap:8px}
+body .plant-check{display:inline-flex;align-items:center;gap:8px;min-height:38px;margin:0;padding:0 12px;border:1px solid #2c528c;border-radius:10px;background:#071428;color:#f4f8ff;font-size:13px;cursor:pointer}
+body .plant-check input{width:16px;height:16px;margin:0;accent-color:#3b82f6}
+body .plant-check:has(input:checked){border-color:#3b82f6;background:#10284f}
 body .kpi-period{margin:0;color:#9eb4d6;font-size:12px;line-height:1.5;overflow-wrap:anywhere}
 body .kpi-board{grid-template-columns:repeat(auto-fit,minmax(min(100%,220px),1fr));gap:12px}
 body .kpi-card,

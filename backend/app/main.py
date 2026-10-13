@@ -5,7 +5,7 @@ import json
 import secrets
 import threading
 from pathlib import Path
-from fastapi import FastAPI, Depends, HTTPException, File, UploadFile
+from fastapi import FastAPI, Depends, HTTPException, File, UploadFile, Query
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, Response
@@ -1853,7 +1853,7 @@ def db_assignment_ids(db, technician_id):
 
 @app.get('/kpi')
 def kpi_dashboard(
-    plant_id: str | None = None,
+    plant_id: list[str] | None = Query(None),
     line_id: str | None = None,
     equipment_id: str | None = None,
     technician_id: str | None = None,
@@ -1864,11 +1864,13 @@ def kpi_dashboard(
 ):
     if is_technician_account(u) and u.technician_id:
         technician_id = u.technician_id
-    payload = compute_kpi(db, plant_id or None, line_id or None, equipment_id or None, technician_id or None, date_from, date_to)
+    plants = [item for item in (plant_id or []) if (item or '').strip()]
+    plant_filter = plants or None
+    payload = compute_kpi(db, plant_filter, line_id or None, equipment_id or None, technician_id or None, date_from, date_to)
     period = payload.get('period') or {}
     start = date.fromisoformat(period['from']) if period.get('from') else date.today()
     end = date.fromisoformat(period['to']) if period.get('to') else date.today()
-    payload['motor'] = motor_chart(db, plant_id or None, line_id or None, equipment_id or None, start, end)
+    payload['motor'] = motor_chart(db, plant_filter, line_id or None, equipment_id or None, start, end)
     return payload
 
 @app.put('/kpi/targets')
@@ -4253,6 +4255,11 @@ def motor_due_equipment(db, day):
 
 def motor_chart(db, plant_id, line_id, equipment_id, start, end):
     """Temperature and oil charts for the KPI page. This does not change the KPI equations."""
+    plant_ids = None
+    if plant_id:
+        plant_ids = {item for item in (plant_id if isinstance(plant_id, (list, tuple, set)) else [plant_id]) if item}
+        if not plant_ids:
+            plant_ids = None
     rows = db.query(MotorConditionReading, MotorConditionReport).join(
         MotorConditionReport, MotorConditionReport.id == MotorConditionReading.report_id
     ).filter(
@@ -4273,7 +4280,7 @@ def motor_chart(db, plant_id, line_id, equipment_id, start, end):
         grouped_by = 'equipment'
     elif line_id:
         grouped_by = 'equipment'
-    elif plant_id:
+    elif plant_ids and len(plant_ids) == 1:
         grouped_by = 'line'
     else:
         grouped_by = 'plant'
@@ -4283,7 +4290,7 @@ def motor_chart(db, plant_id, line_id, equipment_id, start, end):
         found = by_code.get(code)
         if equipment_id and (not found or found.equipment_id != equipment_id):
             continue
-        if plant_id and (not found or found.plant_id != plant_id):
+        if plant_ids and (not found or found.plant_id not in plant_ids):
             continue
         if line_id and (not found or found.line_id != line_id):
             continue

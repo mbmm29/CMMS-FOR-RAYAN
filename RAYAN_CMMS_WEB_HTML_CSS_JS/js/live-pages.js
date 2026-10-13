@@ -15,7 +15,7 @@ const DEFAULT_TAB = {
   'spare-parts': 'All',
 };
 const shellRender = render;
-const ui = { page: 'dashboard', tab: 'All', rowKey: '', mode: 'view', plantId: '', lineId: '', sectionId: '', equipmentId: '', spareEquipment: '', technicianId: '', dateFrom: '', dateTo: '', annualPlant: '', annualYear: new Date().getFullYear(), annualItems: [], annualWeek: '', annualCopy: null, weekTasks: [], lubeId: '', dailyId: '', dailyFilter: '' };
+const ui = { page: 'dashboard', tab: 'All', rowKey: '', mode: 'view', plantId: '', plantIds: [], lineId: '', sectionId: '', equipmentId: '', spareEquipment: '', technicianId: '', dateFrom: '', dateTo: '', annualPlant: '', annualYear: new Date().getFullYear(), annualItems: [], annualWeek: '', annualCopy: null, weekTasks: [], lubeId: '', dailyId: '', dailyFilter: '' };
 const ANNUAL_MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 const WEEKDAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 const DAY_MAINTENANCE_TYPES = ['Preventive', 'Corrective', 'Emergency', 'Routine', 'Inspection', 'Lubrication'];
@@ -254,8 +254,10 @@ function equipmentText(row) {
 }
 
 function visibleEquipment() {
+  const plants = selectedPlantIds();
   return store.equipment.filter((item) => {
-    if (ui.plantId && item.plant_id !== ui.plantId) return false;
+    if (plants.length && !plants.includes(item.plant_id)) return false;
+    if (!plants.length && ui.plantId && item.plant_id !== ui.plantId) return false;
     if (ui.lineId && item.line_id !== ui.lineId) return false;
     if (ui.sectionId && item.section_id !== ui.sectionId) return false;
     if (ui.equipmentId && item.equipment_id !== ui.equipmentId) return false;
@@ -264,7 +266,7 @@ function visibleEquipment() {
 }
 
 function scoped(rows) {
-  if (!ui.plantId && !ui.lineId && !ui.sectionId && !ui.equipmentId) return rows;
+  if (!(ui.plantIds || []).length && !ui.plantId && !ui.lineId && !ui.sectionId && !ui.equipmentId) return rows;
   const ids = new Set(visibleEquipment().map((item) => item.equipment_id));
   return rows.filter((row) => ids.has(row.equipment_id || row.manual_equipment_code));
 }
@@ -374,23 +376,51 @@ function currentFilters() {
   };
 }
 
-function filtersHtml() {
+function selectedPlantIds() {
   const openIds = new Set((store.plants || []).filter((plant) => plant.active !== false).map((plant) => plant.plant_id));
-  if (ui.plantId && !openIds.has(ui.plantId)) {
+  const chosen = (ui.plantIds || []).filter((id) => openIds.has(id));
+  if (chosen.length !== (ui.plantIds || []).length) ui.plantIds = chosen;
+  if (ui.plantId && !chosen.includes(ui.plantId)) {
+    if (chosen.length === 1) ui.plantId = chosen[0];
+    else if (!chosen.length) ui.plantId = '';
+  }
+  return chosen;
+}
+
+function syncPlantSelection(ids) {
+  const unique = [...new Set((ids || []).filter(Boolean))];
+  ui.plantIds = unique;
+  ui.plantId = unique.length === 1 ? unique[0] : '';
+}
+
+function filtersHtml(options = {}) {
+  const multiPlant = Boolean(options.multiPlant);
+  const openIds = new Set((store.plants || []).filter((plant) => plant.active !== false).map((plant) => plant.plant_id));
+  const plants = selectedPlantIds();
+  if (ui.plantId && !openIds.has(ui.plantId) && !plants.length) {
     ui.plantId = '';
+    ui.plantIds = [];
     ui.lineId = '';
     ui.sectionId = '';
     ui.equipmentId = '';
   }
-  const lines = store.lines.filter((line) => openIds.has(line.plant_id) && (!ui.plantId || line.plant_id === ui.plantId));
-  const lineIds = new Set(lines.map((line) => line.line_id));
+  const plantScope = plants.length ? new Set(plants) : openIds;
+  const scopedLines = plants.length > 1
+    ? store.lines.filter((line) => plantScope.has(line.plant_id))
+    : store.lines.filter((line) => openIds.has(line.plant_id) && (!ui.plantId || line.plant_id === ui.plantId));
+  const lineIds = new Set(scopedLines.map((line) => line.line_id));
   const sections = (store.sections || []).filter((section) => lineIds.has(section.line_id) && (!ui.lineId || section.line_id === ui.lineId));
   if (ui.sectionId && !sections.some((section) => section.section_id === ui.sectionId)) ui.sectionId = '';
-  const equipment = store.equipment.filter((item) => (!item.plant_id || openIds.has(item.plant_id)) && (!ui.plantId || item.plant_id === ui.plantId) && (!ui.lineId || item.line_id === ui.lineId) && (!ui.sectionId || item.section_id === ui.sectionId));
+  if (ui.lineId && !lineIds.has(ui.lineId)) ui.lineId = '';
+  const equipment = store.equipment.filter((item) => (!item.plant_id || openIds.has(item.plant_id)) && (!plants.length || plantScope.has(item.plant_id)) && (!ui.lineId || item.line_id === ui.lineId) && (!ui.sectionId || item.section_id === ui.sectionId));
+  if (ui.equipmentId && !equipment.some((item) => item.equipment_id === ui.equipmentId)) ui.equipmentId = '';
   const option = (value, label, selected) => `<option value="${esc(value)}"${selected === value ? ' selected' : ''}>${esc(label)}</option>`;
+  const plantFilter = multiPlant
+    ? `<label class="plant-multi">${t('Plant')}<div class="plant-checks" data-filter="plants">${openPlants().map((plant) => `<label class="plant-check"><input type="checkbox" value="${esc(plant.plant_id)}"${plants.includes(plant.plant_id) ? ' checked' : ''}><span>${esc(plant.name)}</span></label>`).join('')}</div><small>${esc(t('Select one or more plants. Leave empty for all plants.'))}</small></label>`
+    : `<label>${t('Plant')}<select data-filter="plant">${option('', t('All plants'), ui.plantId)}${openPlants().map((plant) => option(plant.plant_id, plant.name, ui.plantId)).join('')}</select></label>`;
   return `<div class="live-filters">
-    <label>${t('Plant')}<select data-filter="plant">${option('', t('All plants'), ui.plantId)}${openPlants().map((plant) => option(plant.plant_id, plant.name, ui.plantId)).join('')}</select></label>
-    <label>${t('Line')}<select data-filter="line">${option('', t('All lines'), ui.lineId)}${lines.map((line) => option(line.line_id, line.name, ui.lineId)).join('')}</select></label>
+    ${plantFilter}
+    <label>${t('Line')}<select data-filter="line">${option('', t('All lines'), ui.lineId)}${scopedLines.map((line) => option(line.line_id, line.name, ui.lineId)).join('')}</select></label>
     <label>${t('Section')}<select data-filter="section">${option('', t('All sections'), ui.sectionId)}${sections.map((section) => option(section.section_id, section.name, ui.sectionId)).join('')}</select></label>
     <label>${t('Equipment')}<select data-filter="equipment">${option('', t('All equipment'), ui.equipmentId)}${equipment.map((item) => option(item.equipment_id, `${item.equipment_id} — ${item.name}`, ui.equipmentId)).join('')}</select></label>
   </div>`;
@@ -589,6 +619,7 @@ function bumpChart(series, title) {
 function motorScopeNote() {
   if (ui.equipmentId) return 'Selected equipment';
   if (ui.lineId) return 'Each equipment';
+  if ((ui.plantIds || []).length > 1) return 'Each plant';
   if (ui.plantId) return 'Each line';
   return 'Each plant';
 }
@@ -618,7 +649,8 @@ function shown(count, total, noun) {
 
 async function drawDashboard() {
   const params = new URLSearchParams();
-  if (ui.plantId) params.set('plant_id', ui.plantId);
+  const plants = selectedPlantIds();
+  plants.forEach((id) => params.append('plant_id', id));
   if (ui.lineId) params.set('line_id', ui.lineId);
   if (ui.equipmentId) params.set('equipment_id', ui.equipmentId);
   if (ui.technicianId) params.set('technician_id', ui.technicianId);
@@ -658,11 +690,11 @@ async function drawDashboard() {
   const extraFilters = `<label>${t('Technician')}<select data-filter="technician"><option value="">${esc(t('All technicians'))}</option>${technicianOptions}</select></label><label>${t('From')}<input data-filter="from" type="date" value="${esc(ui.dateFrom)}"></label><label>${t('To')}<input data-filter="to" type="date" value="${esc(ui.dateTo)}"></label>`;
   const card = (title, value, detail, note) => `<article class="kpi-card"><h3>${esc(t(title))}</h3><b>${value}</b><small>${esc(detail)}</small><small>${esc(note)}</small></article>`;
   const metricOption = (value, label) => `<option value="${value}">${esc(t(label))}</option>`;
-  const targetForm = canMaintain() ? `<form id="kpi-target" class="live-form kpi-target"><b>${esc(t('KPI target for this plant / line / equipment'))}</b><label>${t('Metric')}<select name="metric">${metricOption('availability', 'Availability %')}${metricOption('utilization', 'Utilization %')}${metricOption('reliability', 'Reliability %')}${metricOption('mtbf', 'MTBF hours')}${metricOption('mttr', 'MTTR hours')}${metricOption('pm_compliance', 'PM compliance %')}${metricOption('downtime_h', 'Downtime hours')}${metricOption('planned_pm_pct', 'Planned PM %')}${metricOption('preventive_pct', 'Preventive %')}${metricOption('emergency_to_routine', 'Emergency to routine %')}${metricOption('emergency_to_preventive', 'Emergency to preventive %')}${metricOption('corrective_pct', 'Corrective %')}${metricOption('wo_schedule', 'Schedule compliance %')}${metricOption('wo_completion', 'WO completion %')}${metricOption('backlog', 'Backlog %')}${metricOption('failure_rate_1000h', 'Failures / 1,000 h')}</select></label><label>${t('Target')}<input name="target_value" type="number" min="0" step="0.1" required></label><button class="detail-button primary" type="submit">${esc(t('Save target'))}</button><p id="kpi-target-error" class="form-error"></p></form>` : '';
+  const targetForm = canMaintain() && plants.length <= 1 ? `<form id="kpi-target" class="live-form kpi-target"><b>${esc(t('KPI target for this plant / line / equipment'))}</b><label>${t('Metric')}<select name="metric">${metricOption('availability', 'Availability %')}${metricOption('utilization', 'Utilization %')}${metricOption('reliability', 'Reliability %')}${metricOption('mtbf', 'MTBF hours')}${metricOption('mttr', 'MTTR hours')}${metricOption('pm_compliance', 'PM compliance %')}${metricOption('downtime_h', 'Downtime hours')}${metricOption('planned_pm_pct', 'Planned PM %')}${metricOption('preventive_pct', 'Preventive %')}${metricOption('emergency_to_routine', 'Emergency to routine %')}${metricOption('emergency_to_preventive', 'Emergency to preventive %')}${metricOption('corrective_pct', 'Corrective %')}${metricOption('wo_schedule', 'Schedule compliance %')}${metricOption('wo_completion', 'WO completion %')}${metricOption('backlog', 'Backlog %')}${metricOption('failure_rate_1000h', 'Failures / 1,000 h')}</select></label><label>${t('Target')}<input name="target_value" type="number" min="0" step="0.1" required></label><button class="detail-button primary" type="submit">${esc(t('Save target'))}</button><p id="kpi-target-error" class="form-error"></p></form>` : '';
   const components = (kpi.components || []).map((row) => `<div class="summary-row"><span>${esc(row.component_id)} · ${esc(row.name)}</span><b>${row.life_days} ${t('days')}${row.in_service ? '' : ` ${t('removed')}`}</b></div>`).join('') || `<p class="chart-empty">${esc(t('No component installation dates yet'))}</p>`;
   const workspace = document.getElementById('workspace');
   workspace.className = 'workspace kpi-layout';
-  workspace.innerHTML = `${filtersHtml().replace('</div>', `${extraFilters}</div>`)}
+  workspace.innerHTML = `${filtersHtml({ multiPlant: true }).replace('</div>', `${extraFilters}</div>`)}
     <p class="kpi-period">${esc(t('Period'))} ${esc(fmtDate(kpi.period?.from))} – ${esc(fmtDate(kpi.period?.to))} · ${kpi.period?.days || 0} ${esc(t('days'))} · ${kpi.equipment_count || 0} ${esc(t('equipment'))} · ${esc(t('idle time is 0 because it is not recorded'))}</p>
     <section class="kpi-board">
       ${card('PM overdue', String(kpi.pm_overdue ?? 0), kpiTargetText(kpi.pm_overdue_pct, null, false), `${kpiText(kpi.pm_overdue_pct, 1, '%')} ${t('of')} ${kpi.pm_due || 0} ${t('due PM plans')}`)}
@@ -2201,14 +2233,34 @@ function sopForm() {
 
 function bindFilters() {
   const fields = { plant: 'plantId', line: 'lineId', section: 'sectionId', equipment: 'equipmentId', technician: 'technicianId', from: 'dateFrom', to: 'dateTo' };
-  document.querySelectorAll('[data-filter]').forEach((select) => select.addEventListener('change', () => {
-    ui[fields[select.dataset.filter] || 'equipmentId'] = select.value;
-    if (select.dataset.filter === 'plant') { ui.lineId = ''; ui.sectionId = ''; ui.equipmentId = ''; }
-    if (select.dataset.filter === 'line') { ui.sectionId = ''; ui.equipmentId = ''; }
-    if (select.dataset.filter === 'section') ui.equipmentId = '';
-    ui.rowKey = '';
-    draw(ui.page);
-  }));
+  document.querySelectorAll('[data-filter="plants"] input[type="checkbox"]').forEach((box) => {
+    box.addEventListener('change', () => {
+      const host = box.closest('[data-filter="plants"]');
+      const ids = [...host.querySelectorAll('input:checked')].map((item) => item.value);
+      syncPlantSelection(ids);
+      ui.lineId = '';
+      ui.sectionId = '';
+      ui.equipmentId = '';
+      ui.rowKey = '';
+      draw(ui.page);
+    });
+  });
+  document.querySelectorAll('[data-filter]').forEach((select) => {
+    if (select.dataset.filter === 'plants') return;
+    select.addEventListener('change', () => {
+      ui[fields[select.dataset.filter] || 'equipmentId'] = select.value;
+      if (select.dataset.filter === 'plant') {
+        syncPlantSelection(select.value ? [select.value] : []);
+        ui.lineId = '';
+        ui.sectionId = '';
+        ui.equipmentId = '';
+      }
+      if (select.dataset.filter === 'line') { ui.sectionId = ''; ui.equipmentId = ''; }
+      if (select.dataset.filter === 'section') ui.equipmentId = '';
+      ui.rowKey = '';
+      draw(ui.page);
+    });
+  });
 }
 
 function bindDeletes() {
@@ -3991,7 +4043,7 @@ document.getElementById('primary-action').addEventListener('click', (event) => {
   event.preventDefault();
   event.stopImmediatePropagation();
   if (ui.page === 'machine-records') exportRecords();
-  else if (ui.page === 'dashboard') document.querySelector('[data-filter="plant"]')?.focus();
+  else if (ui.page === 'dashboard') document.querySelector('[data-filter="plants"] input, [data-filter="plant"]')?.focus();
   else if (ui.page === 'pm-schedule' && isTechnician()) return;
   else if (ui.page === 'pm-schedule' && document.querySelector('.week-day')) saveWeekTasks();
   else if (ui.page === 'pm-schedule' && document.getElementById('annual-rows')) saveAnnualPlan();

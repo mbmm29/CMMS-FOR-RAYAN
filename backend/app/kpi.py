@@ -94,15 +94,22 @@ def compute_kpi(db: Session, plant_id=None, line_id=None, equipment_id=None, tec
         for row in plant_lines if row.line_number is not None
     }
     plant_name = {row.plant_id: row.name for row in plants}
-    equipment = list(all_equipment)
     if plant_id:
-        equipment = [row for row in equipment if row.plant_id == plant_id]
+        plant_ids = {item for item in (plant_id if isinstance(plant_id, (list, tuple, set)) else [plant_id]) if item}
+    else:
+        plant_ids = set()
+    if not plant_ids:
+        plant_ids = None
+    single_plant = next(iter(plant_ids)) if plant_ids and len(plant_ids) == 1 else None
+    equipment = list(all_equipment)
+    if plant_ids:
+        equipment = [row for row in equipment if row.plant_id in plant_ids]
     if line_id:
         equipment = [row for row in equipment if row.line_id == line_id]
     if equipment_id:
         equipment = [row for row in equipment if row.equipment_id == equipment_id]
     equipment_ids = {row.equipment_id for row in equipment}
-    scoped = bool(plant_id or line_id or equipment_id)
+    scoped = bool(plant_ids or line_id or equipment_id)
 
     def equipment_ok(code, manual_plant=None, manual_line=None):
         if not scoped:
@@ -110,7 +117,7 @@ def compute_kpi(db: Session, plant_id=None, line_id=None, equipment_id=None, tec
         if code and code in equipment_ids:
             return True
         if manual_plant or manual_line:
-            if plant_id and manual_plant != plant_id:
+            if plant_ids and manual_plant not in plant_ids:
                 return False
             if line_id and manual_line != line_id:
                 return False
@@ -210,7 +217,7 @@ def compute_kpi(db: Session, plant_id=None, line_id=None, equipment_id=None, tec
                 return True
             if line_id or equipment_id:
                 return False
-            return report.plant_id == plant_id
+            return report.plant_id in plant_ids
 
         utilization_reports = len([row for row in reports if report_counts_for_time(row)])
         utilization_available = round(utilization_reports * REPORT_SHIFT_HOURS, 2)
@@ -310,7 +317,7 @@ def compute_kpi(db: Session, plant_id=None, line_id=None, equipment_id=None, tec
                 key = equipment_id
             elif line_id:
                 key = line_id
-            elif plant_id:
+            elif single_plant:
                 key = item_line or 'unassigned'
             else:
                 key = item_plant or 'unassigned'
@@ -326,13 +333,20 @@ def compute_kpi(db: Session, plant_id=None, line_id=None, equipment_id=None, tec
             chosen = equipment_by_id.get(equipment_id)
             catalog = [(equipment_id, f'{chosen.name} ({equipment_id})' if chosen else equipment_id)]
             trend_by = 'equipment'
-        elif plant_id:
+        elif single_plant:
             catalog = [
                 (row.line_id, row.name)
                 for row in sorted(plant_lines, key=lambda row: (row.line_number or 0, row.name))
-                if row.plant_id == plant_id
+                if row.plant_id == single_plant
             ]
             trend_by = 'line'
+        elif plant_ids:
+            catalog = [
+                (row.plant_id, row.name)
+                for row in sorted(plants, key=lambda row: row.name)
+                if row.plant_id in plant_ids
+            ]
+            trend_by = 'plant'
         else:
             catalog = [(row.plant_id, row.name) for row in sorted(plants, key=lambda row: row.name)]
             trend_by = 'plant'
@@ -430,7 +444,7 @@ def compute_kpi(db: Session, plant_id=None, line_id=None, equipment_id=None, tec
             'in_service': row.removal_date is None,
         })
     life.sort(key=lambda row: row['life_days'], reverse=True)
-    targets = _targets_for(db, plant_id, line_id, equipment_id)
+    targets = _targets_for(db, single_plant, line_id, equipment_id)
     current.update({
         'period': {'from': start.isoformat(), 'to': end.isoformat(), 'days': days},
         'previous': {key: previous.get(key) for key in (

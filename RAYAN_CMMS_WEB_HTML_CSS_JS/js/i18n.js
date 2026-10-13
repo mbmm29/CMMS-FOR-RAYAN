@@ -327,6 +327,7 @@ const CMMS_AR = {
   'Line': 'الخط',
   'Line name': 'اسم الخط',
   'All plants': 'كل المصانع',
+  'Select one or more plants. Leave empty for all plants.': 'اختر مصنعاً واحداً أو أكثر. اتركها فارغة لكل المصانع.',
   'All lines': 'كل الخطوط',
   'All equipment': 'كل المعدات',
   'Technician': 'الفني',
