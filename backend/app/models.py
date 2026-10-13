@@ -20,6 +20,7 @@ class Plant(Base):
     id: Mapped[int]=mapped_column(Integer,primary_key=True)
     plant_id: Mapped[str]=mapped_column(String(50),unique=True,index=True)
     name: Mapped[str]=mapped_column(String(150))
+    order_code: Mapped[str|None]=mapped_column(String(12),unique=True,nullable=True)
     active: Mapped[bool]=mapped_column(Boolean,default=True)
 
 class PlantLine(Base):

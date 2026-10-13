@@ -1,4 +1,5 @@
 import os
+import re
 from datetime import date, datetime, timedelta, timezone
 import json
 import secrets
@@ -20,6 +21,51 @@ from .kpi import compute_kpi, save_kpi_target
 from .motor_catalog import OIL_CONDITIONS, OIL_LEVELS, motor_catalog_payload, motor_place, motor_sheet_allowed
 
 Base.metadata.create_all(bind=engine)
+
+def derived_order_code(plant_id):
+    """Turn a plant id such as FM01 into the work-order code FM1."""
+    raw = re.sub(r'[^A-Za-z0-9]', '', plant_id or '').upper()
+    match = re.fullmatch(r'([A-Z]+?)0*([0-9]+)', raw)
+    if match and match.group(1):
+        raw = match.group(1) + str(int(match.group(2)))
+    raw = raw[:12]
+    if re.fullmatch(r'[A-Z][A-Z0-9]{1,11}', raw):
+        return raw
+    return None
+
+
+def normalize_order_code(value):
+    code = re.sub(r'[^A-Za-z0-9]', '', (value or '')).upper()
+    if not re.fullmatch(r'[A-Z][A-Z0-9]{1,11}', code):
+        raise HTTPException(400, 'Enter a work order code such as FM1.')
+    return code
+
+
+def assign_missing_order_codes():
+    """Give each existing plant its own work-order code without renaming anything."""
+    db = SessionLocal()
+    try:
+        plants = db.query(Plant).order_by(Plant.plant_id).all()
+        used = {(row.order_code or '').upper() for row in plants if row.order_code}
+        changed = False
+        for plant in plants:
+            if (plant.order_code or '').strip():
+                continue
+            code = derived_order_code(plant.plant_id)
+            if not code or code in used:
+                continue
+            plant.order_code = code
+            used.add(code)
+            changed = True
+        if changed:
+            db.commit()
+        else:
+            db.rollback()
+    except Exception:
+        db.rollback()
+    finally:
+        db.close()
+
 
 def ensure_additive_columns():
     """Add missing columns required by the live report workflow.
@@ -203,12 +249,19 @@ def ensure_additive_columns():
                 if criticality and (length is None or length < 40):
                     conn.execute(text('ALTER TABLE equipment ALTER COLUMN criticality TYPE VARCHAR(40)'))
                     conn.execute(text("ALTER TABLE equipment ALTER COLUMN criticality SET DEFAULT 'Important'"))
+        if 'plants' in tables:
+            existing = {c['name'] for c in inspector.get_columns('plants')}
+            with engine.begin() as conn:
+                if 'order_code' not in existing:
+                    conn.execute(text('ALTER TABLE plants ADD COLUMN order_code VARCHAR(12)'))
+                conn.execute(text('CREATE UNIQUE INDEX IF NOT EXISTS uq_plant_order_code ON plants (order_code)'))
     except Exception:
         # Do not prevent the API from starting because of an optional migration.
         # The error will be visible in the application logs.
         pass
 
 ensure_additive_columns()
+assign_missing_order_codes()
 
 app=FastAPI(title='Mechanical Maintenance CMMS API',version='2.0.0')
 
@@ -349,7 +402,7 @@ def bootstrap_system(db: Session) -> bool:
         created = True
 
     if not db.query(Plant).filter(Plant.plant_id == 'PLANT-01').first():
-        db.add(Plant(plant_id='PLANT-01',name='Main Plant'))
+        db.add(Plant(plant_id='PLANT-01', name='Main Plant', order_code='PLANT1'))
     if not db.query(PlantLine).filter(PlantLine.line_id == 'LINE-01').first():
         db.add(PlantLine(line_id='LINE-01',plant_id='PLANT-01',name='Production Line 01'))
     if not db.query(Technician).filter(Technician.technician_id == 'TECH-001').first():
@@ -494,16 +547,27 @@ def create_plant(data:PlantCreate,db:Session=Depends(get_db),u=Depends(role(*ENG
         raise HTTPException(400, 'Plant code and name are required')
     if db.query(Plant).filter_by(plant_id=plant_id).first():
         raise HTTPException(409, 'Plant ID already exists')
-    o=Plant(plant_id=plant_id, name=data.name.strip(), active=data.active); db.add(o); audit(db,u,'CREATE','Plant',plant_id,new=data.model_dump()); db.commit(); db.refresh(o); return as_dict(o)
+    order_code = normalize_order_code(data.order_code)
+    if db.query(Plant).filter(func.upper(Plant.order_code) == order_code).first():
+        raise HTTPException(409, 'This work order code is already used by another plant.')
+    o=Plant(plant_id=plant_id, name=data.name.strip(), order_code=order_code, active=data.active); db.add(o); audit(db,u,'CREATE','Plant',plant_id,new=data.model_dump()); db.commit(); db.refresh(o); return as_dict(o)
 
 @app.put('/plants/{plant_id}')
 def update_plant(plant_id: str, data: PlantUpdate, db: Session = Depends(get_db), u=Depends(role(*ENGINEER))):
     plant = db.query(Plant).filter_by(plant_id=plant_id).first()
     if not plant:
         raise HTTPException(404, 'Plant not found')
-    old = plant.active
-    plant.active = data.active
-    audit(db, u, 'UPDATE', 'Plant', plant_id, old={'active': old}, new={'active': data.active})
+    changes = data.model_dump(exclude_unset=True)
+    old = {'active': plant.active, 'order_code': plant.order_code}
+    if 'active' in changes and changes['active'] is not None:
+        plant.active = changes['active']
+    if 'order_code' in changes:
+        code = normalize_order_code(changes['order_code'])
+        taken = db.query(Plant).filter(func.upper(Plant.order_code) == code, Plant.plant_id != plant.plant_id).first()
+        if taken:
+            raise HTTPException(409, 'This work order code is already used by another plant.')
+        plant.order_code = code
+    audit(db, u, 'UPDATE', 'Plant', plant_id, old=old, new={'active': plant.active, 'order_code': plant.order_code})
     db.commit()
     db.refresh(plant)
     return as_dict(plant)
@@ -1505,7 +1569,7 @@ def sync_corrective_work_order(db, user, plant_id, task):
         return
     if order is None:
         order = WorkOrder(
-            work_order_id=next_work_order_id(db, task.work_date.year),
+            work_order_id=next_work_order_id(db, plant_id, task.work_date.year),
             work_order_type='Corrective',
             priority='Medium',
             status='Open',
@@ -2033,7 +2097,9 @@ def create_work_order(data:WOCreate,db:Session=Depends(get_db),u=Depends(role(*E
         raise HTTPException(400, 'This equipment was not found. Enter its name or number as saved in the system.')
     elif payload.get('equipment_id') and not db.query(Equipment).filter_by(equipment_id=payload['equipment_id']).first():
         raise HTTPException(404, 'Equipment not found')
-    wid=data.work_order_id or f'WO-{date.today().year}-{db.query(WorkOrder).count()+1:05d}'
+    plant_id = equipment.plant_id if equipment else payload.get('manual_plant_id')
+    year = (data.planned_date or date.today()).year
+    wid = next_work_order_id(db, plant_id, year)
     if db.query(WorkOrder).filter_by(work_order_id=wid).first(): raise HTTPException(409,'Work Order ID exists')
     o=WorkOrder(work_order_id=wid,created_by=u.username,**payload); db.add(o); db.flush()
     ids = list(data.assigned_technician_ids or [])
@@ -2315,17 +2381,35 @@ def ensure_preventive_pm(db, u, item, report):
     return pm
 
 
-def next_work_order_id(db, year):
-    sequence = db.query(WorkOrder).count() + 1
-    work_order_id = f'WO-{year}-{sequence:05d}'
-    while db.query(WorkOrder).filter_by(work_order_id=work_order_id).first():
-        sequence += 1
-        work_order_id = f'WO-{year}-{sequence:05d}'
-    return work_order_id
+def next_work_order_id(db, plant_id, year):
+    """Issue FM12026-001: the plant code, the year, and that plant's own sequence."""
+    plant = db.query(Plant).filter_by(plant_id=plant_id).first() if plant_id else None
+    if plant is None:
+        raise HTTPException(400, 'Select a plant before issuing the work order.')
+    code = (plant.order_code or '').strip().upper()
+    if not code:
+        raise HTTPException(400, 'Set the work order code for this plant.')
+    stem = f'{code}{int(year)}-'
+    highest = 0
+    for (work_order_id,) in db.query(WorkOrder.work_order_id).filter(WorkOrder.work_order_id.like(stem + '%')).all():
+        tail = work_order_id[len(stem):]
+        if tail.isdigit():
+            highest = max(highest, int(tail))
+    number = highest + 1
+    while True:
+        work_order_id = f'{stem}{number:03d}'
+        if not db.query(WorkOrder).filter_by(work_order_id=work_order_id).first():
+            return work_order_id
+        number += 1
 
 def issue_technician_work_order(db, actor, item, report):
     """Register a unique High work order for corrective or emergency work and write the related records."""
-    work_order_id = next_work_order_id(db, report.report_date.year)
+    plant_id = item.plant_id
+    if not item.is_manual_entry and item.equipment_id:
+        found = db.query(Equipment).filter_by(equipment_id=item.equipment_id).first()
+        if found and found.plant_id:
+            plant_id = found.plant_id
+    work_order_id = next_work_order_id(db, plant_id, report.report_date.year)
     now = datetime.utcnow()
     work_order = WorkOrder(
         work_order_id=work_order_id,
@@ -2398,7 +2482,12 @@ def get_or_create_wo(db,u,item,report):
         matches=corrective_matches(db,item)
         if len(matches)==1:return matches[0],'matched'
         if len(matches)>1:return None,'review'
-    wid=f'WO-{report.report_date.year}-{db.query(WorkOrder).count()+1:05d}'
+    plant_id = item.plant_id
+    if not item.is_manual_entry and item.equipment_id:
+        found = db.query(Equipment).filter_by(equipment_id=item.equipment_id).first()
+        if found and found.plant_id:
+            plant_id = found.plant_id
+    wid = next_work_order_id(db, plant_id, report.report_date.year)
     w=WorkOrder(work_order_id=wid,work_order_type=item.maintenance_type,equipment_id=None if item.is_manual_entry else item.equipment_id,manual_equipment_code=item.equipment_code if item.is_manual_entry else None,manual_equipment_name=item.equipment_name if item.is_manual_entry else None,manual_plant_id=item.plant_id if item.is_manual_entry else None,manual_line_id=item.line_id if item.is_manual_entry else None,component_id=item.component_id,pm_id=item.pm_id,priority='Medium',status='Open',problem_description=item.failure_reason,work_description=item.action_taken,planned_date=report.report_date,created_by='SYSTEM')
     db.add(w); db.flush(); audit(db,u,'AUTO_CREATE','WorkOrder',wid,new={'source':'Daily Report','report_id':report.report_id})
     return w,'created'
@@ -3481,7 +3570,8 @@ def run_pm_automation(db:Session=Depends(get_db),u=Depends(role(*ENGINEER))):
     for p in db.query(PMPlan).filter(PMPlan.active==True,PMPlan.next_due_date==target).all():
         existing=db.query(WorkOrder).filter(WorkOrder.pm_id==p.pm_id,WorkOrder.status.notin_(['Closed','Cancelled'])).first()
         if existing: continue
-        wid=f'WO-{target.year}-{db.query(WorkOrder).count()+1:05d}'
+        equipment = db.query(Equipment).filter_by(equipment_id=p.equipment_id).first()
+        wid = next_work_order_id(db, equipment.plant_id if equipment else None, target.year)
         w=WorkOrder(work_order_id=wid,work_order_type='Preventive',equipment_id=p.equipment_id,component_id=p.component_id,pm_id=p.pm_id,priority=p.priority,status='Open',problem_description='Scheduled PM',work_description=p.task,planned_date=p.next_due_date,created_by='SYSTEM')
         db.add(w); db.flush(); created.append(wid)
         for tech in db.query(User).filter(User.role.in_(tuple(TECHNICIAN)), User.is_active==True).all(): notify(db,tech.id,'PM Work Order Created',f'{wid} for {p.equipment_id} is due tomorrow','pm',wid)
@@ -3619,7 +3709,8 @@ def record_oil_change(db, user, report, technician_id, equipment, code, name, co
     text = f'Oil change: {details}' if details else 'Oil change'
     order = db.query(WorkOrder).filter_by(work_order_id=existing_order_id).first() if existing_order_id else None
     if order is None:
-        work_order_id = next_work_order_id(db, report.report_date.year)
+        plant_id = equipment.plant_id if equipment and equipment.plant_id else getattr(report, 'plant_id', None)
+        work_order_id = next_work_order_id(db, plant_id, report.report_date.year)
         done_at = datetime.combine(report.report_date, datetime.min.time())
         order = WorkOrder(
             work_order_id=work_order_id,
@@ -3627,7 +3718,7 @@ def record_oil_change(db, user, report, technician_id, equipment, code, name, co
             equipment_id=equipment.equipment_id if equipment else None,
             manual_equipment_code=None if equipment else code,
             manual_equipment_name=None if equipment else name,
-            manual_plant_id=equipment.plant_id if equipment else None,
+            manual_plant_id=None if equipment else plant_id,
             manual_line_id=equipment.line_id if equipment else None,
             priority='Medium',
             status='Completed',

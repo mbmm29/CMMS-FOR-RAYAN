@@ -58,11 +58,13 @@ class UserOut(BaseModel):
 class PlantCreate(BaseModel):
     plant_id: str
     name: str
+    order_code: str
     active: bool = True
 
 
 class PlantUpdate(BaseModel):
-    active: bool
+    active: bool | None = None
+    order_code: str | None = None
 
 
 class LineCreate(BaseModel):
