@@ -337,8 +337,7 @@ function setHeader(page) {
     action.hidden = getSavedUser()?.role === 'ADMINISTRATOR_VIEWER';
     action.textContent = t(isLubricationTechnician() ? 'Send report' : 'Save report');
   } else if (page === 'motor-condition') {
-    action.hidden = false;
-    action.textContent = t('Save');
+    action.hidden = true;
   } else if (page === 'sop') {
     action.hidden = true;
   } else if (isTechnician()) {
