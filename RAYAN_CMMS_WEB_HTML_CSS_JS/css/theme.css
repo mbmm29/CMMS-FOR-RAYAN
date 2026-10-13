@@ -440,6 +440,8 @@ button.job-open:hover{filter:brightness(1.12)}
 }
 @page{margin:0}
 @page lubesheet{size:A3 portrait;margin:12mm}
+@page jobsheet{size:A3 portrait;margin:12mm}
+#job-pdf{display:none}
 @media print{
   html,body{margin:0!important;padding:0!important;background:#fff!important;min-height:0!important;height:auto!important}
   body:has(.report-paper){background:#fff}
@@ -506,6 +508,36 @@ button.job-open:hover{filter:brightness(1.12)}
   .report-photo-page.landscape{page:a3photo-land;width:420mm;height:297mm}
   .report-photo-page img{width:297mm;height:420mm;max-width:none;object-fit:contain;object-position:center;background:#fff}
   .report-photo-page.landscape img{width:420mm;height:297mm}
+  body.job-printing .shell,
+  body.job-printing .toast,
+  body.job-printing #screen-notice{display:none!important}
+  body.job-printing #job-pdf{display:block!important}
+  body.job-printing #job-pdf .job-sheet{page:jobsheet;width:auto!important;max-width:none!important;margin:0!important;padding:0!important;border:0!important;border-radius:0!important;box-shadow:none!important;background:#fff!important;color:#102d60!important;print-color-adjust:exact;-webkit-print-color-adjust:exact}
+  body.job-printing #job-pdf .job-sheet .lube-head{display:grid!important;grid-template-columns:68mm minmax(0,1fr) 52mm!important;gap:6mm;align-items:center;justify-items:stretch;text-align:initial;padding-bottom:4mm;border-bottom:0.6mm solid #2a5287}
+  body.job-printing #job-pdf .job-sheet .lube-head img{width:66mm!important;max-width:66mm!important;height:auto}
+  body.job-printing #job-pdf .job-sheet .lube-head h2{font-size:18pt;line-height:1.25;text-align:center!important}
+  body.job-printing #job-pdf .job-sheet .lube-head small{display:block;margin-top:1mm;font-size:11pt;text-align:center!important}
+  body.job-printing #job-pdf .job-sheet .lube-head dl{width:auto;margin:0;border:0.4mm solid #2a5287}
+  body.job-printing #job-pdf .job-sheet .job-fields{display:grid!important;grid-template-columns:1fr 1fr!important;gap:4mm 10mm;margin:6mm 0 2mm}
+  body.job-printing #job-pdf .job-sheet .job-fields label{display:grid!important;grid-template-columns:38mm minmax(0,1fr)!important;gap:2mm;align-items:end;color:#102d60;font-size:12pt;font-weight:800}
+  body.job-printing #job-pdf .job-sheet .job-fields label.job-wide{grid-column:1 / -1!important}
+  body.job-printing #job-pdf .job-sheet .job-crew{display:grid!important;grid-template-columns:1fr 1fr!important;gap:3mm 8mm;margin:3mm 0;padding:3mm 0;border-top:0.3mm solid #d7e4f6;border-bottom:0.3mm solid #d7e4f6;font-size:12pt}
+  body.job-printing #job-pdf .job-sheet .job-block{display:grid;gap:1.5mm;margin-top:4mm;font-size:12pt;font-weight:800}
+  body.job-printing #job-pdf .job-sheet .job-print-line{min-height:7mm;border-bottom:0.35mm solid #8eabda;padding:0 1mm 1mm;font-size:12pt;font-weight:700}
+  body.job-printing #job-pdf .job-sheet .job-print-text{min-height:28mm;border:0.35mm solid #2a5287;padding:2mm;white-space:pre-wrap;font-size:12pt;font-weight:600;line-height:1.45}
+  body.job-printing #job-pdf .job-sheet .job-result-date{display:flex;align-items:end;gap:4mm;max-width:90mm}
+  body.job-printing #job-pdf .job-sheet .job-result-date .job-print-line{flex:1}
+  body.job-printing #job-pdf .job-sheet .lube-table{width:100%!important;border-collapse:collapse;table-layout:fixed}
+  body.job-printing #job-pdf .job-sheet .lube-table th,
+  body.job-printing #job-pdf .job-sheet .lube-table td{border:0.3mm solid #2a5287;font-size:11pt;padding:1.5mm}
+  body.job-printing #job-pdf .job-sheet .lube-table th{height:10mm;background:#e7f0ff!important;color:#102d60}
+  body.job-printing #job-pdf .job-sheet .lube-table th:nth-child(1){width:12%}
+  body.job-printing #job-pdf .job-sheet .lube-table th:nth-child(2){width:50%}
+  body.job-printing #job-pdf .job-sheet .lube-table th:nth-child(3){width:38%}
+  body.job-printing #job-pdf .job-sheet .lube-no{text-align:center;font-weight:800;background:#f7faff}
+  body.job-printing #job-pdf .job-sheet .job-print-cell{min-height:8mm;white-space:pre-wrap}
+  body.job-printing #job-pdf .lube-actions,
+  body.job-printing #job-pdf .no-print{display:none!important}
 }
 
 @media(max-width:980px){

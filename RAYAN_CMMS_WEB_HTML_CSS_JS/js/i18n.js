@@ -660,6 +660,7 @@ const CMMS_AR = {
   'Resend the report': 'إعادة إرسال التقرير',
   'Report sent again to the maintenance engineer.': 'أُعيد إرسال التقرير إلى مهندس الصيانة.',
   'Maintenance Job Order': 'أمر صيانة',
+  'Export PDF': 'تصدير PDF',
   'Curative': 'علاجية',
   'Repair order no.': 'رقم امر الاصلاح',
   'Section': 'القسم',

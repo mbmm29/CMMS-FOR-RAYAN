@@ -750,6 +750,7 @@ function drawWorkOrders() {
       document.getElementById('workspace').className = 'workspace';
       document.getElementById('workspace').innerHTML = workOrderForm(order);
       bindForm();
+      document.getElementById('job-pdf-export')?.addEventListener('click', () => exportJobOrderPdf(order));
       document.getElementById('job-back')?.addEventListener('click', () => {
         ui.mode = 'view';
         drawWorkOrders();
@@ -766,6 +767,10 @@ function drawWorkOrders() {
   ]);
   document.getElementById('workspace').className = 'workspace';
   document.getElementById('workspace').innerHTML = `<section class="panel">${tabsHtml(['All Work Orders', 'In Progress', 'Overdue', 'Completed', 'On Hold'])}${tableShell(['WO No.', 'Type', 'Equipment', 'Problem / Description', 'Priority', 'Status', 'Assigned To', 'Due Date', 'Created On'], body, shown(rows.length, scoped(store.orders).length, 'work orders'))}</section>${detail}`;
+  if (ui.mode !== 'create' && selected) {
+    document.querySelector('.detail')?.insertAdjacentHTML('beforeend', `<button type="button" class="detail-button" id="job-pdf-export">${esc(t('Export PDF'))}</button>`);
+    document.getElementById('job-pdf-export')?.addEventListener('click', () => exportJobOrderPdf(selected));
+  }
   if (ui.mode !== 'create' && selected && canMaintain()) {
     document.querySelector('.detail')?.insertAdjacentHTML('beforeend', `<button type="button" class="detail-button danger" data-delete="/work-orders" data-delete-id="${esc(selected.work_order_id)}">${esc(t('Delete'))}</button>`);
   }
@@ -2028,6 +2033,62 @@ function bindJobPlace(form) {
   refreshJobNumber();
 }
 
+function jobActions(order) {
+  const pdf = order ? `<button type="button" id="job-pdf-export">${esc(t('Export PDF'))}</button>` : '';
+  return `<p id="live-form-error" class="form-error"></p><div class="lube-actions no-print">${pdf}<button type="button" id="job-back">${esc(t('Back'))}</button><button type="submit">${esc(t('Save'))}</button></div>`;
+}
+
+function orderForPdf(order) {
+  const form = document.getElementById('live-form');
+  if (!form || form.dataset.orderId !== order.work_order_id) return order;
+  const parts = [...form.querySelectorAll('#job-parts tr')].map((row) => {
+    const name = row.querySelector('[data-job-part="name"]')?.value.trim() || '';
+    const number = row.querySelector('[data-job-part="number"]')?.value.trim() || '';
+    if (!name && !number) return '';
+    return `1 | ${name || '—'} | No: ${number || '—'}`;
+  }).filter(Boolean);
+  return {
+    ...order,
+    corrective_action: form.querySelector('[name="corrective_action"]')?.value ?? order.corrective_action,
+    verification: form.querySelector('[name="verification"]')?.value ?? order.verification,
+    parts_used: parts.join('\n'),
+  };
+}
+
+function exportJobOrderPdf(order) {
+  if (!order?.work_order_id) return;
+  let root = document.getElementById('job-pdf');
+  if (!root) {
+    root = document.createElement('div');
+    root.id = 'job-pdf';
+    document.body.appendChild(root);
+  }
+  root.innerHTML = workOrderForm(orderForPdf(order));
+  root.querySelectorAll('.lube-actions, #live-form-error').forEach((node) => node.remove());
+  const form = root.querySelector('form');
+  form?.classList.add('job-sheet');
+  root.querySelectorAll('[id]').forEach((node) => node.removeAttribute('id'));
+  root.querySelectorAll('textarea, input').forEach((field) => {
+    if (field.type === 'radio' || field.type === 'checkbox' || field.type === 'hidden') return;
+    const block = document.createElement('div');
+    block.className = field.closest('table') ? 'job-print-cell' : (field.tagName === 'TEXTAREA' ? 'job-print-text' : 'job-print-line');
+    const text = field.type === 'date' && /^\d{4}-\d{2}-\d{2}$/.test(field.value || '') ? fmtDate(field.value) : (field.value || '');
+    block.textContent = text;
+    field.replaceWith(block);
+  });
+  const previousTitle = document.title;
+  document.title = `job-order-${order.work_order_id}`;
+  document.body.classList.add('job-printing');
+  const cleanup = () => {
+    document.body.classList.remove('job-printing');
+    root.innerHTML = '';
+    document.title = previousTitle;
+    window.removeEventListener('afterprint', cleanup);
+  };
+  window.addEventListener('afterprint', cleanup);
+  window.print();
+}
+
 function approvalDateField(order) {
   const raw = String(order?.closing_date || '').slice(0, 10);
   const shown = raw ? fmtDate(raw) : '';
@@ -2038,7 +2099,7 @@ function workOrderForm(order) {
   const today = isoDate(new Date());
   const partRows = order ? jobPartRows(order.parts_used) : Array.from({ length: 5 }, (_, index) => `<tr><td class="lube-no">${index + 1}</td><td><input data-job-part="name"></td><td><input data-job-part="number"></td></tr>`).join('');
   const parts = `<section class="daily-parts"><h3>${esc(t('Parts used'))}</h3><table class="lube-table"><thead><tr><th>${esc(t('No.'))}</th><th>${esc(t('Parts used'))}</th><th>${esc(t('Part No.'))}</th></tr></thead><tbody id="job-parts">${partRows}</tbody></table></section>`;
-  const actions = `<p id="live-form-error" class="form-error"></p><div class="lube-actions"><button type="button" id="job-back">${esc(t('Back'))}</button><button type="submit">${esc(t('Save'))}</button></div>`;
+  const actions = jobActions();
   if (order) {
     const place = jobLocation(order);
     const crew = order.crew_type === 'External' ? t('External maintenance team') : t('Company maintenance team');
@@ -2051,7 +2112,7 @@ function workOrderForm(order) {
       jobField('Repair order no.', `<input class="job-code" value="${esc(order.work_order_id)}" readonly>`),
       jobField('Date', `<input type="date" value="${esc(String(order.planned_date || '').slice(0, 10))}" readonly>`),
     ].join('');
-    return `<form id="live-form" class="lube-paper job-order" data-order-id="${esc(order.work_order_id)}">${jobHead()}<div class="job-fields">${fields}</div><div class="job-crew"><b>${esc(crew)}</b></div><label class="job-block"><span>${esc(t('Fault'))}</span><textarea readonly>${esc(order.problem_description || '')}</textarea></label><label class="job-block"><span>${esc(t('Action taken'))}</span><textarea name="corrective_action">${esc(order.corrective_action || '')}</textarea></label><div class="job-block"><span>${esc(t('Technician signature'))}</span><input value="${esc(getSavedUser()?.full_name || assigneeNames(order))}" readonly></div>${parts}<label class="job-block"><span>${esc(t('Result'))}</span><textarea name="verification">${esc(order.verification || '')}</textarea></label>${approvalDateField(order)}${actions}</form>`;
+    return `<form id="live-form" class="lube-paper job-order" data-order-id="${esc(order.work_order_id)}">${jobHead()}<div class="job-fields">${fields}</div><div class="job-crew"><b>${esc(crew)}</b></div><label class="job-block"><span>${esc(t('Fault'))}</span><textarea readonly>${esc(order.problem_description || '')}</textarea></label><label class="job-block"><span>${esc(t('Action taken'))}</span><textarea name="corrective_action">${esc(order.corrective_action || '')}</textarea></label><div class="job-block"><span>${esc(t('Technician signature'))}</span><input value="${esc(getSavedUser()?.full_name || assigneeNames(order))}" readonly></div>${parts}<label class="job-block"><span>${esc(t('Result'))}</span><textarea name="verification">${esc(order.verification || '')}</textarea></label>${approvalDateField(order)}${jobActions(order)}</form>`;
   }
   const plants = openPlants().map((plant) => `<option value="${esc(plant.plant_id)}">${esc(plant.name)}</option>`).join('');
   const fields = [
