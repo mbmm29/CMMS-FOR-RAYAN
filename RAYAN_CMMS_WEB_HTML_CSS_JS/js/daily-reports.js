@@ -209,7 +209,8 @@ document.addEventListener('DOMContentLoaded', async () => {
   async function openLubeReview(report) {
     const detail = await apiRequest(`/lubrication-reports/${encodeURIComponent(report.id)}`);
     state.selected = report;
-    const lines = detail.lines || [];
+    const lines = (detail.lines || []).slice();
+    while (lines.length < 10) lines.push({});
     const rows = lines.map((line, index) => `<tr>
       <td class="lube-no">${index + 1}</td>
       <td class="lube-machine"><input value="${escapeHtml(line.equipment_code || '')}" readonly><input value="${escapeHtml(line.equipment_name || '')}" readonly></td>
@@ -248,7 +249,9 @@ document.addEventListener('DOMContentLoaded', async () => {
       return;
     }
     state.selected = report;
-    const activityRows = report.items.map((item, index) => `<tr>
+    const items = (report.items || []).slice();
+    while (items.length < 10) items.push({});
+    const activityRows = items.map((item, index) => `<tr>
       <td class="lube-no">${index + 1}</td>
       <td class="lube-machine"><input value="${escapeHtml(item.equipment_code || item.equipment_id || '')}" readonly><input value="${escapeHtml(item.equipment_name || '')}" readonly><input value="${escapeHtml(lineNameOf(item, report.plantId) || item.entered_line_number || '')}" readonly></td>
       <td><input value="${escapeHtml(t(item.maintenance_type || ''))}" readonly>${item.wo_id ? `<small class="lube-order">${escapeHtml(item.wo_id)}</small>` : ''}</td>
@@ -256,9 +259,10 @@ document.addEventListener('DOMContentLoaded', async () => {
       <td><input value="${escapeHtml(reviewValue(item.maintenance_start))}" readonly></td>
       <td><input value="${escapeHtml(reviewValue(item.maintenance_end))}" readonly></td>
       <td><input value="${item.downtime_h != null ? asHours(item.downtime_h) : ''}" readonly></td>
-    </tr>`).join('') || `<tr><td class="annual-empty" colspan="7">${escapeHtml(t('No activities'))}</td></tr>`;
+    </tr>`).join('');
     const parts = reviewParts(report.items.find(item => item.spare_parts)?.spare_parts || '');
-    const partRows = parts.map((part, index) => `<tr><td class="lube-no">${index + 1}</td><td><input value="${escapeHtml(part.description)}" readonly></td><td><input value="${escapeHtml(part.number)}" readonly></td><td><input value="${escapeHtml(part.quantity)}" readonly></td></tr>`).join('') || `<tr><td class="annual-empty" colspan="4">${escapeHtml(t('No spare parts'))}</td></tr>`;
+    while (parts.length < 2) parts.push({ description: '', number: '', quantity: '' });
+    const partRows = parts.map((part, index) => `<tr><td class="lube-no">${index + 1}</td><td><input value="${escapeHtml(part.description)}" readonly></td><td><input value="${escapeHtml(part.number)}" readonly></td><td><input value="${escapeHtml(part.quantity)}" readonly></td></tr>`).join('');
     const decisions = report.status === 'Submitted' && isEngineer()
       ? `<button type="button" class="decision approve" id="review-approve">${escapeHtml(t('Approve report'))}</button><button type="button" class="decision return" id="review-reject">${escapeHtml(t('Reject report'))}</button>`
       : '';
@@ -269,7 +273,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     const sheet = document.getElementById('detailsContent');
     if (!sheet) return;
     layout?.classList.add('reviewing');
-    sheet.innerHTML = `<div class="review-bar no-print"><button type="button" id="review-close">${escapeHtml(t('Back to reports'))}</button>${decisions}${remove}</div>
+    sheet.innerHTML = `<div class="review-bar no-print"><button type="button" id="review-close">${escapeHtml(t('Back to reports'))}</button><button type="button" class="decision print" id="review-print">${escapeHtml(t('Print'))}</button>${decisions}${remove}</div>
       <form class="lube-paper daily-paper" id="review-paper">
         <header class="lube-head"><img src="logo-rayan.png?v=2" alt="Rayan"><div><h2>${escapeHtml(t('DAILY MAINTENANCE REPORT'))}</h2><p>${escapeHtml(t(report.status || 'Draft'))}</p><small>${escapeHtml(t('Mechanical Maintenance Department'))}</small></div><dl><div><dt>${escapeHtml(t('Form No.:'))}</dt><dd>${escapeHtml(state.formNo || 'DR')}</dd></div><div><dt>${escapeHtml(t('Approved by'))}</dt><dd>${escapeHtml(report.approvedBy || '—')}</dd></div></dl></header>
         <div class="lube-meta">
@@ -282,7 +286,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         <section class="daily-parts"><h3>${escapeHtml(t('SPARE PARTS USED'))}</h3><table class="lube-table"><thead><tr><th>${escapeHtml(t('No.'))}</th><th>${escapeHtml(t('Part'))}</th><th>${escapeHtml(t('Part No.'))}</th><th>${escapeHtml(t('Qty'))}</th></tr></thead><tbody>${partRows}</tbody></table></section>
         <label class="daily-notes"><span>${escapeHtml(t('GENERAL NOTES'))}</span><div class="daily-note-box"><textarea readonly>${escapeHtml(report.notes || '')}</textarea><b class="daily-tdt">TDT: <span>${asHours(report.downtime)}</span></b></div></label>
         ${(report.photos || []).length ? `<section class="daily-photos no-print"><div class="lube-list-head"><h3>${escapeHtml(t('Photos'))}</h3></div><p class="photo-hint">${escapeHtml(t('Each photo prints on a full A3 page.'))}</p><div class="photo-strip" id="review-photo-strip"></div></section>` : ''}
-        ${report.returnReason ? `<p class="daily-return">${escapeHtml(t('Rejection reason'))}: ${escapeHtml(report.returnReason)}</p>` : ''}
+        ${report.returnReason ? `<p class="daily-return no-print">${escapeHtml(t('Rejection reason'))}: ${escapeHtml(report.returnReason)}</p>` : ''}
       </form>
       <div id="review-photo-print"></div>
       <form class="review-reason no-print" id="reject-box" hidden>
@@ -292,6 +296,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         <div class="review-reason-actions"><button type="submit" class="decision return" id="reject-send">${escapeHtml(t('Return to technician'))}</button></div>
       </form>`;
     document.getElementById('review-close')?.addEventListener('click', closeReview);
+    document.getElementById('review-print')?.addEventListener('click', () => window.print());
     document.getElementById('review-approve')?.addEventListener('click', approveSelected);
     attachReviewPhotos(report);
     document.getElementById('review-delete')?.addEventListener('click', deleteSelected);

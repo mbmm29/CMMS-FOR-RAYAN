@@ -3857,7 +3857,7 @@ async function drawDailyReport() {
   const report = detail?.report || null;
   const items = detail?.items?.length ? detail.items.slice() : [];
   const parts = dailyPartsFromText(items.find((item) => item.spare_parts)?.spare_parts || '');
-  while (items.length < 6) items.push({});
+  while (items.length < 10) items.push({});
   const monthKey = today.slice(0, 7);
   const monthCount = dailyCache.filter((row) => String(row.report_date).startsWith(monthKey)).length;
   const approved = dailyCache.filter((row) => row.status === 'Approved').length;
