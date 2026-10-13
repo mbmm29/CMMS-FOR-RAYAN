@@ -519,7 +519,8 @@ async function saveReport(submit) {
 }
 
 async function initializeForm() {
-  if (!getSavedUser()) return location.replace('login.html');
+  if (!hasSavedSession()) return location.replace('login.html');
+  if (!(await restoreSession())) return location.replace('login.html');
   try {
     currentUser = await getCurrentUser();
     if (currentUser.role === 'TECHNICIAN') {

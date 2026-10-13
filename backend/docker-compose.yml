@@ -22,6 +22,7 @@ services:
     environment:
       DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-maintenance}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-maintenance}
       JWT_SECRET: ${JWT_SECRET:?Set JWT_SECRET in .env}
+      JWT_EXPIRE_DAYS: ${JWT_EXPIRE_DAYS:-3650}
       CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:3000,http://localhost:4173,http://localhost:8000}
       ALLOW_DEMO_SEED: ${ALLOW_DEMO_SEED:-false}
       BOOTSTRAP_USERNAME: ${BOOTSTRAP_USERNAME:-}

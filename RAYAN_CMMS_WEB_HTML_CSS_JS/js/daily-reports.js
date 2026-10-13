@@ -499,8 +499,9 @@ document.addEventListener('DOMContentLoaded', async () => {
   }
 
   try {
-    if (!getSavedUser()) return location.replace('login.html');
-    state.user = await getCurrentUser();
+    if (!hasSavedSession()) return location.replace('login.html');
+    state.user = await restoreSession();
+    if (!state.user) return location.replace('login.html');
     setText('sidebarUsername', state.user.full_name || state.user.username);
     setText('sidebarRole', t(state.user.role.replaceAll('_', ' ').replace(/\b\w/g, (letter) => letter.toUpperCase())));
     applyTechnicianInterface();

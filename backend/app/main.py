@@ -465,12 +465,33 @@ def create_bootstrap_system():
 @app.get('/health')
 def health(): return {'status':'ok','version':'2.0.0'}
 
+def session_payload(user: User):
+    return {
+        'access_token': create_access_token(user.id, user.username, user.role),
+        'user_id': user.id,
+        'username': user.username,
+        'full_name': user.full_name,
+        'role': user.role,
+        'technician_id': user.technician_id,
+    }
+
+
 @app.post('/login',response_model=LoginResponse)
 def login(data:LoginRequest,db:Session=Depends(get_db)):
     u=db.query(User).filter(User.username==data.username).first()
     if not u or not u.is_active or not verify_password(data.password,u.password_hash): raise HTTPException(401,'Invalid username or password')
     u.last_login=datetime.utcnow(); db.commit()
-    return {'access_token':create_access_token(u.id,u.username,u.role),'user_id':u.id,'username':u.username,'full_name':u.full_name,'role':u.role,'technician_id':u.technician_id}
+    return session_payload(u)
+
+
+@app.post('/auth/refresh', response_model=LoginResponse)
+def refresh_session(db: Session = Depends(get_db), u=Depends(auth)):
+    """Extend a still-valid browser session without asking for the password again."""
+    account = db.query(User).filter(User.id == u.id).first()
+    if not account or not account.is_active:
+        raise HTTPException(401, 'Session expired')
+    return session_payload(account)
+
 
 @app.get('/me',response_model=UserOut)
 def me(u=Depends(auth)): return u

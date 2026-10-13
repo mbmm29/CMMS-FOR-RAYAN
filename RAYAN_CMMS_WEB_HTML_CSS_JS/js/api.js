@@ -105,15 +105,17 @@ async function getCurrentUser() {
 
 function saveSession(loginResponse) {
 
-    localStorage.setItem(
-        "access_token",
-        loginResponse.access_token
-    );
+    if (loginResponse?.access_token) {
+        localStorage.setItem("access_token", loginResponse.access_token);
+    }
 
-    localStorage.setItem(
-        "user",
-        JSON.stringify(loginResponse)
-    );
+    const previous = getSavedUser() || {};
+    const next = {
+        ...previous,
+        ...loginResponse,
+    };
+    delete next.access_token;
+    localStorage.setItem("user", JSON.stringify(next));
 
 }
 
@@ -132,6 +134,35 @@ function getSavedUser() {
         return null;
     }
 
+}
+
+
+function hasSavedSession() {
+    return Boolean(localStorage.getItem("access_token") && getSavedUser());
+}
+
+
+function homePageForUser(user) {
+    if (user?.role === "LUBRICATION_TECHNICIAN") return "lubrication";
+    if (user?.role === "TECHNICIAN") return "work-orders";
+    return "dashboard";
+}
+
+
+async function restoreSession() {
+    if (!localStorage.getItem("access_token")) {
+        return null;
+    }
+    try {
+        const refreshed = await apiRequest("/auth/refresh", { method: "POST" });
+        saveSession(refreshed);
+        const user = await getCurrentUser();
+        saveSession({ ...refreshed, ...user });
+        return user;
+    } catch (_) {
+        logout();
+        return null;
+    }
 }
 
 

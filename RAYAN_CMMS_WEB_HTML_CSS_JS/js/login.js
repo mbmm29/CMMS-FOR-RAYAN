@@ -1,4 +1,4 @@
-document.addEventListener("DOMContentLoaded", () => {
+document.addEventListener("DOMContentLoaded", async () => {
 
     const loginForm = document.getElementById("loginForm");
     const usernameInput = document.getElementById("username");
@@ -11,6 +11,15 @@ document.addEventListener("DOMContentLoaded", () => {
     if (!loginForm) {
         console.error("loginForm not found.");
         return;
+    }
+
+    // Already signed in on this browser? Skip the form until Sign out.
+    if (hasSavedSession()) {
+        const user = await restoreSession();
+        if (user) {
+            window.location.replace(`index.html#${homePageForUser(user)}`);
+            return;
+        }
     }
 
 
@@ -42,14 +51,10 @@ document.addEventListener("DOMContentLoaded", () => {
 
         try {
 
-            console.log("Attempting login:", username);
-
             const response = await login(
                 username,
                 password
             );
-
-            console.log("Login successful:", response);
 
 
             if (!response.access_token) {
@@ -62,29 +67,11 @@ document.addEventListener("DOMContentLoaded", () => {
             saveSession(response);
 
 
-            /*
-             * Verify the token with /me
-             */
             const user = await getCurrentUser();
-
-            console.log("Authenticated user:", user);
-
-
-            localStorage.setItem(
-                "user",
-                JSON.stringify(user)
-            );
+            saveSession({ ...response, ...user });
 
 
-            /*
-             * Go to the separate Dashboard page
-             */
-            const home = user.role === 'LUBRICATION_TECHNICIAN'
-                ? 'lubrication'
-                : user.role === 'TECHNICIAN'
-                    ? 'work-orders'
-                    : 'dashboard';
-            window.location.href = `index.html#${home}`;
+            window.location.href = `index.html#${homePageForUser(user)}`;
 
 
         } catch (error) {
