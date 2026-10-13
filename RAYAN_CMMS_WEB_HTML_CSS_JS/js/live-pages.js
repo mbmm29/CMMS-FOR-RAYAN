@@ -417,8 +417,23 @@ function filtersHtml(options = {}) {
   const equipment = store.equipment.filter((item) => (!item.plant_id || openIds.has(item.plant_id)) && (!plants.length || plantScope.has(item.plant_id)) && (!ui.lineId || item.line_id === ui.lineId) && (!ui.sectionId || item.section_id === ui.sectionId));
   if (ui.equipmentId && !equipment.some((item) => item.equipment_id === ui.equipmentId)) ui.equipmentId = '';
   const option = (value, label, selected) => `<option value="${esc(value)}"${selected === value ? ' selected' : ''}>${esc(label)}</option>`;
+  const plantSummary = plants.length
+    ? (plants.length === 1
+      ? (openPlants().find((plant) => plant.plant_id === plants[0])?.name || plants[0])
+      : `${plants.length} ${t('plants selected')}`)
+    : t('All plants');
   const plantFilter = multiPlant
-    ? `<label class="plant-multi">${t('Plant')}<div class="plant-checks" data-filter="plants">${openPlants().map((plant) => `<label class="plant-check"><input type="checkbox" value="${esc(plant.plant_id)}"${plants.includes(plant.plant_id) ? ' checked' : ''}><span>${esc(plant.name)}</span></label>`).join('')}</div><small>${esc(t('Select one or more plants. Leave empty for all plants.'))}</small></label>`
+    ? `<div class="plant-menu">
+        <span class="plant-menu-label">${esc(t('Plants'))}</span>
+        <button type="button" class="plant-menu-toggle" id="plant-menu-toggle" aria-expanded="false" aria-haspopup="listbox">
+          <span class="plant-menu-summary" id="plant-menu-summary">${esc(plantSummary)}</span>
+          <span class="plant-menu-caret" aria-hidden="true">▾</span>
+        </button>
+        <div class="plant-menu-panel" id="plant-menu-panel" data-filter="plants" hidden role="listbox" aria-label="${esc(t('Plants'))}">
+          ${openPlants().map((plant) => `<label class="plant-menu-item"><input type="checkbox" value="${esc(plant.plant_id)}"${plants.includes(plant.plant_id) ? ' checked' : ''}><span>${esc(plant.name)}</span></label>`).join('') || `<p class="plant-menu-empty">${esc(t('No plants'))}</p>`}
+          <button type="button" class="plant-menu-clear" id="plant-menu-clear">${esc(t('All plants'))}</button>
+        </div>
+      </div>`
     : `<label>${t('Plant')}<select data-filter="plant">${option('', t('All plants'), ui.plantId)}${openPlants().map((plant) => option(plant.plant_id, plant.name, ui.plantId)).join('')}</select></label>`;
   return `<div class="live-filters">
     ${plantFilter}
@@ -2344,20 +2359,72 @@ function sopForm() {
   ].join(''));
 }
 
-function bindFilters() {
-  const fields = { plant: 'plantId', line: 'lineId', section: 'sectionId', equipment: 'equipmentId', technician: 'technicianId', from: 'dateFrom', to: 'dateTo' };
-  document.querySelectorAll('[data-filter="plants"] input[type="checkbox"]').forEach((box) => {
+function plantMenuSummaryText() {
+  const plants = selectedPlantIds();
+  if (!plants.length) return t('All plants');
+  if (plants.length === 1) {
+    return openPlants().find((plant) => plant.plant_id === plants[0])?.name || plants[0];
+  }
+  return `${plants.length} ${t('plants selected')}`;
+}
+
+function setPlantMenuOpen(open) {
+  const toggle = document.getElementById('plant-menu-toggle');
+  const panel = document.getElementById('plant-menu-panel');
+  if (!toggle || !panel) return;
+  ui.plantMenuOpen = Boolean(open);
+  panel.hidden = !open;
+  toggle.setAttribute('aria-expanded', open ? 'true' : 'false');
+  toggle.classList.toggle('open', Boolean(open));
+}
+
+function applyPlantMenuSelection(ids, { redraw = true, keepOpen = false } = {}) {
+  syncPlantSelection(ids);
+  ui.lineId = '';
+  ui.sectionId = '';
+  ui.equipmentId = '';
+  ui.rowKey = '';
+  const summary = document.getElementById('plant-menu-summary');
+  if (summary) summary.textContent = plantMenuSummaryText();
+  if (!redraw) return;
+  ui.plantMenuOpen = keepOpen;
+  draw(ui.page);
+}
+
+function bindPlantMenu() {
+  const toggle = document.getElementById('plant-menu-toggle');
+  const panel = document.getElementById('plant-menu-panel');
+  if (!toggle || !panel) return;
+  if (ui.plantMenuOpen) setPlantMenuOpen(true);
+  toggle.addEventListener('click', (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+    setPlantMenuOpen(panel.hidden);
+  });
+  panel.addEventListener('click', (event) => event.stopPropagation());
+  panel.querySelectorAll('input[type="checkbox"]').forEach((box) => {
     box.addEventListener('change', () => {
-      const host = box.closest('[data-filter="plants"]');
-      const ids = [...host.querySelectorAll('input:checked')].map((item) => item.value);
-      syncPlantSelection(ids);
-      ui.lineId = '';
-      ui.sectionId = '';
-      ui.equipmentId = '';
-      ui.rowKey = '';
-      draw(ui.page);
+      const ids = [...panel.querySelectorAll('input:checked')].map((item) => item.value);
+      applyPlantMenuSelection(ids, { redraw: true, keepOpen: true });
     });
   });
+  document.getElementById('plant-menu-clear')?.addEventListener('click', (event) => {
+    event.preventDefault();
+    applyPlantMenuSelection([], { redraw: true, keepOpen: true });
+  });
+  if (!ui._plantMenuDocBound) {
+    ui._plantMenuDocBound = true;
+    document.addEventListener('click', (event) => {
+      if (!ui.plantMenuOpen) return;
+      if (event.target.closest?.('.plant-menu')) return;
+      setPlantMenuOpen(false);
+    });
+  }
+}
+
+function bindFilters() {
+  const fields = { plant: 'plantId', line: 'lineId', section: 'sectionId', equipment: 'equipmentId', technician: 'technicianId', from: 'dateFrom', to: 'dateTo' };
+  bindPlantMenu();
   document.querySelectorAll('[data-filter]').forEach((select) => {
     if (select.dataset.filter === 'plants') return;
     select.addEventListener('change', () => {
@@ -4105,7 +4172,7 @@ document.getElementById('primary-action').addEventListener('click', (event) => {
   event.preventDefault();
   event.stopImmediatePropagation();
   if (ui.page === 'machine-records') exportRecords();
-  else if (ui.page === 'dashboard') document.querySelector('[data-filter="plants"] input, [data-filter="plant"]')?.focus();
+  else if (ui.page === 'dashboard') (document.getElementById('plant-menu-toggle') || document.querySelector('[data-filter="plant"]'))?.focus();
   else if (ui.page === 'pm-schedule' && isTechnician()) return;
   else if (ui.page === 'pm-schedule' && document.querySelector('.week-day')) saveWeekTasks();
   else if (ui.page === 'pm-schedule' && document.getElementById('annual-rows')) saveAnnualPlan();
