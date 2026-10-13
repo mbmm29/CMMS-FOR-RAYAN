@@ -1693,9 +1693,75 @@ function readSopParagraphs() {
   return [...document.querySelectorAll('.sop-text')].map((node) => (node.textContent === '—' ? '' : node.textContent));
 }
 
-function sopParagraphEditor(equipment, paragraphs) {
+function sopManualHtml(manual) {
+  const doc = manual?.document || {};
+  if (!doc || (!doc.title && !(doc.steps || []).length && !(doc.safety || []).length)) return '';
+  const safetyHeaders = doc.safety_headers || {};
+  const stepsHeaders = doc.steps_headers || {};
+  const meta = `
+    <div class="sop-manual-section">
+      <div class="sop-manual-section-title">${esc(doc.meta_heading || t('Document and equipment information'))}</div>
+      <div class="sop-manual-meta">
+        <div class="sop-manual-meta-row"><span>${esc(doc.document_no_label || t('Document No.:'))}</span><b>${esc(doc.document_no || '—')}</b></div>
+        <div class="sop-manual-meta-row"><span>${esc(doc.equipment_name_label || t('Equipment name:'))}</span><b>${esc(doc.equipment_name || '—')}</b></div>
+        <div class="sop-manual-meta-row"><span>${esc(doc.location_label || t('Location / section:'))}</span><b>${esc(doc.location || '—')}</b></div>
+      </div>
+    </div>`;
+  const safetyRows = (doc.safety || []).map((row) => `<tr>
+      <td>${esc(row.detail || '—')}</td>
+      <td>${esc(row.description || '—')}</td>
+      <td>${esc(row.category || '—')}</td>
+    </tr>`).join('') || `<tr><td colspan="3">${esc(t('No records yet'))}</td></tr>`;
+  const safety = `
+    <div class="sop-manual-section">
+      <div class="sop-manual-section-title">${esc(doc.safety_heading || t('Safety, LOTO and tools'))}</div>
+      <div class="sop-manual-table-wrap">
+        <table class="sop-manual-table">
+          <thead><tr>
+            <th>${esc(safetyHeaders.detail || t('Detailed standards'))}</th>
+            <th>${esc(safetyHeaders.description || t('Requirement description'))}</th>
+            <th>${esc(safetyHeaders.category || t('Category'))}</th>
+          </tr></thead>
+          <tbody>${safetyRows}</tbody>
+        </table>
+      </div>
+    </div>`;
+  const stepRows = (doc.steps || []).map((row) => `<tr>
+      <td>${esc(row.action || '—')}</td>
+      <td>${esc(row.standard || '—')}</td>
+      <td>${esc(row.notes || '—')}</td>
+      <td>${esc(row.phase || '—')}</td>
+    </tr>`).join('') || `<tr><td colspan="4">${esc(t('No records yet'))}</td></tr>`;
+  const steps = `
+    <div class="sop-manual-section">
+      <div class="sop-manual-section-title">${esc(doc.steps_heading || t('Detailed maintenance steps'))}</div>
+      <div class="sop-manual-table-wrap">
+        <table class="sop-manual-table sop-manual-steps">
+          <thead><tr>
+            <th>${esc(stepsHeaders.action || t('Procedure and steps'))}</th>
+            <th>${esc(stepsHeaders.standard || t('Standards and measurements'))}</th>
+            <th>${esc(stepsHeaders.notes || t('Safety and quality notes'))}</th>
+            <th>${esc(stepsHeaders.phase || t('Main phase'))}</th>
+          </tr></thead>
+          <tbody>${stepRows}</tbody>
+        </table>
+      </div>
+    </div>`;
+  const fileNote = manual.filename ? `<small class="sop-manual-file">${esc(t('Imported file'))}: ${esc(manual.filename)}</small>` : '';
+  return `<article class="sop-manual" dir="rtl" lang="ar">
+    <header class="sop-manual-head">
+      <h2>${esc(doc.title || t('Standard operating procedure'))}</h2>
+      <p>${esc(doc.subtitle || '')}</p>
+      ${fileNote}
+    </header>
+    ${meta}${safety}${steps}
+  </article>`;
+}
+
+function sopParagraphEditor(equipment, paragraphs, manual) {
   const locked = !canMaintain();
-  const source = paragraphs.length || locked ? paragraphs : [''];
+  const hasManual = Boolean(manual?.document);
+  const source = paragraphs.length || locked || hasManual ? paragraphs : [''];
   const rows = source.map((text, index) => {
     const remove = locked ? '' : `<button type="button" class="detail-button danger sop-remove">${esc(t('Remove'))}</button>`;
     const field = locked
@@ -1703,21 +1769,37 @@ function sopParagraphEditor(equipment, paragraphs) {
       : `<textarea data-sop-paragraph rows="3" placeholder="${esc(t('Write the paragraph'))}">${esc(text || '')}</textarea>`;
     return `<li><b>${index + 1}</b>${field}${remove}</li>`;
   }).join('') || `<li class="sop-empty">${esc(t('No SOP paragraphs yet.'))}</li>`;
-  const write = locked ? '' : `<button type="button" id="sop-add" class="detail-button">${esc(t('Add paragraph'))}</button><button type="button" id="sop-save" class="detail-button primary">${esc(t('Save'))}</button><button type="button" id="sop-import" class="detail-button">${esc(t('Import'))}</button><input id="sop-import-file" type="file" accept=".xlsx,.txt,.text,.csv,.md,text/plain,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" hidden>`;
+  const write = locked
+    ? ''
+    : `<button type="button" id="sop-import" class="detail-button primary">${esc(t('Import'))}</button><input id="sop-import-file" type="file" accept=".xlsx,.txt,.text,.csv,.md,text/plain,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" hidden>${hasManual ? '' : `<button type="button" id="sop-add" class="detail-button">${esc(t('Add paragraph'))}</button><button type="button" id="sop-save" class="detail-button">${esc(t('Save'))}</button>`}`;
+  const editor = hasManual
+    ? ''
+    : `<p class="kpi-note">${esc(t('Write the operating steps for this machine, or import an Excel or text file into this equipment operating manual.'))}</p>
+    <ol class="sop-paragraphs">${rows}</ol>`;
+  const viewer = hasManual
+    ? `${sopManualHtml(manual)}<p class="kpi-note">${esc(t('This operating manual opens inside the site in the same form as the imported Excel file.'))}</p>`
+    : '';
   return `<section class="sop-sheet">
     <div class="sop-sheet-bar">
-      <h3>${esc(t('SOP paragraphs'))} · ${esc(equipment.equipment_id)} · ${esc(equipment.name || '')}</h3>
+      <h3>${esc(t('Operating manual'))} · ${esc(equipment.equipment_id)} · ${esc(equipment.name || '')}</h3>
       ${write}
     </div>
-    <p class="kpi-note">${esc(t('Write the operating steps for this machine, or import an Excel or text file into this equipment operating manual.'))}</p>
-    <ol class="sop-paragraphs">${rows}</ol>
+    ${viewer}${editor}
     <p id="sop-error" class="form-error"></p>
   </section>`;
 }
 
-async function loadSopParagraphs(equipmentId) {
+async function loadSopBundle(equipmentId) {
   const data = await apiRequest(`/equipment/${encodeURIComponent(equipmentId)}/sop-paragraphs`);
-  return (data.items || []).map((item) => item.body || '');
+  return {
+    paragraphs: (data.items || []).map((item) => item.body || ''),
+    manual: data.manual || null,
+  };
+}
+
+async function loadSopParagraphs(equipmentId) {
+  const data = await loadSopBundle(equipmentId);
+  return data.paragraphs;
 }
 
 async function saveSopParagraphs() {
@@ -1762,9 +1844,16 @@ async function drawSops(localParagraphs) {
   const chosen = ui.equipmentId;
   const equipment = equipmentOf(chosen);
   let paragraphs = Array.isArray(localParagraphs) ? localParagraphs : [];
+  let manual = null;
   if (chosen && !Array.isArray(localParagraphs)) {
-    try { paragraphs = await loadSopParagraphs(chosen); }
-    catch (_) { paragraphs = []; }
+    try {
+      const bundle = await loadSopBundle(chosen);
+      paragraphs = bundle.paragraphs;
+      manual = bundle.manual;
+    } catch (_) {
+      paragraphs = [];
+      manual = null;
+    }
   }
   const rows = scoped(store.sops).filter((sop) => {
     if (ui.tab === 'Under Review') return /review/i.test(sop.status || '');
@@ -1789,7 +1878,7 @@ async function drawSops(localParagraphs) {
     ['Effective', fmtDate(selected?.effective_date)], ['Review', fmtDate(selected?.review_date)], ['Prepared by', selected?.prepared_by],
     ['Approved by', selected?.approved_by],
   ]);
-  const sheet = equipment ? sopParagraphEditor(equipment, paragraphs) : '';
+  const sheet = equipment ? sopParagraphEditor(equipment, paragraphs, manual) : '';
   document.getElementById('workspace').className = 'workspace';
   document.getElementById('workspace').innerHTML = `<section class="panel"><div class="split">${assetList(chosen)}<div class="asset-view">${tabsHtml(['All SOPs', 'Published', 'Under Review', 'Draft'])}${tableShell(['SOP Code', 'SOP Title', 'Category', 'Version', 'Status', 'Last Review'], body, shown(rows.length, all.length, 'SOPs'))}</div></div>${sheet}</section>${detail}`;
   bindAssets();

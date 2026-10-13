@@ -1812,15 +1812,37 @@ def create_sop(data:SOPCreate,db:Session=Depends(get_db),u=Depends(role(*ENGINEE
     sid=f'SOP-{data.equipment_id}-{db.query(SOP).filter(SOP.equipment_id==data.equipment_id).count()+1:03d}'
     o=SOP(sop_id=sid,**data.model_dump()); db.add(o); audit(db,u,'CREATE','SOP',sid,new=data.model_dump()); db.commit(); db.refresh(o); return o
 
-def sop_paragraph_payload(equipment_id, rows):
-    return {'equipment_id': equipment_id, 'items': [{'position': row.position, 'body': row.body or ''} for row in rows]}
+def sop_manual_payload(row):
+    if not row:
+        return None
+    try:
+        document = json.loads(row.document or '{}')
+    except Exception:
+        document = {}
+    if not isinstance(document, dict):
+        document = {}
+    return {
+        'equipment_id': row.equipment_id,
+        'filename': row.filename,
+        'title': row.title or document.get('title') or '',
+        'updated_at': row.updated_at.isoformat() if row.updated_at else None,
+        'document': document,
+    }
+
+def sop_paragraph_payload(equipment_id, rows, manual=None):
+    return {
+        'equipment_id': equipment_id,
+        'items': [{'position': row.position, 'body': row.body or ''} for row in rows],
+        'manual': sop_manual_payload(manual),
+    }
 
 @app.get('/equipment/{equipment_id}/sop-paragraphs')
 def get_sop_paragraphs(equipment_id:str, db:Session=Depends(get_db), u=Depends(auth)):
     if not db.query(Equipment).filter_by(equipment_id=equipment_id).first():
         raise HTTPException(404, 'Equipment not found')
     rows = db.query(SOPParagraph).filter_by(equipment_id=equipment_id).order_by(SOPParagraph.position, SOPParagraph.id).all()
-    return sop_paragraph_payload(equipment_id, rows)
+    manual = db.query(SOPManual).filter_by(equipment_id=equipment_id).first()
+    return sop_paragraph_payload(equipment_id, rows, manual)
 
 SOP_IMPORT_MAX_BYTES = 2_000_000
 _SOP_SSML = '{http://schemas.openxmlformats.org/spreadsheetml/2006/main}'
@@ -1832,8 +1854,11 @@ _SOP_SKIP_LABELS = {
     'الفقرة', 'تسلسل', 'رقم النموذج:', 'رقم المعدة', 'اسم المعدة', 'الموقع / القسم',
     'الشركة المصنعة', 'لا توجد فقرات لهذا الإجراء.',
 }
+_SOP_META_LABELS = ('رقم الوثيقة', 'اسم المعدة', 'الموقع / القسم', 'الموقع', 'القسم')
+_SOP_SAFETY_MARKERS = ('وصف المتطلب', 'الفئة', 'معدات الوقاية', 'إجراءات العزل', 'تصاريح العمل')
+_SOP_STEP_MARKERS = ('المرحلة الرئيسية', 'الإجراء والخطوات', 'المعايير والقياسات', 'ملاحظات السلامة')
 
-def _sop_clean_paragraphs(items):
+def _sop_clean_paragraphs(items, allow_empty=False):
     cleaned = []
     for body in items:
         text = str(body or '').replace('\r\n', '\n').replace('\r', '\n').strip()
@@ -1845,7 +1870,7 @@ def _sop_clean_paragraphs(items):
         if len(text) > 4000:
             raise HTTPException(400, 'A paragraph is too long.')
         cleaned.append(text)
-    if not cleaned:
+    if not cleaned and not allow_empty:
         raise HTTPException(400, 'No SOP paragraphs found in the file.')
     if len(cleaned) > 80:
         raise HTTPException(400, 'An SOP can hold 80 paragraphs.')
@@ -1871,7 +1896,7 @@ def _sop_col_index(ref):
         number = number * 26 + (ord(ch) - 64)
     return number
 
-def _sop_paragraphs_from_xlsx(raw):
+def _sop_xlsx_rows(raw):
     try:
         with zipfile.ZipFile(io.BytesIO(raw)) as archive:
             names = set(archive.namelist())
@@ -1898,6 +1923,140 @@ def _sop_paragraphs_from_xlsx(raw):
                 values[col] = text
         if values:
             rows.append(values)
+    return rows
+
+def _sop_row_text(values):
+    return ' '.join(str(values.get(key) or '') for key in sorted(values))
+
+def _sop_is_section(text):
+    return bool(re.match(r'^\d+[\.\-\)]\s*\S', (text or '').strip()))
+
+def _sop_looks_like_manual(rows):
+    blob = ' '.join(_sop_row_text(row) for row in rows)
+    markers = ('رقم الوثيقة', 'المرحلة الرئيسية', 'إجراء العمل القياسي', 'متطلبات السلامة', 'وصف المتطلب')
+    return sum(1 for marker in markers if marker in blob) >= 2
+
+def _sop_manual_from_rows(rows):
+    if not rows or not _sop_looks_like_manual(rows):
+        return None
+    title = rows[0].get(1, '') if rows else ''
+    subtitle = rows[1].get(1, '') if len(rows) > 1 else ''
+    meta_heading = ''
+    safety_heading = ''
+    steps_heading = ''
+    document_no = ''
+    document_no_label = 'رقم الوثيقة:'
+    equipment_name = ''
+    equipment_name_label = 'اسم المعدة:'
+    location = ''
+    location_label = 'الموقع / القسم:'
+    safety_headers = {
+        'detail': 'المعايير والمواصفات التفصيلية',
+        'description': 'وصف المتطلب',
+        'category': 'الفئة',
+    }
+    steps_headers = {
+        'action': 'الإجراء والخطوات التنفيذية',
+        'standard': 'المعايير والقياسات المطلوبة',
+        'notes': 'ملاحظات السلامة والجودة',
+        'phase': 'المرحلة الرئيسية',
+    }
+    safety = []
+    steps = []
+    mode = 'meta'
+    for values in rows[2:]:
+        a = (values.get(1) or '').strip()
+        c = (values.get(3) or '').strip()
+        d = (values.get(4) or '').strip()
+        e = (values.get(5) or '').strip()
+        row_blob = _sop_row_text(values)
+        if _sop_is_section(a):
+            if a.startswith('1') or 'معلومات الوثيقة' in a:
+                meta_heading = a
+                mode = 'meta'
+                continue
+            if a.startswith('2') or 'متطلبات السلامة' in a or 'LOTO' in a:
+                safety_heading = a
+                mode = 'safety_header'
+                continue
+            if a.startswith('3') or 'خطوات' in a:
+                steps_heading = a
+                mode = 'steps_header'
+                continue
+        if mode == 'meta':
+            label = d.rstrip(':').strip()
+            if any(marker in label for marker in _SOP_META_LABELS) or any(marker in d for marker in _SOP_META_LABELS):
+                if 'وثيقة' in d:
+                    document_no_label = d if d.endswith(':') else f'{d}:'
+                    document_no = a
+                elif 'اسم المعدة' in d or d.startswith('اسم'):
+                    equipment_name_label = d if d.endswith(':') else f'{d}:'
+                    equipment_name = a
+                elif 'موقع' in d or 'قسم' in d:
+                    location_label = d if d.endswith(':') else f'{d}:'
+                    location = a
+            continue
+        if mode == 'safety_header':
+            if any(marker in row_blob for marker in _SOP_SAFETY_MARKERS):
+                if a:
+                    safety_headers['detail'] = a
+                if d:
+                    safety_headers['description'] = d
+                if e:
+                    safety_headers['category'] = e
+                mode = 'safety'
+                continue
+        if mode == 'safety':
+            if any(marker in row_blob for marker in _SOP_STEP_MARKERS) and ('مرحلة' in row_blob or 'خطوات' in row_blob):
+                if a:
+                    steps_headers['action'] = a
+                if c:
+                    steps_headers['standard'] = c
+                if d:
+                    steps_headers['notes'] = d
+                if e:
+                    steps_headers['phase'] = e
+                mode = 'steps'
+                continue
+            if a or d or e:
+                safety.append({'detail': a, 'description': d, 'category': e})
+            continue
+        if mode == 'steps_header':
+            if any(marker in row_blob for marker in _SOP_STEP_MARKERS):
+                if a:
+                    steps_headers['action'] = a
+                if c:
+                    steps_headers['standard'] = c
+                if d:
+                    steps_headers['notes'] = d
+                if e:
+                    steps_headers['phase'] = e
+                mode = 'steps'
+                continue
+        if mode == 'steps' and (a or c or d or e):
+            steps.append({'action': a, 'standard': c, 'notes': d, 'phase': e})
+    if not (title or document_no or safety or steps):
+        return None
+    return {
+        'layout': 'feed-mill-sop',
+        'title': title,
+        'subtitle': subtitle,
+        'meta_heading': meta_heading or '1. معلومات الوثيقة والمعدة',
+        'document_no': document_no,
+        'document_no_label': document_no_label,
+        'equipment_name': equipment_name,
+        'equipment_name_label': equipment_name_label,
+        'location': location,
+        'location_label': location_label,
+        'safety_heading': safety_heading or '2. متطلبات السلامة وإجراءات العزل (LOTO) والأدوات',
+        'safety_headers': safety_headers,
+        'safety': safety,
+        'steps_heading': steps_heading or '3. خطوات الصيانة التفصيلية والمعايرة',
+        'steps_headers': steps_headers,
+        'steps': steps,
+    }
+
+def _sop_paragraphs_from_grid(rows):
     paragraphs = []
     started = False
     for values in rows:
@@ -1913,7 +2072,6 @@ def _sop_paragraphs_from_xlsx(raw):
             if body:
                 paragraphs.append(body)
             continue
-        # Simple one-column lists: keep non-header text from column A.
         if len(values) == 1 and first and first.lower() not in _SOP_SKIP_LABELS and not numbered:
             paragraphs.append(first)
     return paragraphs
@@ -1943,22 +2101,51 @@ def _sop_paragraphs_from_text(raw, filename):
         chunks = [line.strip() for line in text.splitlines() if line.strip()]
     return chunks
 
-def extract_sop_paragraphs(filename, raw):
+def extract_sop_import(filename, raw):
     name = (filename or '').lower().strip()
     if name.endswith('.xlsx'):
-        return _sop_clean_paragraphs(_sop_paragraphs_from_xlsx(raw))
+        rows = _sop_xlsx_rows(raw)
+        manual = _sop_manual_from_rows(rows)
+        if manual:
+            paragraphs = [item.get('action') or item.get('phase') for item in manual.get('steps') or []]
+            if not any(paragraphs):
+                paragraphs = [manual.get('title') or 'SOP']
+            return manual, _sop_clean_paragraphs(paragraphs, allow_empty=False)
+        return None, _sop_clean_paragraphs(_sop_paragraphs_from_grid(rows))
     if name.endswith(('.txt', '.text', '.csv', '.md')):
-        return _sop_clean_paragraphs(_sop_paragraphs_from_text(raw, name))
+        return None, _sop_clean_paragraphs(_sop_paragraphs_from_text(raw, name))
     raise HTTPException(400, 'Choose an Excel (.xlsx) or text file.')
 
-def replace_sop_paragraphs(db, equipment_id, cleaned, u, action='SAVE'):
+def clear_sop_manual(db, equipment_id):
+    db.query(SOPManual).filter_by(equipment_id=equipment_id).delete(synchronize_session=False)
+
+def save_sop_manual(db, equipment_id, manual, filename):
+    clear_sop_manual(db, equipment_id)
+    if not manual:
+        return None
+    row = SOPManual(
+        equipment_id=equipment_id,
+        filename=(filename or '')[:255] or None,
+        title=(manual.get('title') or '')[:300] or None,
+        document=json.dumps(manual, ensure_ascii=False),
+        updated_at=datetime.utcnow(),
+    )
+    db.add(row)
+    return row
+
+def replace_sop_paragraphs(db, equipment_id, cleaned, u, action='SAVE', manual=None, filename=None, keep_manual=False):
     db.query(SOPParagraph).filter_by(equipment_id=equipment_id).delete(synchronize_session=False)
     for index, body in enumerate(cleaned, start=1):
         db.add(SOPParagraph(equipment_id=equipment_id, position=index, body=body))
-    audit(db, u, action, 'SOPParagraph', equipment_id, new={'count': len(cleaned)})
+    if manual is not None:
+        save_sop_manual(db, equipment_id, manual, filename)
+    elif not keep_manual:
+        clear_sop_manual(db, equipment_id)
+    audit(db, u, action, 'SOPParagraph', equipment_id, new={'count': len(cleaned), 'manual': bool(manual)})
     db.commit()
     rows = db.query(SOPParagraph).filter_by(equipment_id=equipment_id).order_by(SOPParagraph.position, SOPParagraph.id).all()
-    return sop_paragraph_payload(equipment_id, rows)
+    stored = db.query(SOPManual).filter_by(equipment_id=equipment_id).first()
+    return sop_paragraph_payload(equipment_id, rows, stored)
 
 @app.put('/equipment/{equipment_id}/sop-paragraphs')
 def save_sop_paragraphs(equipment_id:str, data:SOPParagraphSave, db:Session=Depends(get_db), u=Depends(role(*ENGINEER))):
@@ -1974,7 +2161,7 @@ def save_sop_paragraphs(equipment_id:str, data:SOPParagraphSave, db:Session=Depe
         cleaned.append(body)
     if len(cleaned) > 80:
         raise HTTPException(400, 'An SOP can hold 80 paragraphs.')
-    return replace_sop_paragraphs(db, equipment_id, cleaned, u)
+    return replace_sop_paragraphs(db, equipment_id, cleaned, u, keep_manual=True)
 
 @app.post('/equipment/{equipment_id}/sop-paragraphs/import')
 async def import_sop_paragraphs(
@@ -1991,8 +2178,12 @@ async def import_sop_paragraphs(
         raise HTTPException(400, 'Choose a file to import.')
     if len(raw) > SOP_IMPORT_MAX_BYTES:
         raise HTTPException(400, 'The file must be smaller than 2 MB.')
-    cleaned = extract_sop_paragraphs(file.filename or '', raw)
-    return replace_sop_paragraphs(db, equipment_id, cleaned, u, action='IMPORT')
+    manual, cleaned = extract_sop_import(file.filename or '', raw)
+    return replace_sop_paragraphs(
+        db, equipment_id, cleaned, u, action='IMPORT',
+        manual=manual if manual else None,
+        filename=file.filename or '',
+    )
 
 def visible_to_technician(query, technician_id):
     """A technician sees a work order only when it was sent to that technician."""
@@ -3772,6 +3963,7 @@ def purge_kpi_history(db, equipment_ids=None, plant_id=None, line_ids=None):
         db.query(Component).filter(Component.equipment_id.in_(equipment_ids)).delete(synchronize_session=False)
         db.query(SOP).filter(SOP.equipment_id.in_(equipment_ids)).delete(synchronize_session=False)
         db.query(SOPParagraph).filter(SOPParagraph.equipment_id.in_(equipment_ids)).delete(synchronize_session=False)
+        db.query(SOPManual).filter(SOPManual.equipment_id.in_(equipment_ids)).delete(synchronize_session=False)
         db.query(Measurement).filter(Measurement.equipment_id.in_(equipment_ids)).delete(synchronize_session=False)
         db.query(PartUsed).filter(PartUsed.equipment_id.in_(equipment_ids)).delete(synchronize_session=False)
         db.query(MotorConditionReading).filter(or_(

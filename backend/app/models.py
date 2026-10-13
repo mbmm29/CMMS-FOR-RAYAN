@@ -175,6 +175,16 @@ class SOPParagraph(Base):
     position: Mapped[int]=mapped_column(Integer,default=1)
     body: Mapped[str]=mapped_column(Text,default='')
 
+class SOPManual(Base):
+    """Structured operating manual imported from an Excel SOP form for one machine."""
+    __tablename__ = 'sop_manuals'
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    equipment_id: Mapped[str] = mapped_column(String(50), ForeignKey('equipment.equipment_id'), unique=True, index=True)
+    filename: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    title: Mapped[str | None] = mapped_column(String(300), nullable=True)
+    document: Mapped[str] = mapped_column(Text, default='{}')
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
 class WorkOrder(Base):
     __tablename__='work_orders'
     id: Mapped[int]=mapped_column(Integer,primary_key=True)
