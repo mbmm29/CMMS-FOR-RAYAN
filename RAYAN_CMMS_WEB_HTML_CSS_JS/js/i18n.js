@@ -623,6 +623,7 @@ const CMMS_AR = {
   'Send report': 'إرسال التقرير',
   'Draft saved.': 'تم حفظ المسودة.',
   'Report sent to the maintenance engineer for approval.': 'أُرسل التقرير إلى مهندس الصيانة للموافقة.',
+  'The report was sent to the maintenance engineer.': 'تم إرسال التقرير إلى مهندس الصيانة.',
   'This report can no longer be edited.': 'لم يعد بالإمكان تعديل هذا التقرير.',
   'Select a plant at the top of the report.': 'اختر المصنع في أعلى التقرير.',
   'Each activity needs an equipment number, a name, and a maintenance type.': 'كل عمل يحتاج رقم المعدة واسمها ونوع الصيانة.',

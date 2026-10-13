@@ -149,6 +149,21 @@ function toast(message) {
   setTimeout(() => node.classList.remove('show'), 2800);
 }
 
+let screenNoticeTimer = 0;
+function screenNotice(message) {
+  let node = document.getElementById('screen-notice');
+  if (!node) {
+    node = document.createElement('div');
+    node.id = 'screen-notice';
+    node.setAttribute('role', 'status');
+    document.body.appendChild(node);
+  }
+  node.textContent = message;
+  node.classList.add('show');
+  window.clearTimeout(screenNoticeTimer);
+  screenNoticeTimer = window.setTimeout(() => node.classList.remove('show'), 4500);
+}
+
 function canMaintain() {
   const user = getSavedUser();
   return Boolean(user && (user.role === 'SYSTEM_DEVELOPER' || user.role === 'MAINTENANCE_ENGINEER'));
@@ -318,7 +333,7 @@ function setHeader(page) {
     action.textContent = t('Send report');
   } else if (page === 'lubrication') {
     action.hidden = getSavedUser()?.role === 'ADMINISTRATOR_VIEWER';
-    action.textContent = t('Save report');
+    action.textContent = t(isLubricationTechnician() ? 'Send report' : 'Save report');
   } else if (page === 'motor-condition') {
     action.hidden = false;
     action.textContent = t('Save');
@@ -2324,7 +2339,8 @@ async function saveLubrication() {
       }),
     });
     ui.lubeId = saved.report_id;
-    toast(t(saved.new_equipment?.length ? 'The equipment was sent to the maintenance engineer for approval.' : 'The lubrication report was saved.'));
+    if (isLubricationTechnician()) screenNotice(t('The report was sent to the maintenance engineer.'));
+    else toast(t(saved.new_equipment?.length ? 'The equipment was sent to the maintenance engineer for approval.' : 'The lubrication report was saved.'));
     await drawLubrication();
   } catch (exception) {
     if (error) error.textContent = t(exception.message);
@@ -2673,7 +2689,8 @@ async function saveDailyReport(submit) {
     const savedId = response.report.report_id;
     if (submit) await apiRequest(`/daily-reports/${encodeURIComponent(savedId)}/submit`, { method: 'POST' });
     ui.dailyId = submit ? 'new' : savedId;
-    toast(t(submit && status === 'Returned' ? 'Report sent again to the maintenance engineer.' : submit ? 'Report sent to the maintenance engineer for approval.' : 'Draft saved.'));
+    if (submit) screenNotice(t('The report was sent to the maintenance engineer.'));
+    else toast(t('Draft saved.'));
     await drawDailyReport();
   } catch (exception) {
     const existing = String(exception.message || '').match(/Daily Report already exists for this technician\/date: (\S+)/);

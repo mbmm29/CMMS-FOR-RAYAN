@@ -43,6 +43,8 @@ body .table-button{background:#10284f;color:#9ec4ff}
 body .split .equipment-list{border-inline-end:1px solid #23406e;border-right:0}
 body .h-bars span,body .h-bars b{color:#c5d6f4}
 body .toast{border:1px solid #2d5ea6;background:#0c2f68}
+#screen-notice{position:fixed;left:50%;top:22px;z-index:80;width:max-content;max-width:min(520px,calc(100vw - 28px));padding:14px 20px;border-radius:10px;background:#0c7a4b;color:#fff;font:800 16px Arial,sans-serif;text-align:center;line-height:1.45;box-shadow:0 12px 30px #06285755;opacity:0;pointer-events:none;transform:translateX(-50%) translateY(-12px);transition:opacity .2s,transform .2s}
+#screen-notice.show{opacity:1;transform:translateX(-50%) translateY(0)}
 
 .app .page-title h1{color:#f5f8ff;letter-spacing:0}
 .app .page-title p{color:#c5d6f4}
@@ -432,6 +434,7 @@ button.job-open:hover{filter:brightness(1.12)}
   body:has(.lube-paper) .metric-grid,
   body:has(.lube-paper) .lube-list,
   body:has(.lube-paper) .toast,
+  #screen-notice,
   body:has(.lube-paper) .no-print{display:none!important;position:static!important;height:0!important;min-height:0!important;margin:0!important;padding:0!important}
   html body .shell .content,
   html[dir="rtl"] body .shell .content,
