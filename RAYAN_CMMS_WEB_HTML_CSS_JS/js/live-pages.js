@@ -3745,6 +3745,14 @@ function stockAmount(value) {
   return String(Math.round(amount * 1000) / 1000);
 }
 
+function stockClass(part) {
+  if (part?.stock_qty == null) return '';
+  const stock = Number(part.stock_qty);
+  if (stock <= 0) return 'stock-out';
+  if (part.critical_qty != null && stock <= Number(part.critical_qty)) return 'stock-critical';
+  return '';
+}
+
 let equipmentPartsToken = 0;
 
 async function loadEquipmentParts(selected) {
@@ -3756,8 +3764,8 @@ async function loadEquipmentParts(selected) {
     if (token !== equipmentPartsToken || !box.isConnected) return;
     const rows = (parts || []).map((part) => {
       const stock = part.stock_qty == null ? t('No warehouse balance') : stockAmount(part.stock_qty);
-      const tone = part.stock_qty != null && Number(part.stock_qty) <= 0 ? ' class="stock-out"' : '';
-      return `<li><b>${esc(part.part_number)}</b><span>${esc(part.name)}</span><em${tone}>${esc(stock)}</em></li>`;
+      const tone = stockClass(part);
+      return `<li><b>${esc(part.part_number)}</b><span>${esc(part.name)}</span><em${tone ? ` class="${tone}"` : ''}>${esc(stock)}</em></li>`;
     }).join('');
     box.innerHTML = `<h3>${esc(t('Spare parts'))}</h3>${rows ? `<ul class="spare-links">${rows}</ul>` : `<p class="live-note">${esc(t('No spare parts linked to this machine.'))}</p>`}<button type="button" class="detail-button" id="open-spare">${esc(t('Spare parts'))}</button>`;
     document.getElementById('open-spare')?.addEventListener('click', () => {
@@ -3810,7 +3818,8 @@ function paintSpareEquipment(form) {
 function spareForm(part) {
   const ids = part?.equipment?.map((row) => row.equipment_id) || (ui.spareEquipment ? [ui.spareEquipment] : []);
   const stock = part?.stock_qty == null ? '' : stockAmount(part.stock_qty);
-  return `<aside class="panel detail"><h2>${esc(t(part ? 'Spare parts' : '+ Add part'))}</h2><form id="spare-form" class="live-form spare-form"><label>${esc(t('Part No.'))}<input name="part_number" required maxlength="100" value="${esc(part?.part_number || '')}"></label><label>${esc(t('Part name'))}<input name="name" required maxlength="200" value="${esc(part?.name || '')}"></label><label>${esc(t('Stock'))}<input name="stock_qty" type="number" step="0.001" value="${esc(stock)}"></label><p class="live-note">${esc(t('Leave empty when this part has no warehouse balance.'))}</p><p class="live-note">${esc(t('A daily report quantity reduces this balance when the part number matches.'))}</p><label>${esc(t('Unit'))}<input name="unit" maxlength="30" value="${esc(part?.unit || 'pcs')}"></label><input type="hidden" name="equipment_ids" value="${esc(ids.join(','))}"><div id="spare-equipment-box"></div><button class="detail-button primary" type="submit">${esc(t('Save'))}</button>${part ? `<button type="button" class="detail-button danger" data-delete="/spare-parts" data-delete-id="${esc(part.part_id)}" data-delete-note="Delete this spare part?">${esc(t('Delete'))}</button>` : ''}<p id="spare-error" class="form-error"></p></form></aside>`;
+  const critical = part?.critical_qty == null ? '' : stockAmount(part.critical_qty);
+  return `<aside class="panel detail"><h2>${esc(t(part ? 'Spare parts' : '+ Add part'))}</h2><form id="spare-form" class="live-form spare-form"><label>${esc(t('Part No.'))}<input name="part_number" required maxlength="100" value="${esc(part?.part_number || '')}"></label><label>${esc(t('Part name'))}<input name="name" required maxlength="200" value="${esc(part?.name || '')}"></label><label>${esc(t('Stock'))}<input name="stock_qty" type="number" step="0.001" value="${esc(stock)}"></label><p class="live-note">${esc(t('Leave empty when this part has no warehouse balance.'))}</p><p class="live-note">${esc(t('A daily report quantity reduces this balance when the part number matches.'))}</p><label>${esc(t('Critical balance'))}<input name="critical_qty" type="number" min="0" step="0.001" value="${esc(critical)}"></label><p class="live-note">${esc(t('Leave empty when this part has no critical balance.'))}</p><p class="live-note">${esc(t('The maintenance engineer is notified when the warehouse balance reaches this level.'))}</p><label>${esc(t('Unit'))}<input name="unit" maxlength="30" value="${esc(part?.unit || 'pcs')}"></label><input type="hidden" name="equipment_ids" value="${esc(ids.join(','))}"><div id="spare-equipment-box"></div><button class="detail-button primary" type="submit">${esc(t('Save'))}</button>${part ? `<button type="button" class="detail-button danger" data-delete="/spare-parts" data-delete-id="${esc(part.part_id)}" data-delete-note="Delete this spare part?">${esc(t('Delete'))}</button>` : ''}<p id="spare-error" class="form-error"></p></form></aside>`;
 }
 
 async function saveSparePart(event, partId) {
@@ -3824,6 +3833,12 @@ async function saveSparePart(event, partId) {
     if (error) error.textContent = t('Enter a warehouse balance');
     return;
   }
+  const criticalText = String(data.get('critical_qty') || '').trim().replace(',', '.');
+  const critical = criticalText === '' ? null : Number(criticalText);
+  if (critical !== null && (!Number.isFinite(critical) || critical < 0)) {
+    if (error) error.textContent = t('Enter a critical balance');
+    return;
+  }
   const equipmentIds = spareEquipmentIds(form);
   if (!equipmentIds.length) {
     if (error) error.textContent = t('Choose the equipment for this part');
@@ -3833,6 +3848,7 @@ async function saveSparePart(event, partId) {
     part_number: String(data.get('part_number') || '').trim(),
     name: String(data.get('name') || '').trim(),
     stock_qty: stock,
+    critical_qty: critical,
     unit: String(data.get('unit') || '').trim() || 'pcs',
     equipment_ids: equipmentIds,
   };
@@ -3857,10 +3873,12 @@ async function drawSpareParts() {
   if (selected) ui.rowKey = selected.part_id;
   const tracked = parts.filter((item) => item.stock_qty != null).length;
   const empty = parts.filter((item) => item.stock_qty != null && Number(item.stock_qty) <= 0).length;
+  const criticalCount = parts.filter((item) => stockClass(item) === 'stock-critical' || (item.critical_qty != null && item.stock_qty != null && Number(item.stock_qty) <= Number(item.critical_qty))).length;
   document.getElementById('metric-grid').innerHTML = metrics([
     ['Spare parts', String(parts.length), '□', 'blue', ''],
     ['With a balance', String(tracked), '▣', 'green', ''],
     ['Out of stock', String(empty), '×', 'red', ''],
+    ['Critical balance', String(criticalCount), '!', 'orange', ''],
     ['Linked equipment', String(new Set(parts.flatMap((item) => (item.equipment || []).map((row) => row.equipment_id))).size), '⚙', 'orange', ''],
   ]);
   const equipmentOptions = [`<option value="">${esc(t('All equipment'))}</option>`].concat(
@@ -3872,11 +3890,13 @@ async function drawSpareParts() {
   const body = parts.map((item) => {
     const machines = (item.equipment || []).map((row) => row.equipment_id).join(', ') || '—';
     const stock = item.stock_qty == null ? t('No warehouse balance') : stockAmount(item.stock_qty);
-    const stockCell = item.stock_qty != null && Number(item.stock_qty) <= 0 ? `<span class="stock-out">${esc(stock)}</span>` : esc(stock);
-    return `<tr data-row="${esc(item.part_id)}" class="${selected && selected.part_id === item.part_id ? 'selected' : ''}">${cell(esc(item.part_number), true)}${cell(esc(item.name))}${cell(esc(machines))}${cell(stockCell)}${cell(esc(item.unit || 'pcs'))}</tr>`;
+    const tone = stockClass(item);
+    const stockCell = tone ? `<span class="${tone}">${esc(stock)}</span>` : esc(stock);
+    const critical = item.critical_qty == null ? '—' : stockAmount(item.critical_qty);
+    return `<tr data-row="${esc(item.part_id)}" class="${selected && selected.part_id === item.part_id ? 'selected' : ''}">${cell(esc(item.part_number), true)}${cell(esc(item.name))}${cell(esc(machines))}${cell(stockCell)}${cell(esc(critical))}${cell(esc(item.unit || 'pcs'))}</tr>`;
   });
   document.getElementById('workspace').className = 'workspace';
-  document.getElementById('workspace').innerHTML = `<section class="panel"><label class="spare-filter">${esc(t('Linked equipment'))}<select id="spare-equipment">${equipmentOptions.join('')}</select></label>${tableShell(['Part No.', 'Part name', 'Linked equipment', 'Stock', 'Unit'], body.length ? body : [`<tr><td colspan="5">${esc(t('No spare parts yet.'))}</td></tr>`], shown(parts.length, parts.length, 'parts'))}</section>${ui.mode === 'create' ? spareForm(null) : (selected ? spareForm(selected) : `<aside class="panel detail"><h2>${esc(t('Spare parts'))}</h2><p class="live-note">${esc(t('No spare parts yet.'))}</p></aside>`)}`;
+  document.getElementById('workspace').innerHTML = `<section class="panel"><label class="spare-filter">${esc(t('Linked equipment'))}<select id="spare-equipment">${equipmentOptions.join('')}</select></label>${tableShell(['Part No.', 'Part name', 'Linked equipment', 'Stock', 'Critical balance', 'Unit'], body.length ? body : [`<tr><td colspan="6">${esc(t('No spare parts yet.'))}</td></tr>`], shown(parts.length, parts.length, 'parts'))}</section>${ui.mode === 'create' ? spareForm(null) : (selected ? spareForm(selected) : `<aside class="panel detail"><h2>${esc(t('Spare parts'))}</h2><p class="live-note">${esc(t('No spare parts yet.'))}</p></aside>`)}`;
   document.getElementById('spare-equipment')?.addEventListener('change', (event) => {
     ui.spareEquipment = event.target.value;
     ui.rowKey = '';

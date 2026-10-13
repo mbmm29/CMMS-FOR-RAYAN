@@ -11,14 +11,14 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, Response
 from fastapi.staticfiles import StaticFiles
 from sqlalchemy.orm import Session
-from sqlalchemy import and_, func, or_, inspect, text
+from sqlalchemy import and_, event, func, or_, inspect, text
 from .database import Base, engine, get_db, SessionLocal
 from .models import *
 from .schemas import *
 from .security import *
 from .kpi import compute_kpi, save_kpi_target
 from .motor_catalog import OIL_CONDITIONS, OIL_LEVELS, motor_catalog_payload, motor_place, motor_sheet_allowed
-from .push_notices import clear_work_order_push, public_key as push_public_key, queue_work_order_pushes, save_subscription, start_phone_notices
+from .push_notices import clear_work_order_push, public_key as push_public_key, queue_critical_stock_pushes, queue_work_order_pushes, save_subscription, start_phone_notices
 
 Base.metadata.create_all(bind=engine)
 
@@ -249,6 +249,11 @@ def ensure_additive_columns():
                 if criticality and (length is None or length < 40):
                     conn.execute(text('ALTER TABLE equipment ALTER COLUMN criticality TYPE VARCHAR(40)'))
                     conn.execute(text("ALTER TABLE equipment ALTER COLUMN criticality SET DEFAULT 'Important'"))
+        if 'spare_parts' in tables:
+            existing = {c['name'] for c in inspector.get_columns('spare_parts')}
+            if 'critical_qty' not in existing:
+                with engine.begin() as conn:
+                    conn.execute(text('ALTER TABLE spare_parts ADD COLUMN critical_qty DOUBLE PRECISION'))
         if 'plants' in tables:
             existing = {c['name'] for c in inspector.get_columns('plants')}
             with engine.begin() as conn:
@@ -823,6 +828,65 @@ def _clean_stock(value):
         raise HTTPException(400, 'Enter a warehouse balance')
     return round(number, 3)
 
+def _clean_critical(value):
+    number = _clean_stock(value)
+    if number is not None and number < 0:
+        raise HTTPException(400, 'Enter a critical balance')
+    return number
+
+def _balance_text(value):
+    return f'{round(float(value), 3):.3f}'.rstrip('0').rstrip('.') or '0'
+
+def _stock_is_critical(part):
+    if part.stock_qty is None or part.critical_qty is None:
+        return False
+    return float(part.stock_qty) <= float(part.critical_qty)
+
+def watch_critical_stock(db, parts):
+    """Tell maintenance engineers when a part reaches its critical balance."""
+    fresh = []
+    seen = set()
+    engineers = None
+    for part in parts or []:
+        if part is None or not part.part_id or part.part_id in seen:
+            continue
+        seen.add(part.part_id)
+        if not _stock_is_critical(part):
+            db.query(PushDelivery).filter_by(kind='critical_stock', ref=part.part_id).delete(synchronize_session=False)
+            continue
+        if db.query(PushDelivery).filter_by(kind='critical_stock', ref=part.part_id).first():
+            continue
+        if engineers is None:
+            engineers = db.query(User).filter(User.role == 'MAINTENANCE_ENGINEER', User.is_active == True).all()
+        if not engineers:
+            continue
+        unit = part.unit or 'pcs'
+        message = (
+            f'{part.part_number} — {part.name}. '
+            f'Balance {_balance_text(part.stock_qty)} {unit}, critical level {_balance_text(part.critical_qty)} {unit}.'
+        )
+        for engineer in engineers:
+            notify(db, engineer.id, 'Critical spare balance', message, 'critical_stock', part.part_id)
+            db.add(PushDelivery(user_id=engineer.id, kind='critical_stock', ref=part.part_id))
+        fresh.append(part.part_id)
+    if fresh:
+        db.flush()
+        pending = db.info.setdefault('critical_push_ids', [])
+        for part_id in fresh:
+            if part_id not in pending:
+                pending.append(part_id)
+    return fresh
+
+@event.listens_for(Session, 'after_commit')
+def _send_critical_stock_pushes(session):
+    part_ids = session.info.pop('critical_push_ids', None)
+    if part_ids:
+        queue_critical_stock_pushes(part_ids)
+
+@event.listens_for(Session, 'after_rollback')
+def _drop_critical_stock_pushes(session):
+    session.info.pop('critical_push_ids', None)
+
 def _clean_part_equipment(db, equipment_ids):
     chosen = []
     for raw in equipment_ids or []:
@@ -855,6 +919,7 @@ def spare_part_payload(db, part):
         'part_number': part.part_number,
         'name': part.name,
         'stock_qty': part.stock_qty,
+        'critical_qty': part.critical_qty,
         'unit': part.unit or 'pcs',
         'notes': part.notes or '',
         'equipment': equipment,
@@ -917,6 +982,7 @@ def apply_spare_stock(db, before_text, after_text):
     by_name = {}
     for part in parts:
         by_name.setdefault((part.name or '').strip().lower(), []).append(part)
+    changed = []
     for key in set(before) | set(after):
         delta = after.get(key, 0) - before.get(key, 0)
         if not delta:
@@ -929,6 +995,9 @@ def apply_spare_stock(db, before_text, after_text):
         if part is None or part.stock_qty is None:
             continue
         part.stock_qty = round(float(part.stock_qty) - delta, 3)
+        changed.append(part)
+    if changed:
+        watch_critical_stock(db, changed)
 
 @app.get('/spare-parts/catalog')
 def spare_part_catalog(db: Session = Depends(get_db), u=Depends(auth)):
@@ -968,13 +1037,15 @@ def create_spare_part(data: SparePartIn, db: Session = Depends(get_db), u=Depend
         part_number=number,
         name=name,
         stock_qty=_clean_stock(data.stock_qty),
+        critical_qty=_clean_critical(data.critical_qty),
         unit=unit,
         notes=(data.notes or '').strip() or None,
     )
     db.add(part)
     db.flush()
     _replace_part_links(db, part.part_id, equipment_ids)
-    audit(db, u, 'CREATE', 'SparePart', part.part_id, new={'part_number': number, 'stock_qty': part.stock_qty, 'equipment_ids': equipment_ids})
+    watch_critical_stock(db, [part])
+    audit(db, u, 'CREATE', 'SparePart', part.part_id, new={'part_number': number, 'stock_qty': part.stock_qty, 'critical_qty': part.critical_qty, 'equipment_ids': equipment_ids})
     db.commit()
     db.refresh(part)
     return spare_part_payload(db, part)
@@ -993,10 +1064,12 @@ def update_spare_part(part_id: str, data: SparePartIn, db: Session = Depends(get
     part.part_number = number
     part.name = name
     part.stock_qty = _clean_stock(data.stock_qty)
+    part.critical_qty = _clean_critical(data.critical_qty)
     part.unit = (data.unit or '').strip()[:30] or 'pcs'
     part.notes = (data.notes or '').strip() or None
     _replace_part_links(db, part.part_id, equipment_ids)
-    audit(db, u, 'UPDATE', 'SparePart', part.part_id, new={'part_number': number, 'stock_qty': part.stock_qty, 'equipment_ids': equipment_ids})
+    watch_critical_stock(db, [part])
+    audit(db, u, 'UPDATE', 'SparePart', part.part_id, new={'part_number': number, 'stock_qty': part.stock_qty, 'critical_qty': part.critical_qty, 'equipment_ids': equipment_ids})
     db.commit()
     db.refresh(part)
     return spare_part_payload(db, part)
@@ -1007,6 +1080,8 @@ def delete_spare_part(part_id: str, db: Session = Depends(get_db), u=Depends(rol
     if not part:
         raise HTTPException(404, 'Spare part not found')
     db.query(SparePartEquipment).filter_by(part_id=part.part_id).delete(synchronize_session=False)
+    db.query(PushDelivery).filter_by(kind='critical_stock', ref=part.part_id).delete(synchronize_session=False)
+    db.query(Notification).filter_by(kind='critical_stock', related_id=part.part_id).delete(synchronize_session=False)
     db.delete(part)
     audit(db, u, 'DELETE', 'SparePart', part_id)
     db.commit()
@@ -3736,8 +3811,8 @@ def push_key(db:Session=Depends(get_db), u=Depends(auth)):
 
 @app.post('/push/subscribe')
 def push_subscribe(data:PushSubscribe, db:Session=Depends(get_db), u=Depends(auth)):
-    if u.role not in TECHNICIAN:
-        raise HTTPException(403, 'Only a technician can receive phone notices.')
+    if u.role not in TECHNICIAN and u.role != 'MAINTENANCE_ENGINEER':
+        raise HTTPException(403, 'Only a technician or maintenance engineer can receive phone notices.')
     if not save_subscription(db, u, data.endpoint, data.p256dh, data.auth):
         raise HTTPException(400, 'The phone could not be registered for notices.')
     return {'ok': True}

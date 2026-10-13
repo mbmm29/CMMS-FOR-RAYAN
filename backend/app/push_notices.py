@@ -22,6 +22,7 @@ from .models import (
     Equipment,
     PushDelivery,
     PushSubscription,
+    SparePart,
     User,
     WorkOrder,
 )
@@ -76,7 +77,7 @@ def public_key(db: Session) -> str:
 
 
 def save_subscription(db: Session, user, endpoint: str, p256dh: str, auth: str):
-    if user.role not in ('TECHNICIAN', 'LUBRICATION_TECHNICIAN'):
+    if user.role not in ('TECHNICIAN', 'LUBRICATION_TECHNICIAN', 'MAINTENANCE_ENGINEER'):
         return False
     endpoint = (endpoint or '').strip()
     if not endpoint.startswith('https://') or len(endpoint) > 2000:
@@ -134,6 +135,44 @@ def _remember(db: Session, user_id: int, kind: str, ref: str) -> bool:
         db.rollback()
         return False
     return True
+
+
+def _amount(value):
+    return f'{round(float(value), 3):.3f}'.rstrip('0').rstrip('.') or '0'
+
+
+def queue_critical_stock_pushes(part_ids):
+    ids = [item for item in (part_ids or []) if item]
+    if not ids:
+        return
+    threading.Thread(target=_push_critical_stock, args=(ids,), daemon=True).start()
+
+
+def _push_critical_stock(part_ids):
+    db = SessionLocal()
+    try:
+        engineers = db.query(User).filter(User.role == 'MAINTENANCE_ENGINEER', User.is_active == True).all()
+        if not engineers:
+            return
+        private_key, _public = vapid_material(db)
+        for part_id in part_ids:
+            part = db.query(SparePart).filter_by(part_id=part_id).first()
+            if part is None or part.stock_qty is None or part.critical_qty is None:
+                continue
+            if float(part.stock_qty) > float(part.critical_qty):
+                continue
+            unit = part.unit or 'pcs'
+            body = (
+                f'{part.part_number} — {part.name}. '
+                f'الرصيد {_amount(part.stock_qty)} {unit}، والحد الحرج {_amount(part.critical_qty)} {unit}.'
+            )
+            for engineer in engineers:
+                _send(db, engineer.id, 'رصيد حرج', body[:240], '/index.html#spare-parts', private_key)
+        db.commit()
+    except Exception:
+        db.rollback()
+    finally:
+        db.close()
 
 
 def clear_work_order_push(db: Session, technician_id: str, work_order_id: str):

@@ -610,6 +610,7 @@ class SparePart(Base):
     part_number: Mapped[str] = mapped_column(String(100), index=True)
     name: Mapped[str] = mapped_column(String(200))
     stock_qty: Mapped[float | None] = mapped_column(Float, nullable=True)
+    critical_qty: Mapped[float | None] = mapped_column(Float, nullable=True)
     unit: Mapped[str] = mapped_column(String(30), default='pcs')
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)
 

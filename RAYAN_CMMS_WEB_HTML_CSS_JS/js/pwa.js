@@ -13,10 +13,10 @@
     return localStorage.getItem('cmms-lang') === 'ar' && FALLBACK[key] ? FALLBACK[key] : key;
   }
 
-  function technicianUser() {
+  function noticeUser() {
     if (typeof getSavedUser !== 'function') return null;
     const user = getSavedUser();
-    if (!user || (user.role !== 'TECHNICIAN' && user.role !== 'LUBRICATION_TECHNICIAN')) return null;
+    if (!user || (user.role !== 'TECHNICIAN' && user.role !== 'LUBRICATION_TECHNICIAN' && user.role !== 'MAINTENANCE_ENGINEER')) return null;
     return user;
   }
 
@@ -30,7 +30,7 @@
   }
 
   async function subscribePhone() {
-    if (!technicianUser() || typeof apiRequest !== 'function') return false;
+    if (!noticeUser() || typeof apiRequest !== 'function') return false;
     if (!('serviceWorker' in navigator) || !('PushManager' in window) || Notification.permission !== 'granted') return false;
     const registration = await navigator.serviceWorker.ready;
     const key = await apiRequest('/push/key');
@@ -78,13 +78,13 @@
   if (host) host.prepend(phone);
 
   function refreshPhone() {
-    const allowed = Boolean(technicianUser()) && 'Notification' in window && 'PushManager' in window && Notification.permission !== 'granted';
+    const allowed = Boolean(noticeUser()) && 'Notification' in window && 'PushManager' in window && Notification.permission !== 'granted';
     phone.hidden = !allowed;
     phone.textContent = label(PHONE);
   }
 
   phone.addEventListener('click', async function () {
-    if (!technicianUser()) return;
+    if (!noticeUser()) return;
     const permission = await Notification.requestPermission();
     if (permission !== 'granted') return;
     try {
