@@ -699,9 +699,15 @@ body .sop-paragraphs .detail-button{width:auto;flex:0 0 auto;height:36px;margin:
 .sop-manual-steps th:nth-child(3),.sop-manual-steps td:nth-child(3){width:24%}
 .sop-manual-steps th:nth-child(4),.sop-manual-steps td:nth-child(4){width:20%}
 .workspace.sop-board{min-width:0}
+.workspace.sop-board .live-filters{margin-bottom:12px}
 .workspace.sop-board .sop-tech-layout{display:grid;grid-template-columns:220px minmax(0,1fr);gap:12px;align-items:start}
 .workspace.sop-board .sop-tech-view,.workspace.sop-board .sop-sheet{min-width:0;max-width:100%}
 .workspace.sop-board .sop-tech-panel .equipment-list{max-height:min(70vh,560px);overflow:auto;-webkit-overflow-scrolling:touch}
+body .asset.missing-sop{border-color:#7a1f2b;background:#2a1016}
+body .asset.missing-sop b,body .asset.missing-sop small{color:#ff8a8a}
+body .asset.missing-sop .asset-icon{color:#ff5c5c}
+body .asset.missing-sop.selected{background:#3a1520;box-shadow:inset 0 0 0 1px #ff5c5c88}
+body .asset .sop-missing-tag{display:block;margin-top:2px;color:#ff6b6b;font:11px Arial,sans-serif;font-style:normal}
 body.technician-interface .workspace.sop-board .detail{display:none}
 @media (max-width:980px){
   .workspace.sop-board .sop-tech-layout,

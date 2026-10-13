@@ -395,8 +395,17 @@ function syncPlantSelection(ids) {
   ui.plantId = unique.length === 1 ? unique[0] : '';
 }
 
+function equipmentIdsWithSopFile() {
+  return new Set(
+    oneSopPerEquipment(store.sops || [])
+      .filter((sop) => sop.equipment_id && (/Published|Approved/i.test(sop.status || '') || sop.document_path))
+      .map((sop) => sop.equipment_id),
+  );
+}
+
 function filtersHtml(options = {}) {
   const multiPlant = Boolean(options.multiPlant);
+  const sopOnly = Boolean(options.sopOnly);
   const openIds = new Set((store.plants || []).filter((plant) => plant.active !== false).map((plant) => plant.plant_id));
   const plants = selectedPlantIds();
   if (ui.plantId && !openIds.has(ui.plantId) && !plants.length) {
@@ -414,7 +423,8 @@ function filtersHtml(options = {}) {
   const sections = (store.sections || []).filter((section) => lineIds.has(section.line_id) && (!ui.lineId || section.line_id === ui.lineId));
   if (ui.sectionId && !sections.some((section) => section.section_id === ui.sectionId)) ui.sectionId = '';
   if (ui.lineId && !lineIds.has(ui.lineId)) ui.lineId = '';
-  const equipment = store.equipment.filter((item) => (!item.plant_id || openIds.has(item.plant_id)) && (!plants.length || plantScope.has(item.plant_id)) && (!ui.lineId || item.line_id === ui.lineId) && (!ui.sectionId || item.section_id === ui.sectionId));
+  const withSop = sopOnly ? equipmentIdsWithSopFile() : null;
+  const equipment = store.equipment.filter((item) => (!item.plant_id || openIds.has(item.plant_id)) && (!plants.length || plantScope.has(item.plant_id)) && (!ui.lineId || item.line_id === ui.lineId) && (!ui.sectionId || item.section_id === ui.sectionId) && (!withSop || withSop.has(item.equipment_id)));
   if (ui.equipmentId && !equipment.some((item) => item.equipment_id === ui.equipmentId)) ui.equipmentId = '';
   const option = (value, label, selected) => `<option value="${esc(value)}"${selected === value ? ' selected' : ''}>${esc(label)}</option>`;
   const plantSummary = plants.length
@@ -759,16 +769,26 @@ function tabsHtml(labels) {
   return `<div class="tabs">${labels.map((label) => `<button class="tab${ui.tab === label ? ' active' : ''}" data-tab="${esc(label)}" type="button">${esc(t(label))}</button>`).join('')}</div>`;
 }
 
-function assetList(selectedCode) {
+function assetList(selectedCode, options = {}) {
+  const requireSop = Boolean(options.requireSop);
+  const markMissingSop = Boolean(options.markMissingSop);
+  const withSop = (requireSop || markMissingSop) ? equipmentIdsWithSopFile() : null;
   const plants = selectedPlantIds();
   const items = (store.equipment || []).filter((item) => {
     if (plants.length && !plants.includes(item.plant_id)) return false;
     if (!plants.length && ui.plantId && item.plant_id !== ui.plantId) return false;
     if (ui.lineId && item.line_id !== ui.lineId) return false;
     if (ui.sectionId && item.section_id !== ui.sectionId) return false;
+    if (ui.equipmentId && item.equipment_id !== ui.equipmentId && options.narrowToEquipment) return false;
+    if (requireSop && withSop && !withSop.has(item.equipment_id)) return false;
     return true;
   });
-  return `<aside class="equipment-list"><h3>${esc(t('Select Equipment'))}</h3><label class="mini-search">⌕ <input id="asset-search" placeholder="${esc(t('Search equipment...'))}"></label>${items.map((item) => `<div class="asset${item.equipment_id === selectedCode ? ' selected' : ''}" data-asset="${esc(item.equipment_id)}"><span class="asset-icon">⚙</span><span><b>${esc(item.equipment_id)}</b><small>${esc(item.name)}</small></span></div>`).join('') || `<p class="live-note">${esc(t('No equipment'))}</p>`}</aside>`;
+  return `<aside class="equipment-list"><h3>${esc(t('Select Equipment'))}</h3><label class="mini-search">⌕ <input id="asset-search" placeholder="${esc(t('Search equipment...'))}"></label>${items.map((item) => {
+    const missing = markMissingSop && withSop && !withSop.has(item.equipment_id);
+    const classes = `asset${item.equipment_id === selectedCode ? ' selected' : ''}${missing ? ' missing-sop' : ''}`;
+    const title = missing ? ` title="${esc(t('No SOP file'))}"` : '';
+    return `<div class="${classes}" data-asset="${esc(item.equipment_id)}"${title}><span class="asset-icon">⚙</span><span><b>${esc(item.equipment_id)}</b><small>${esc(item.name)}</small>${missing ? `<em class="sop-missing-tag">${esc(t('No SOP'))}</em>` : ''}</span></div>`;
+  }).join('') || `<p class="live-note">${esc(t(requireSop ? 'No equipment with an SOP file.' : 'No equipment'))}</p>`}</aside>`;
 }
 
 function drawWorkOrders() {
@@ -1796,7 +1816,7 @@ function sopParagraphEditor(equipment, manual) {
     ? ''
     : `<button type="button" id="sop-import" class="detail-button primary">${esc(t(hasManual ? 'Replace SOP file' : 'Publish SOP file'))}</button><input id="sop-import-file" type="file" accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" hidden>${hasManual ? `<button type="button" class="detail-button danger" data-delete="/equipment" data-delete-id="${esc(equipment.equipment_id)}" data-delete-suffix="/sop" data-delete-note="Delete this equipment SOP? The published file will be removed.">${esc(t('Delete SOP'))}</button>` : ''}`;
   const emptyNote = isTechnician()
-    ? t('Select any machine to open its published SOP.')
+    ? t('Select a machine that has a published SOP file.')
     : t('Each machine has one SOP only. Publish it by importing one Excel file.');
   const empty = `<p class="kpi-note">${esc(emptyNote)}</p>`;
   const viewer = hasManual
@@ -1853,9 +1873,14 @@ function oneSopPerEquipment(list) {
 }
 
 async function drawSops() {
+  const techView = isTechnician();
+  const withSop = equipmentIdsWithSopFile();
+  if (techView && ui.equipmentId && !withSop.has(ui.equipmentId)) {
+    ui.equipmentId = '';
+    ui.rowKey = '';
+  }
   const chosen = ui.equipmentId;
   const equipment = equipmentOf(chosen);
-  const techView = isTechnician();
   let manual = null;
   if (chosen) {
     try {
@@ -1865,13 +1890,21 @@ async function drawSops() {
       manual = null;
     }
   }
-  // Technicians may open the published SOP for every machine.
   const all = oneSopPerEquipment(store.sops || []);
-  const machines = store.equipment || [];
-  const published = all.filter((sop) => /Published|Approved/i.test(sop.status || ''));
-  const missing = Math.max(0, machines.length - published.length);
+  const machines = (store.equipment || []).filter((item) => {
+    if (selectedPlantIds().length && !selectedPlantIds().includes(item.plant_id)) return false;
+    if (!selectedPlantIds().length && ui.plantId && item.plant_id !== ui.plantId) return false;
+    if (ui.lineId && item.line_id !== ui.lineId) return false;
+    if (ui.sectionId && item.section_id !== ui.sectionId) return false;
+    return true;
+  });
+  const published = all.filter((sop) => /Published|Approved/i.test(sop.status || '') || sop.document_path);
+  const publishedScoped = published.filter((sop) => machines.some((item) => item.equipment_id === sop.equipment_id));
+  const missing = Math.max(0, machines.length - publishedScoped.length);
   const rows = all.filter((sop) => {
-    if (ui.tab === 'Published') return /Published|Approved/i.test(sop.status || '');
+    if (!machines.some((item) => item.equipment_id === sop.equipment_id)) return false;
+    if (ui.equipmentId && sop.equipment_id !== ui.equipmentId) return false;
+    if (ui.tab === 'Published') return /Published|Approved/i.test(sop.status || '') || sop.document_path;
     return true;
   });
   const selected = chosen
@@ -1879,27 +1912,32 @@ async function drawSops() {
     : (rows.find((sop) => sop.sop_id === ui.rowKey) || rows[0]);
   document.getElementById('metric-grid').innerHTML = techView
     ? metrics([
-      ['Equipment', String(machines.length), '⚙', 'blue', ''],
-      ['Published SOPs', String(published.length), '✓', 'green', ''],
-      ['Open any machine SOP', String(published.length), '▤', 'purple', ''],
+      ['Equipment with SOP', String(publishedScoped.length), '⚙', 'blue', ''],
+      ['Published SOPs', String(publishedScoped.length), '✓', 'green', ''],
+      ['Open published SOP', String(publishedScoped.length), '▤', 'purple', ''],
     ])
     : metrics([
       ['Equipment', String(machines.length), '⚙', 'blue', ''],
-      ['Published SOPs', String(published.length), '✓', 'green', ''],
-      ['Without SOP', String(missing), '!', 'orange', ''],
+      ['Published SOPs', String(publishedScoped.length), '✓', 'green', ''],
+      ['Without SOP', String(missing), '!', 'red', ''],
       ['One SOP per machine', '1', '▤', 'purple', ''],
       ['File publish only', 'xlsx', '◈', 'blue', ''],
-      ['Compliance', `${machines.length ? numberText((published.length / machines.length) * 100) : 0}%`, '◈', 'green', ''],
+      ['Compliance', `${machines.length ? numberText((publishedScoped.length / machines.length) * 100) : 0}%`, '◈', 'green', ''],
     ]);
   const pickNote = techView
-    ? t('Select any machine to open its published SOP.')
-    : t('Select a machine, then publish one SOP Excel file for it.');
+    ? t('Select a machine that has a published SOP file.')
+    : t('Select a machine, then publish one SOP Excel file for it. Machines without an SOP are marked in red.');
   const sheet = equipment
     ? sopParagraphEditor(equipment, manual)
     : `<p class="live-note">${esc(pickNote)}</p>`;
+  const filterBar = filtersHtml({ sopOnly: techView });
+  const list = assetList(chosen, {
+    requireSop: techView,
+    markMissingSop: !techView,
+  });
   let markup;
   if (techView) {
-    markup = `<section class="panel sop-tech-panel"><div class="sop-tech-layout">${assetList(chosen)}<div class="sop-tech-view">${sheet}</div></div></section>`;
+    markup = `<section class="panel sop-tech-panel">${filterBar}<div class="sop-tech-layout">${list}<div class="sop-tech-view">${sheet}</div></div></section>`;
   } else {
     const body = rows.map((sop) => `<tr data-row="${esc(sop.sop_id)}" class="${selected && selected.sop_id === sop.sop_id ? 'selected' : ''}">${cell(esc(sop.sop_id), true)}${cell(esc(sop.title))}${cell(esc(sop.equipment_id || '—'))}${cell(esc(sop.revision || '—'))}${cell(liveBadge(sop.status))}${cell(esc(sop.document_path || '—'))}</tr>`);
     let detail = selected
@@ -1908,13 +1946,14 @@ async function drawSops() {
         ['Effective', fmtDate(selected.effective_date)], ['Imported file', selected.document_path || '—'],
       ])
       : `<aside class="panel detail"><h2>${esc(t('SOP Details'))}</h2><p class="live-note">${esc(pickNote)}</p></aside>`;
-    markup = `<section class="panel"><div class="split">${assetList(chosen)}<div class="asset-view">${tabsHtml(['All SOPs', 'Published'])}${tableShell(['SOP Code', 'SOP Title', 'Equipment', 'Version', 'Status', 'Imported file'], body, shown(rows.length, all.length, 'SOPs'))}</div></div>${sheet}</section>${detail}`;
+    markup = `<section class="panel">${filterBar}<div class="split">${list}<div class="asset-view">${tabsHtml(['All SOPs', 'Published'])}${tableShell(['SOP Code', 'SOP Title', 'Equipment', 'Version', 'Status', 'Imported file'], body, shown(rows.length, all.length, 'SOPs'))}</div></div>${sheet}</section>${detail}`;
   }
   document.getElementById('workspace').className = 'workspace sop-board';
   document.getElementById('workspace').innerHTML = markup;
   if (!techView && canMaintain() && selected?.equipment_id) {
     document.querySelector('.detail')?.insertAdjacentHTML('beforeend', `<button type="button" class="detail-button danger" data-delete="/equipment" data-delete-id="${esc(selected.equipment_id)}" data-delete-suffix="/sop" data-delete-note="Delete this equipment SOP? The published file will be removed.">${esc(t('Delete SOP'))}</button>`);
   }
+  bindFilters();
   bindAssets();
   if (!techView) bindRows();
   bindDeletes();
