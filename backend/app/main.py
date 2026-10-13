@@ -1807,10 +1807,45 @@ def sops(equipment_id:str|None=None,db:Session=Depends(get_db),u=Depends(auth)):
     q=db.query(SOP)
     if equipment_id:q=q.filter(SOP.equipment_id==equipment_id)
     return [as_dict(row) for row in q.order_by(SOP.sop_id).all()]
+
 @app.post('/sops')
 def create_sop(data:SOPCreate,db:Session=Depends(get_db),u=Depends(role(*ENGINEER))):
-    sid=f'SOP-{data.equipment_id}-{db.query(SOP).filter(SOP.equipment_id==data.equipment_id).count()+1:03d}'
-    o=SOP(sop_id=sid,**data.model_dump()); db.add(o); audit(db,u,'CREATE','SOP',sid,new=data.model_dump()); db.commit(); db.refresh(o); return o
+    raise HTTPException(400, 'Publish one SOP per equipment by importing an Excel file.')
+
+def publish_equipment_sop(db, equipment_id, title, filename, u):
+    """Keep exactly one published SOP registry row for the machine."""
+    title = ((title or '').strip() or 'Standard operating procedure')[:200]
+    filename = ((filename or '').strip() or None)
+    rows = db.query(SOP).filter_by(equipment_id=equipment_id).order_by(SOP.id).all()
+    primary = rows[0] if rows else None
+    for extra in rows[1:]:
+        db.delete(extra)
+    if primary:
+        primary.title = title
+        primary.status = 'Published'
+        primary.revision = primary.revision or '01'
+        primary.document_path = filename
+        if not primary.effective_date:
+            primary.effective_date = date.today()
+        primary.sop_type = primary.sop_type or 'Operating manual'
+        audit(db, u, 'PUBLISH', 'SOP', primary.sop_id, new={'title': title, 'filename': filename})
+        return primary
+    sid = f'SOP-{equipment_id}'
+    if db.query(SOP).filter_by(sop_id=sid).first():
+        sid = f'SOP-{equipment_id}-{int(datetime.utcnow().timestamp())}'
+    primary = SOP(
+        sop_id=sid,
+        equipment_id=equipment_id,
+        title=title,
+        sop_type='Operating manual',
+        revision='01',
+        effective_date=date.today(),
+        status='Published',
+        document_path=filename,
+    )
+    db.add(primary)
+    audit(db, u, 'PUBLISH', 'SOP', sid, new={'title': title, 'filename': filename})
+    return primary
 
 def sop_manual_payload(row):
     if not row:
@@ -2103,18 +2138,16 @@ def _sop_paragraphs_from_text(raw, filename):
 
 def extract_sop_import(filename, raw):
     name = (filename or '').lower().strip()
-    if name.endswith('.xlsx'):
-        rows = _sop_xlsx_rows(raw)
-        manual = _sop_manual_from_rows(rows)
-        if manual:
-            paragraphs = [item.get('action') or item.get('phase') for item in manual.get('steps') or []]
-            if not any(paragraphs):
-                paragraphs = [manual.get('title') or 'SOP']
-            return manual, _sop_clean_paragraphs(paragraphs, allow_empty=False)
-        return None, _sop_clean_paragraphs(_sop_paragraphs_from_grid(rows))
-    if name.endswith(('.txt', '.text', '.csv', '.md')):
-        return None, _sop_clean_paragraphs(_sop_paragraphs_from_text(raw, name))
-    raise HTTPException(400, 'Choose an Excel (.xlsx) or text file.')
+    if not name.endswith('.xlsx'):
+        raise HTTPException(400, 'Publish the SOP as an Excel (.xlsx) file.')
+    rows = _sop_xlsx_rows(raw)
+    manual = _sop_manual_from_rows(rows)
+    if not manual:
+        raise HTTPException(400, 'The Excel file must follow the SOP form layout.')
+    paragraphs = [item.get('action') or item.get('phase') for item in manual.get('steps') or []]
+    if not any(paragraphs):
+        paragraphs = [manual.get('title') or 'SOP']
+    return manual, _sop_clean_paragraphs(paragraphs, allow_empty=False)
 
 def clear_sop_manual(db, equipment_id):
     db.query(SOPManual).filter_by(equipment_id=equipment_id).delete(synchronize_session=False)
@@ -2133,14 +2166,13 @@ def save_sop_manual(db, equipment_id, manual, filename):
     db.add(row)
     return row
 
-def replace_sop_paragraphs(db, equipment_id, cleaned, u, action='SAVE', manual=None, filename=None, keep_manual=False):
+def replace_sop_paragraphs(db, equipment_id, cleaned, u, action='SAVE', manual=None, filename=None):
     db.query(SOPParagraph).filter_by(equipment_id=equipment_id).delete(synchronize_session=False)
     for index, body in enumerate(cleaned, start=1):
         db.add(SOPParagraph(equipment_id=equipment_id, position=index, body=body))
-    if manual is not None:
-        save_sop_manual(db, equipment_id, manual, filename)
-    elif not keep_manual:
-        clear_sop_manual(db, equipment_id)
+    save_sop_manual(db, equipment_id, manual, filename)
+    title = (manual or {}).get('title') if manual else None
+    publish_equipment_sop(db, equipment_id, title, filename, u)
     audit(db, u, action, 'SOPParagraph', equipment_id, new={'count': len(cleaned), 'manual': bool(manual)})
     db.commit()
     rows = db.query(SOPParagraph).filter_by(equipment_id=equipment_id).order_by(SOPParagraph.position, SOPParagraph.id).all()
@@ -2149,19 +2181,7 @@ def replace_sop_paragraphs(db, equipment_id, cleaned, u, action='SAVE', manual=N
 
 @app.put('/equipment/{equipment_id}/sop-paragraphs')
 def save_sop_paragraphs(equipment_id:str, data:SOPParagraphSave, db:Session=Depends(get_db), u=Depends(role(*ENGINEER))):
-    if not db.query(Equipment).filter_by(equipment_id=equipment_id).first():
-        raise HTTPException(404, 'Equipment not found')
-    cleaned = []
-    for item in data.items:
-        body = (item.body or '').strip()
-        if not body:
-            continue
-        if len(body) > 4000:
-            raise HTTPException(400, 'A paragraph is too long.')
-        cleaned.append(body)
-    if len(cleaned) > 80:
-        raise HTTPException(400, 'An SOP can hold 80 paragraphs.')
-    return replace_sop_paragraphs(db, equipment_id, cleaned, u, keep_manual=True)
+    raise HTTPException(400, 'Publish one SOP per equipment by importing an Excel file.')
 
 @app.post('/equipment/{equipment_id}/sop-paragraphs/import')
 async def import_sop_paragraphs(
@@ -2181,7 +2201,7 @@ async def import_sop_paragraphs(
     manual, cleaned = extract_sop_import(file.filename or '', raw)
     return replace_sop_paragraphs(
         db, equipment_id, cleaned, u, action='IMPORT',
-        manual=manual if manual else None,
+        manual=manual,
         filename=file.filename or '',
     )
 

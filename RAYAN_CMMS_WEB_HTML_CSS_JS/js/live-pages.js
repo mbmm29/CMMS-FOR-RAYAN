@@ -339,6 +339,8 @@ function setHeader(page) {
   } else if (page === 'motor-condition') {
     action.hidden = false;
     action.textContent = t('Save');
+  } else if (page === 'sop') {
+    action.hidden = true;
   } else if (isTechnician()) {
     action.hidden = true;
     action.textContent = t('+ Add Equipment');
@@ -1758,33 +1760,22 @@ function sopManualHtml(manual) {
   </article>`;
 }
 
-function sopParagraphEditor(equipment, paragraphs, manual) {
+function sopParagraphEditor(equipment, manual) {
   const locked = !canMaintain();
   const hasManual = Boolean(manual?.document);
-  const source = paragraphs.length || locked || hasManual ? paragraphs : [''];
-  const rows = source.map((text, index) => {
-    const remove = locked ? '' : `<button type="button" class="detail-button danger sop-remove">${esc(t('Remove'))}</button>`;
-    const field = locked
-      ? `<p class="sop-text">${esc(text || '—')}</p>`
-      : `<textarea data-sop-paragraph rows="3" placeholder="${esc(t('Write the paragraph'))}">${esc(text || '')}</textarea>`;
-    return `<li><b>${index + 1}</b>${field}${remove}</li>`;
-  }).join('') || `<li class="sop-empty">${esc(t('No SOP paragraphs yet.'))}</li>`;
   const write = locked
     ? ''
-    : `<button type="button" id="sop-import" class="detail-button primary">${esc(t('Import'))}</button><input id="sop-import-file" type="file" accept=".xlsx,.txt,.text,.csv,.md,text/plain,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" hidden>${hasManual ? '' : `<button type="button" id="sop-add" class="detail-button">${esc(t('Add paragraph'))}</button><button type="button" id="sop-save" class="detail-button">${esc(t('Save'))}</button>`}`;
-  const editor = hasManual
-    ? ''
-    : `<p class="kpi-note">${esc(t('Write the operating steps for this machine, or import an Excel or text file into this equipment operating manual.'))}</p>
-    <ol class="sop-paragraphs">${rows}</ol>`;
+    : `<button type="button" id="sop-import" class="detail-button primary">${esc(t(hasManual ? 'Replace SOP file' : 'Publish SOP file'))}</button><input id="sop-import-file" type="file" accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" hidden>`;
+  const empty = `<p class="kpi-note">${esc(t('Each machine has one SOP only. Publish it by importing one Excel file.'))}</p>`;
   const viewer = hasManual
     ? `${sopManualHtml(manual)}<p class="kpi-note">${esc(t('This operating manual opens inside the site in the same form as the imported Excel file.'))}</p>`
-    : '';
+    : empty;
   return `<section class="sop-sheet">
     <div class="sop-sheet-bar">
       <h3>${esc(t('Operating manual'))} · ${esc(equipment.equipment_id)} · ${esc(equipment.name || '')}</h3>
       ${write}
     </div>
-    ${viewer}${editor}
+    ${viewer}
     <p id="sop-error" class="form-error"></p>
   </section>`;
 }
@@ -1802,28 +1793,6 @@ async function loadSopParagraphs(equipmentId) {
   return data.paragraphs;
 }
 
-async function saveSopParagraphs() {
-  const equipmentId = ui.equipmentId;
-  const error = document.getElementById('sop-error');
-  if (!equipmentId || !canMaintain()) return;
-  const items = readSopParagraphs().map((body) => body.trim()).filter(Boolean);
-  if (items.length > 80) {
-    if (error) error.textContent = t('An SOP can hold 80 paragraphs.');
-    return;
-  }
-  if (items.some((body) => body.length > 4000)) {
-    if (error) error.textContent = t('A paragraph is too long.');
-    return;
-  }
-  try {
-    await apiRequest(`/equipment/${encodeURIComponent(equipmentId)}/sop-paragraphs`, { method: 'PUT', body: JSON.stringify({ items: items.map((body) => ({ body })) }) });
-    toast(t('SOP paragraphs saved.'));
-    await drawSops();
-  } catch (exception) {
-    if (error) error.textContent = t(exception.message);
-  }
-}
-
 async function importSopParagraphs(file) {
   const equipmentId = ui.equipmentId;
   const error = document.getElementById('sop-error');
@@ -1833,6 +1802,7 @@ async function importSopParagraphs(file) {
   body.append('file', file);
   try {
     await apiRequest(`/equipment/${encodeURIComponent(equipmentId)}/sop-paragraphs/import`, { method: 'POST', body });
+    store = null;
     toast(t('SOP file imported.'));
     await drawSops();
   } catch (exception) {
@@ -1840,60 +1810,61 @@ async function importSopParagraphs(file) {
   }
 }
 
-async function drawSops(localParagraphs) {
+function oneSopPerEquipment(list) {
+  const byEquipment = new Map();
+  (list || []).forEach((sop) => {
+    const key = sop.equipment_id || sop.sop_id;
+    const current = byEquipment.get(key);
+    if (!current || Number(sop.id || 0) >= Number(current.id || 0)) byEquipment.set(key, sop);
+  });
+  return [...byEquipment.values()];
+}
+
+async function drawSops() {
   const chosen = ui.equipmentId;
   const equipment = equipmentOf(chosen);
-  let paragraphs = Array.isArray(localParagraphs) ? localParagraphs : [];
   let manual = null;
-  if (chosen && !Array.isArray(localParagraphs)) {
+  if (chosen) {
     try {
       const bundle = await loadSopBundle(chosen);
-      paragraphs = bundle.paragraphs;
       manual = bundle.manual;
     } catch (_) {
-      paragraphs = [];
       manual = null;
     }
   }
-  const rows = scoped(store.sops).filter((sop) => {
-    if (ui.tab === 'Under Review') return /review/i.test(sop.status || '');
-    if (ui.tab === 'Draft') return sop.status === 'Draft';
+  const all = oneSopPerEquipment(scoped(store.sops));
+  const published = all.filter((sop) => /Published|Approved/i.test(sop.status || ''));
+  const missing = Math.max(0, visibleEquipment().length - published.length);
+  const rows = all.filter((sop) => {
     if (ui.tab === 'Published') return /Published|Approved/i.test(sop.status || '');
+    if (ui.tab === 'Missing') return false;
     return true;
   });
-  const selected = rows.find((sop) => sop.sop_id === ui.rowKey) || rows[0];
-  const all = scoped(store.sops);
-  const published = all.filter((sop) => /Published|Approved/i.test(sop.status || '')).length;
+  const selected = chosen
+    ? rows.find((sop) => sop.equipment_id === chosen) || all.find((sop) => sop.equipment_id === chosen)
+    : (rows.find((sop) => sop.sop_id === ui.rowKey) || rows[0]);
   document.getElementById('metric-grid').innerHTML = metrics([
-    ['Total SOPs', String(all.length), '▤', 'blue', ''],
-    ['Published', String(published), '✓', 'green', ''],
-    ['Under Review', String(all.filter((sop) => /review/i.test(sop.status || '')).length), '◷', 'orange', ''],
-    ['Draft', String(all.filter((sop) => sop.status === 'Draft').length), '✎', 'purple', ''],
-    ['Review due', String(all.filter((sop) => dayDiff(sop.review_date) !== null && dayDiff(sop.review_date) < 0).length), '!', 'red', ''],
-    ['Compliance', `${all.length ? numberText((published / all.length) * 100) : 0}%`, '◈', 'green', ''],
+    ['Equipment', String(visibleEquipment().length), '⚙', 'blue', ''],
+    ['Published SOPs', String(published.length), '✓', 'green', ''],
+    ['Without SOP', String(missing), '!', 'orange', ''],
+    ['One SOP per machine', '1', '▤', 'purple', ''],
+    ['File publish only', 'xlsx', '◈', 'blue', ''],
+    ['Compliance', `${visibleEquipment().length ? numberText((published.length / visibleEquipment().length) * 100) : 0}%`, '◈', 'green', ''],
   ]);
-  const body = rows.map((sop) => `<tr data-row="${esc(sop.sop_id)}" class="${selected && selected.sop_id === sop.sop_id ? 'selected' : ''}">${cell(esc(sop.sop_id), true)}${cell(esc(sop.title))}${cell(esc(sop.sop_type || '—'))}${cell(esc(sop.revision || '—'))}${cell(liveBadge(sop.status))}${cell(fmtDate(sop.review_date))}</tr>`);
-  const detail = ui.mode === 'create' ? sopForm() : detailPanel('SOP Details', selected?.status || '—', selected?.sop_id || '—', selected?.title || '', [
-    ['Equipment', selected?.equipment_id], ['Category', selected?.sop_type], ['Revision', selected?.revision],
-    ['Effective', fmtDate(selected?.effective_date)], ['Review', fmtDate(selected?.review_date)], ['Prepared by', selected?.prepared_by],
-    ['Approved by', selected?.approved_by],
-  ]);
-  const sheet = equipment ? sopParagraphEditor(equipment, paragraphs, manual) : '';
+  const body = rows.map((sop) => `<tr data-row="${esc(sop.sop_id)}" class="${selected && selected.sop_id === sop.sop_id ? 'selected' : ''}">${cell(esc(sop.sop_id), true)}${cell(esc(sop.title))}${cell(esc(sop.equipment_id || '—'))}${cell(esc(sop.revision || '—'))}${cell(liveBadge(sop.status))}${cell(esc(sop.document_path || '—'))}</tr>`);
+  const detail = selected
+    ? detailPanel('SOP Details', selected.status || '—', selected.sop_id || '—', selected.title || '', [
+      ['Equipment', selected.equipment_id], ['Category', selected.sop_type], ['Revision', selected.revision],
+      ['Effective', fmtDate(selected.effective_date)], ['Imported file', selected.document_path || '—'],
+    ])
+    : `<aside class="panel detail"><h2>${esc(t('SOP Details'))}</h2><p class="live-note">${esc(t('Select a machine, then publish one SOP Excel file for it.'))}</p></aside>`;
+  const sheet = equipment
+    ? sopParagraphEditor(equipment, manual)
+    : `<p class="live-note">${esc(t('Select a machine, then publish one SOP Excel file for it.'))}</p>`;
   document.getElementById('workspace').className = 'workspace';
-  document.getElementById('workspace').innerHTML = `<section class="panel"><div class="split">${assetList(chosen)}<div class="asset-view">${tabsHtml(['All SOPs', 'Published', 'Under Review', 'Draft'])}${tableShell(['SOP Code', 'SOP Title', 'Category', 'Version', 'Status', 'Last Review'], body, shown(rows.length, all.length, 'SOPs'))}</div></div>${sheet}</section>${detail}`;
+  document.getElementById('workspace').innerHTML = `<section class="panel"><div class="split">${assetList(chosen)}<div class="asset-view">${tabsHtml(['All SOPs', 'Published'])}${tableShell(['SOP Code', 'SOP Title', 'Equipment', 'Version', 'Status', 'Imported file'], body, shown(rows.length, all.length, 'SOPs'))}</div></div>${sheet}</section>${detail}`;
   bindAssets();
   bindRows();
-  bindForm();
-  document.getElementById('sop-add')?.addEventListener('click', () => {
-    const items = readSopParagraphs();
-    if (items.length >= 80) {
-      const error = document.getElementById('sop-error');
-      if (error) error.textContent = t('An SOP can hold 80 paragraphs.');
-      return;
-    }
-    drawSops(items.concat(''));
-  });
-  document.getElementById('sop-save')?.addEventListener('click', () => { saveSopParagraphs(); });
   const importButton = document.getElementById('sop-import');
   const importFile = document.getElementById('sop-import-file');
   importButton?.addEventListener('click', () => importFile?.click());
@@ -1902,12 +1873,6 @@ async function drawSops(localParagraphs) {
     importFile.value = '';
     if (file) await importSopParagraphs(file);
   });
-  document.querySelectorAll('.sop-remove').forEach((button) => button.addEventListener('click', () => {
-    const items = readSopParagraphs();
-    const index = [...document.querySelectorAll('.sop-remove')].indexOf(button);
-    items.splice(index, 1);
-    drawSops(items);
-  }));
 }
 
 function workOrderFor(row) {
@@ -2405,6 +2370,10 @@ function bindRows() {
   document.querySelectorAll('[data-row]').forEach((row) => row.addEventListener('click', () => {
     ui.rowKey = row.dataset.row;
     ui.mode = 'view';
+    if (ui.page === 'sop') {
+      const sop = (store.sops || []).find((item) => item.sop_id === row.dataset.row);
+      if (sop?.equipment_id) ui.equipmentId = sop.equipment_id;
+    }
     draw(ui.page);
   }));
 }
@@ -2482,8 +2451,7 @@ function bindForm() {
         data.active = data.active !== 'false';
         await apiRequest('/plants', { method: 'POST', body: JSON.stringify(data) });
       } else if (ui.page === 'sop') {
-        data.revision = data.revision || '00';
-        await apiRequest('/sops', { method: 'POST', body: JSON.stringify(data) });
+        throw new Error('Publish one SOP per equipment by importing an Excel file.');
       }
       store = null;
       ui.mode = 'view';
