@@ -735,6 +735,16 @@ const CMMS_AR = {
   'Very important': 'مهمة جداً',
   'Important': 'مهمة',
   'Choose the equipment importance': 'اختر أهمية المعدة',
+  'Photos': 'الصور',
+  'Add photo': 'إضافة صورة',
+  'Remove photo': 'حذف الصورة',
+  'No photos attached.': 'لا توجد صور مرفقة.',
+  'Each photo prints on a full A3 page.': 'تُطبع كل صورة على صفحة A3 كاملة.',
+  'A report can hold 12 photos.': 'يمكن إرفاق 12 صورة في التقرير.',
+  'The photo could not be read.': 'تعذرت قراءة الصورة.',
+  'Each photo must be smaller than 2.5 MB.': 'يجب أن يكون حجم الصورة أقل من 2.5 ميغابايت.',
+  'Choose an image file.': 'اختر ملف صورة.',
+  'Photo not found': 'الصورة غير موجودة',
 };
 
 function currentLang() {

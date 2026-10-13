@@ -67,8 +67,29 @@ async function loadPrintReport() {
   const paper = document.getElementById('print-paper');
   paper.classList.toggle('single-sheet', pages.pageCount === 1);
 
+  const photoMarkup = await photoPages(report.report_id, data.photos || []);
   paper.innerHTML = `<header class="report-head"><div class="company-logo"><img src="logo-rayan.png?v=2" alt="Rayan"></div><div class="report-title"><h1>DAILY MAINTENANCE REPORT</h1><h2>Mechanical Maintenance Department</h2></div><dl class="form-meta"><div><dt>Form No.:</dt><dd>${text(dailyFormNo)}</dd></div><div><dt>Approved by</dt><dd>${text(report.approved_by)}</dd></div><div><dt>Date:</dt><dd>${text(report.report_date)}</dd></div><div><dt>Pages:</dt><dd>1 of ${pages.pageCount}</dd></div></dl></header><section class="report-info"><div class="info-column"><label>Technician's name:<input value="${text(technician)}" readonly></label><label>Shift:<input value="${text(report.shift)}" readonly></label></div><div class="info-column"><label>Plant:<input value="${text(plantName)}" readonly></label></div></section><section class="activity-section">${pages.markup}</section><section class="report-bottom"><table class="parts-table"><thead><tr><th colspan="5">SPARE PARTS USED</th></tr><tr><th>No.</th><th>Part Name / Description</th><th>Part No.</th><th>Qty</th><th>Remarks</th></tr></thead><tbody>${parts(first.spare_parts)}</tbody></table><section class="notes-box"><div class="notes-heading"><b>GENERAL NOTES</b><span>TOTAL DOWNTIME: <output>${total.toFixed(2)}</output> HRS</span></div><textarea readonly>${text(report.general_notes || '').replace(/<br>/g, '\n')}</textarea></section></section>`;
+  paper.insertAdjacentHTML('afterend', photoMarkup);
   document.getElementById('print-message').textContent = `Approved report: ${report.report_id}`;
+}
+
+async function photoPages(reportId, photos) {
+  const pages = [];
+  for (const photo of photos) {
+    const blob = await apiRequest(`/daily-reports/${encodeURIComponent(reportId)}/photos/${photo.id}`, { blob: true });
+    const sized = await new Promise((resolve, reject) => {
+      const url = URL.createObjectURL(blob);
+      const image = new Image();
+      image.onload = () => resolve({ url, width: image.naturalWidth || 1, height: image.naturalHeight || 1 });
+      image.onerror = () => {
+        URL.revokeObjectURL(url);
+        reject(new Error('The photo could not be read.'));
+      };
+      image.src = url;
+    });
+    pages.push(`<section class="report-photo-page${sized.width > sized.height ? ' landscape' : ''}"><img src="${sized.url}" alt=""></section>`);
+  }
+  return pages.join('');
 }
 
 document.addEventListener('DOMContentLoaded', () => {

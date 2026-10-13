@@ -6,10 +6,10 @@ import secrets
 import threading
 import time
 from pathlib import Path
-from fastapi import FastAPI, Depends, HTTPException
+from fastapi import FastAPI, Depends, HTTPException, File, UploadFile
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, Response
 from fastapi.staticfiles import StaticFiles
 from sqlalchemy.orm import Session
 from sqlalchemy import and_, func, or_, inspect, text
@@ -2699,10 +2699,39 @@ def report_to_dict(r, items, db: Session):
     report['technician_code'] = r.technician_id
     report['technician_name'] = technician.name if technician else None
     report['technician_id'] = technician.name if technician else None
+    photos = db.query(DailyReportPhoto.id, DailyReportPhoto.position).filter_by(
+        report_id=r.id
+    ).order_by(DailyReportPhoto.position, DailyReportPhoto.id).all()
     return {
         'report': report,
         'items': items,
+        'photos': [{'id': photo.id, 'position': photo.position} for photo in photos],
     }
+
+
+MAX_REPORT_PHOTOS = 12
+MAX_PHOTO_BYTES = 2_500_000
+
+
+def image_media_type(raw: bytes) -> str | None:
+    if raw.startswith(b'\xff\xd8\xff'):
+        return 'image/jpeg'
+    if raw.startswith(b'\x89PNG\r\n\x1a\n'):
+        return 'image/png'
+    if len(raw) >= 12 and raw[:4] == b'RIFF' and raw[8:12] == b'WEBP':
+        return 'image/webp'
+    return None
+
+
+def load_daily_report(db: Session, report_id: str, u, edit: bool = False):
+    report = db.query(DailyReport).filter_by(report_id=report_id).first()
+    if not report:
+        raise HTTPException(404, 'Daily Report not found')
+    if is_technician_account(u) and report.technician_id != u.technician_id:
+        raise HTTPException(403, 'You can only edit your own reports' if edit else 'You can only view your own reports')
+    if edit and (report.locked_at or report.status not in ('Draft', 'Returned')):
+        raise HTTPException(409, f'Report cannot be edited while status is {report.status}')
+    return report
 
 
 @app.get('/daily-reports')
@@ -2746,6 +2775,66 @@ def get_report(
 
     items = db.query(DailyReportItem).filter_by(report_id=r.id).all()
     return report_to_dict(r, items, db)
+
+
+@app.post('/daily-reports/{report_id}/photos')
+async def add_daily_report_photo(
+    report_id: str,
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db),
+    u=Depends(auth),
+):
+    report = load_daily_report(db, report_id, u, edit=True)
+    count = db.query(DailyReportPhoto).filter_by(report_id=report.id).count()
+    if count >= MAX_REPORT_PHOTOS:
+        raise HTTPException(400, 'A report can hold 12 photos.')
+    raw = await file.read(MAX_PHOTO_BYTES + 1)
+    await file.close()
+    if not raw:
+        raise HTTPException(400, 'Choose an image file.')
+    if len(raw) > MAX_PHOTO_BYTES:
+        raise HTTPException(400, 'Each photo must be smaller than 2.5 MB.')
+    media = image_media_type(raw)
+    if not media:
+        raise HTTPException(400, 'Choose an image file.')
+    position = (db.query(func.max(DailyReportPhoto.position)).filter_by(report_id=report.id).scalar() or 0) + 1
+    photo = DailyReportPhoto(report_id=report.id, position=position, content_type=media, data=raw)
+    db.add(photo)
+    db.flush()
+    audit(db, u, 'UPDATE', 'DailyReport', report.report_id, new={'photo_id': photo.id})
+    db.commit()
+    return {'id': photo.id, 'position': photo.position}
+
+
+@app.get('/daily-reports/{report_id}/photos/{photo_id}')
+def get_daily_report_photo(
+    report_id: str,
+    photo_id: int,
+    db: Session = Depends(get_db),
+    u=Depends(auth),
+):
+    report = load_daily_report(db, report_id, u)
+    photo = db.query(DailyReportPhoto).filter_by(id=photo_id, report_id=report.id).first()
+    if not photo:
+        raise HTTPException(404, 'Photo not found')
+    return Response(content=bytes(photo.data), media_type=photo.content_type or 'image/jpeg')
+
+
+@app.delete('/daily-reports/{report_id}/photos/{photo_id}')
+def delete_daily_report_photo(
+    report_id: str,
+    photo_id: int,
+    db: Session = Depends(get_db),
+    u=Depends(auth),
+):
+    report = load_daily_report(db, report_id, u, edit=True)
+    photo = db.query(DailyReportPhoto).filter_by(id=photo_id, report_id=report.id).first()
+    if not photo:
+        raise HTTPException(404, 'Photo not found')
+    db.delete(photo)
+    audit(db, u, 'UPDATE', 'DailyReport', report.report_id, new={'photo_removed': photo_id})
+    db.commit()
+    return {'ok': True}
 
 
 @app.post('/daily-reports')
@@ -3493,6 +3582,7 @@ def delete_daily_report(report_id: str, db: Session = Depends(get_db), u=Depends
     previous_parts = spare_text_from_items(db.query(DailyReportItem).filter_by(report_id=report.id).all())
     apply_spare_stock(db, previous_parts, '')
     db.query(DailyReportItem).filter_by(report_id=report.id).delete(synchronize_session=False)
+    db.query(DailyReportPhoto).filter_by(report_id=report.id).delete(synchronize_session=False)
     db.query(MachineRecord).filter_by(daily_report_id=report.id).delete(synchronize_session=False)
     db.delete(report)
     audit(db, u, 'DELETE', 'DailyReport', report_id)

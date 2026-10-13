@@ -390,7 +390,17 @@ body .machine-log .log-facts-save{width:auto;height:32px;margin:8px 0 0;padding:
 .daily-parts{margin-top:14px}
 .daily-parts h3{margin:0;color:#102d60;font-size:13px}
 .daily-parts .lube-list-head{margin-bottom:6px}
-.daily-parts .lube-list-head button{border:1px solid #99baf0;border-radius:6px;background:#fff;color:#0755dc;font-weight:800;padding:6px 10px;cursor:pointer}
+.daily-parts .lube-list-head button,.daily-photos .lube-list-head button{border:1px solid #99baf0;border-radius:6px;background:#fff;color:#0755dc;font-weight:800;padding:6px 10px;cursor:pointer}
+.daily-photos{margin-top:14px}
+.daily-photos h3{margin:0;color:#102d60;font-size:13px}
+.daily-photos .photo-hint,.photo-strip .photo-hint{margin:0 0 8px;color:#31517f;font-size:12px;font-weight:600}
+.photo-strip{display:flex;flex-wrap:wrap;gap:8px}
+.photo-strip figure{position:relative;width:104px;height:104px;margin:0;border:1px solid #8eabda;background:#f4f8ff;overflow:hidden}
+.photo-strip img{width:100%;height:100%;object-fit:cover;display:block}
+.photo-strip button{position:absolute;top:4px;inset-inline-end:4px;width:22px;height:22px;border:0;border-radius:50%;background:#102d60;color:#fff;font:800 14px/22px Arial,sans-serif;cursor:pointer;padding:0}
+.report-photo-page{display:none}
+@page a3photo{size:A3 portrait;margin:0}
+@page a3photo-land{size:A3 landscape;margin:0}
 .daily-parts .lube-table th:nth-child(1){width:8%}
 .daily-parts .lube-table th:nth-child(2){width:46%}
 .daily-parts .lube-table th:nth-child(3){width:28%}
@@ -462,6 +472,10 @@ button.job-open:hover{filter:brightness(1.12)}
   body:has(.daily-paper) .lube-meta{display:grid!important;grid-template-columns:1fr 1fr!important;gap:8px 16px}
   body:has(.daily-paper) .lube-meta label{display:grid!important;grid-template-columns:140px minmax(0,1fr)!important;gap:8px;align-items:center}
   body:has(.motor-paper) .motor-paper{width:auto!important;min-width:0!important;max-width:none!important;margin:0!important}
+  .report-photo-page{display:flex!important;align-items:center;justify-content:center;break-before:page;page-break-before:always;break-inside:avoid;page-break-inside:avoid;page:a3photo;width:297mm;height:420mm;margin:0!important;padding:0!important;overflow:hidden;background:#fff!important;border:0!important}
+  .report-photo-page.landscape{page:a3photo-land;width:420mm;height:297mm}
+  .report-photo-page img{width:297mm;height:420mm;max-width:none;object-fit:contain;object-position:center;background:#fff}
+  .report-photo-page.landscape img{width:420mm;height:297mm}
 }
 
 @media(max-width:980px){

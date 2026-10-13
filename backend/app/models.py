@@ -1,5 +1,5 @@
 from datetime import date, datetime, time
-from sqlalchemy import String, Integer, Float, Date, DateTime, Text, Boolean, ForeignKey, Time, UniqueConstraint
+from sqlalchemy import String, Integer, Float, Date, DateTime, Text, Boolean, ForeignKey, Time, UniqueConstraint, LargeBinary
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from .database import Base
 
@@ -293,6 +293,19 @@ class DailyReport(Base):
     )
     return_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
     returned_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+
+
+class DailyReportPhoto(Base):
+    __tablename__ = 'daily_report_photos'
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    report_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey('daily_reports.id', ondelete='CASCADE'), index=True
+    )
+    position: Mapped[int] = mapped_column(Integer, default=0)
+    content_type: Mapped[str] = mapped_column(String(40), default='image/jpeg')
+    data: Mapped[bytes] = mapped_column(LargeBinary)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
 
 class DailyReportItem(Base):

@@ -1,5 +1,6 @@
 document.addEventListener('DOMContentLoaded', async () => {
   const state = { reports: [], lubeReports: [], filtered: [], page: 1, rows: 10, status: 'all', user: null, selected: null, formNo: 'DR', lubeFormNo: 'PMF 17-05 rev.a' };
+  let reviewPhotoUrls = [];
   const body = document.getElementById('reportsTableBody');
   const search = document.getElementById('globalSearch');
   const from = document.getElementById('dateFrom');
@@ -101,6 +102,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         plantId: report.plant_id,
         items,
         first,
+        photos: detail.photos || [],
       };
     }));
     updateStatistics();
@@ -279,8 +281,10 @@ document.addEventListener('DOMContentLoaded', async () => {
         <table class="lube-table"><thead><tr><th>${escapeHtml(t('Seq.'))}</th><th>${escapeHtml(t('Machine'))}</th><th>${escapeHtml(t('Maintenance Type'))}</th><th>${escapeHtml(t('Repair Actions'))}</th><th>${escapeHtml(t('Start Time'))}</th><th>${escapeHtml(t('End Time'))}</th><th>${escapeHtml(t('Downtime (hrs)'))}</th></tr></thead><tbody>${activityRows}</tbody></table>
         <section class="daily-parts"><h3>${escapeHtml(t('SPARE PARTS USED'))}</h3><table class="lube-table"><thead><tr><th>${escapeHtml(t('No.'))}</th><th>${escapeHtml(t('Part'))}</th><th>${escapeHtml(t('Part No.'))}</th><th>${escapeHtml(t('Qty'))}</th></tr></thead><tbody>${partRows}</tbody></table></section>
         <label class="daily-notes"><span>${escapeHtml(t('GENERAL NOTES'))}</span><div class="daily-note-box"><textarea readonly>${escapeHtml(report.notes || '')}</textarea><b class="daily-tdt">TDT: <span>${asHours(report.downtime)}</span></b></div></label>
+        ${(report.photos || []).length ? `<section class="daily-photos no-print"><div class="lube-list-head"><h3>${escapeHtml(t('Photos'))}</h3></div><p class="photo-hint">${escapeHtml(t('Each photo prints on a full A3 page.'))}</p><div class="photo-strip" id="review-photo-strip"></div></section>` : ''}
         ${report.returnReason ? `<p class="daily-return">${escapeHtml(t('Rejection reason'))}: ${escapeHtml(report.returnReason)}</p>` : ''}
       </form>
+      <div id="review-photo-print"></div>
       <form class="review-reason no-print" id="reject-box" hidden>
         <div class="review-reason-head"><b>${escapeHtml(t('Rejection reason'))}</b><small>${escapeHtml(t('The technician sees this reason on the returned report.'))}</small></div>
         <textarea id="reject-reason" required placeholder="${escapeHtml(t('Enter the reason for rejecting this report.'))}"></textarea>
@@ -289,6 +293,7 @@ document.addEventListener('DOMContentLoaded', async () => {
       </form>`;
     document.getElementById('review-close')?.addEventListener('click', closeReview);
     document.getElementById('review-approve')?.addEventListener('click', approveSelected);
+    attachReviewPhotos(report);
     document.getElementById('review-delete')?.addEventListener('click', deleteSelected);
     document.getElementById('review-reject')?.addEventListener('click', () => {
       const box = document.getElementById('reject-box');
@@ -303,7 +308,45 @@ document.addEventListener('DOMContentLoaded', async () => {
     });
   }
 
+  async function attachReviewPhotos(report) {
+    const photos = report.photos || [];
+    const strip = document.getElementById('review-photo-strip');
+    const printHost = document.getElementById('review-photo-print');
+    if (!photos.length || !strip || !printHost) return;
+    const loaded = [];
+    try {
+      for (const photo of photos) {
+        const blob = await apiRequest(`/daily-reports/${encodeURIComponent(report.id)}/photos/${photo.id}`, { blob: true });
+        const sized = await new Promise((resolve, reject) => {
+          const url = URL.createObjectURL(blob);
+          const image = new Image();
+          image.onload = () => resolve({ url, width: image.naturalWidth || 1, height: image.naturalHeight || 1 });
+          image.onerror = () => {
+            URL.revokeObjectURL(url);
+            reject(new Error('The photo could not be read.'));
+          };
+          image.src = url;
+        });
+        loaded.push(sized);
+      }
+    } catch (error) {
+      loaded.forEach((photo) => URL.revokeObjectURL(photo.url));
+      showNotice(error.message, true);
+      return;
+    }
+    if (!strip.isConnected) {
+      loaded.forEach((photo) => URL.revokeObjectURL(photo.url));
+      return;
+    }
+    reviewPhotoUrls.forEach((url) => URL.revokeObjectURL(url));
+    reviewPhotoUrls = loaded.map((photo) => photo.url);
+    strip.innerHTML = loaded.map((photo) => `<figure><img src="${photo.url}" alt=""></figure>`).join('');
+    printHost.innerHTML = loaded.map((photo) => `<section class="report-photo-page${photo.width > photo.height ? ' landscape' : ''}"><img src="${photo.url}" alt=""></section>`).join('');
+  }
+
   function closeReview() {
+    reviewPhotoUrls.forEach((url) => URL.revokeObjectURL(url));
+    reviewPhotoUrls = [];
     document.querySelector('.reports-layout')?.classList.remove('reviewing');
     const sheet = document.getElementById('detailsContent');
     if (sheet) sheet.innerHTML = '';

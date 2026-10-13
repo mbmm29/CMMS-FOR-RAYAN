@@ -20,11 +20,13 @@ const API_BASE_URL = (() => {
 
 async function apiRequest(endpoint, options = {}) {
     const token = localStorage.getItem("access_token");
+    const wantsBlob = options.blob === true;
+    const { blob: _blob, headers: optionHeaders, ...request } = options;
 
-    const headers = {
-        "Content-Type": "application/json",
-        ...(options.headers || {})
-    };
+    const headers = { ...(optionHeaders || {}) };
+    if (!(options.body instanceof FormData) && !headers["Content-Type"]) {
+        headers["Content-Type"] = "application/json";
+    }
 
     if (token) {
         headers["Authorization"] = `Bearer ${token}`;
@@ -36,7 +38,7 @@ async function apiRequest(endpoint, options = {}) {
         response = await fetch(
             `${API_BASE_URL}${endpoint}`,
             {
-                ...options,
+                ...request,
                 headers
             }
         );
@@ -44,6 +46,19 @@ async function apiRequest(endpoint, options = {}) {
         throw new Error(
             "Cannot connect to the CMMS server. Open the system from http://localhost:8000 and try again."
         );
+    }
+
+    if (wantsBlob) {
+        if (!response.ok) {
+            let data = null;
+            try {
+                data = await response.json();
+            } catch (_) {
+                data = null;
+            }
+            throw new Error(data?.detail || `HTTP ${response.status}`);
+        }
+        return response.blob();
     }
 
     let data = null;
