@@ -1732,6 +1732,38 @@ def create_sop(data:SOPCreate,db:Session=Depends(get_db),u=Depends(role(*ENGINEE
     sid=f'SOP-{data.equipment_id}-{db.query(SOP).filter(SOP.equipment_id==data.equipment_id).count()+1:03d}'
     o=SOP(sop_id=sid,**data.model_dump()); db.add(o); audit(db,u,'CREATE','SOP',sid,new=data.model_dump()); db.commit(); db.refresh(o); return o
 
+def sop_paragraph_payload(equipment_id, rows):
+    return {'equipment_id': equipment_id, 'items': [{'position': row.position, 'body': row.body or ''} for row in rows]}
+
+@app.get('/equipment/{equipment_id}/sop-paragraphs')
+def get_sop_paragraphs(equipment_id:str, db:Session=Depends(get_db), u=Depends(auth)):
+    if not db.query(Equipment).filter_by(equipment_id=equipment_id).first():
+        raise HTTPException(404, 'Equipment not found')
+    rows = db.query(SOPParagraph).filter_by(equipment_id=equipment_id).order_by(SOPParagraph.position, SOPParagraph.id).all()
+    return sop_paragraph_payload(equipment_id, rows)
+
+@app.put('/equipment/{equipment_id}/sop-paragraphs')
+def save_sop_paragraphs(equipment_id:str, data:SOPParagraphSave, db:Session=Depends(get_db), u=Depends(role(*ENGINEER))):
+    if not db.query(Equipment).filter_by(equipment_id=equipment_id).first():
+        raise HTTPException(404, 'Equipment not found')
+    cleaned = []
+    for item in data.items:
+        body = (item.body or '').strip()
+        if not body:
+            continue
+        if len(body) > 4000:
+            raise HTTPException(400, 'A paragraph is too long.')
+        cleaned.append(body)
+    if len(cleaned) > 80:
+        raise HTTPException(400, 'An SOP can hold 80 paragraphs.')
+    db.query(SOPParagraph).filter_by(equipment_id=equipment_id).delete(synchronize_session=False)
+    for index, body in enumerate(cleaned, start=1):
+        db.add(SOPParagraph(equipment_id=equipment_id, position=index, body=body))
+    audit(db, u, 'SAVE', 'SOPParagraph', equipment_id, new={'count': len(cleaned)})
+    db.commit()
+    rows = db.query(SOPParagraph).filter_by(equipment_id=equipment_id).order_by(SOPParagraph.position, SOPParagraph.id).all()
+    return sop_paragraph_payload(equipment_id, rows)
+
 def visible_to_technician(query, technician_id):
     """A technician sees a work order only when it was sent to that technician."""
     if not technician_id:
@@ -3499,6 +3531,7 @@ def purge_kpi_history(db, equipment_ids=None, plant_id=None, line_ids=None):
     if equipment_ids:
         db.query(Component).filter(Component.equipment_id.in_(equipment_ids)).delete(synchronize_session=False)
         db.query(SOP).filter(SOP.equipment_id.in_(equipment_ids)).delete(synchronize_session=False)
+        db.query(SOPParagraph).filter(SOPParagraph.equipment_id.in_(equipment_ids)).delete(synchronize_session=False)
         db.query(Measurement).filter(Measurement.equipment_id.in_(equipment_ids)).delete(synchronize_session=False)
         db.query(PartUsed).filter(PartUsed.equipment_id.in_(equipment_ids)).delete(synchronize_session=False)
         db.query(MotorConditionReading).filter(or_(

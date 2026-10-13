@@ -633,3 +633,14 @@ body .motor-empty{color:#9eb4d6}
 @media(max-width:900px){
   body .motor-highlights{grid-template-columns:1fr}
 }
+.sop-sheet{margin-top:14px;padding:12px;border:1px solid #23406e;border-radius:12px;background:#0c1e40}
+.sop-sheet-bar{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:8px}
+.sop-sheet-bar h3{margin:0;flex:1 1 220px;color:#f4f8ff;font-size:15px}
+body .sop-sheet-bar .detail-button{width:auto;height:36px;margin:0;padding:0 14px}
+.sop-paragraphs{display:flex;flex-direction:column;gap:8px;margin:0;padding:0;list-style:none}
+.sop-paragraphs li{display:flex;gap:8px;align-items:flex-start}
+.sop-paragraphs b{flex:0 0 36px;height:36px;display:grid;place-items:center;border:1px solid #2a5287;border-radius:8px;background:#10284f;color:#f4f8ff;font-size:14px}
+.sop-paragraphs textarea,.sop-paragraphs .sop-text{flex:1;min-width:0;min-height:72px;margin:0;border:1px solid #8eabda;border-radius:8px;background:#fff;color:#102d60;padding:8px 10px;font:14px Arial,sans-serif;line-height:1.45}
+.sop-paragraphs .sop-text{white-space:pre-wrap}
+body .sop-paragraphs .detail-button{width:auto;flex:0 0 auto;height:36px;margin:0;padding:0 12px}
+.sop-empty{color:#9eb4d6;padding:8px 0}

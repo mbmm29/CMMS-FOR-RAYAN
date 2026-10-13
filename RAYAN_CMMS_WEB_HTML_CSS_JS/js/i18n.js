@@ -745,6 +745,17 @@ const CMMS_AR = {
   'Each photo must be smaller than 2.5 MB.': 'يجب أن يكون حجم الصورة أقل من 2.5 ميغابايت.',
   'Choose an image file.': 'اختر ملف صورة.',
   'Photo not found': 'الصورة غير موجودة',
+  'SOP paragraphs': 'فقرات إجراء التشغيل',
+  'Write the operating steps for this machine. Each paragraph is one numbered cell in the Excel file.': 'اكتب خطوات التشغيل لهذه المعدة. كل فقرة تصبح خانة مرقمة في ملف الإكسل.',
+  'Add paragraph': 'إضافة فقرة',
+  'Write the paragraph': 'اكتب الفقرة',
+  'No SOP paragraphs yet.': 'لا توجد فقرات لهذا الإجراء.',
+  'SOP paragraphs saved.': 'حُفظت فقرات الإجراء.',
+  'Paragraph': 'الفقرة',
+  'An SOP can hold 80 paragraphs.': 'إجراء التشغيل يتسع لثمانين فقرة.',
+  'A paragraph is too long.': 'الفقرة طويلة جداً.',
+  'Equipment not found': 'المعدة غير موجودة',
+  'Standard operating procedure': 'إجراء التشغيل القياسي',
 };
 
 function currentLang() {

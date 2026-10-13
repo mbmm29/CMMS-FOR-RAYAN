@@ -482,6 +482,14 @@ class SOPCreate(BaseModel):
     notes: str | None = None
 
 
+class SOPParagraphIn(BaseModel):
+    body: str = ''
+
+
+class SOPParagraphSave(BaseModel):
+    items: list[SOPParagraphIn] = Field(default_factory=list)
+
+
 class LubricationLineIn(BaseModel):
     equipment_code: str = ''
     equipment_name: str = ''

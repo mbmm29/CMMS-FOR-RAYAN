@@ -1650,8 +1650,70 @@ function drawEquipment() {
   });
 }
 
-function drawSops() {
+function readSopParagraphs() {
+  const fields = [...document.querySelectorAll('[data-sop-paragraph]')];
+  if (fields.length) return fields.map((field) => field.value);
+  return [...document.querySelectorAll('.sop-text')].map((node) => (node.textContent === '—' ? '' : node.textContent));
+}
+
+function sopParagraphEditor(equipment, paragraphs) {
+  const locked = !canMaintain();
+  const source = paragraphs.length || locked ? paragraphs : [''];
+  const rows = source.map((text, index) => {
+    const remove = locked ? '' : `<button type="button" class="detail-button danger sop-remove">${esc(t('Remove'))}</button>`;
+    const field = locked
+      ? `<p class="sop-text">${esc(text || '—')}</p>`
+      : `<textarea data-sop-paragraph rows="3" placeholder="${esc(t('Write the paragraph'))}">${esc(text || '')}</textarea>`;
+    return `<li><b>${index + 1}</b>${field}${remove}</li>`;
+  }).join('') || `<li class="sop-empty">${esc(t('No SOP paragraphs yet.'))}</li>`;
+  const write = locked ? '' : `<button type="button" id="sop-add" class="detail-button">${esc(t('Add paragraph'))}</button><button type="button" id="sop-save" class="detail-button primary">${esc(t('Save'))}</button>`;
+  return `<section class="sop-sheet">
+    <div class="sop-sheet-bar">
+      <h3>${esc(t('SOP paragraphs'))} · ${esc(equipment.equipment_id)} · ${esc(equipment.name || '')}</h3>
+      ${write}
+      <button type="button" id="sop-export" class="detail-button">${esc(t('Export'))}</button>
+    </div>
+    <p class="kpi-note">${esc(t('Write the operating steps for this machine. Each paragraph is one numbered cell in the Excel file.'))}</p>
+    <ol class="sop-paragraphs">${rows}</ol>
+    <p id="sop-error" class="form-error"></p>
+  </section>`;
+}
+
+async function loadSopParagraphs(equipmentId) {
+  const data = await apiRequest(`/equipment/${encodeURIComponent(equipmentId)}/sop-paragraphs`);
+  return (data.items || []).map((item) => item.body || '');
+}
+
+async function saveSopParagraphs() {
+  const equipmentId = ui.equipmentId;
+  const error = document.getElementById('sop-error');
+  if (!equipmentId || !canMaintain()) return;
+  const items = readSopParagraphs().map((body) => body.trim()).filter(Boolean);
+  if (items.length > 80) {
+    if (error) error.textContent = t('An SOP can hold 80 paragraphs.');
+    return;
+  }
+  if (items.some((body) => body.length > 4000)) {
+    if (error) error.textContent = t('A paragraph is too long.');
+    return;
+  }
+  try {
+    await apiRequest(`/equipment/${encodeURIComponent(equipmentId)}/sop-paragraphs`, { method: 'PUT', body: JSON.stringify({ items: items.map((body) => ({ body })) }) });
+    toast(t('SOP paragraphs saved.'));
+    await drawSops();
+  } catch (exception) {
+    if (error) error.textContent = t(exception.message);
+  }
+}
+
+async function drawSops(localParagraphs) {
   const chosen = ui.equipmentId;
+  const equipment = equipmentOf(chosen);
+  let paragraphs = Array.isArray(localParagraphs) ? localParagraphs : [];
+  if (chosen && !Array.isArray(localParagraphs)) {
+    try { paragraphs = await loadSopParagraphs(chosen); }
+    catch (_) { paragraphs = []; }
+  }
   const rows = scoped(store.sops).filter((sop) => {
     if (ui.tab === 'Under Review') return /review/i.test(sop.status || '');
     if (ui.tab === 'Draft') return sop.status === 'Draft';
@@ -1675,11 +1737,29 @@ function drawSops() {
     ['Effective', fmtDate(selected?.effective_date)], ['Review', fmtDate(selected?.review_date)], ['Prepared by', selected?.prepared_by],
     ['Approved by', selected?.approved_by],
   ]);
+  const sheet = equipment ? sopParagraphEditor(equipment, paragraphs) : '';
   document.getElementById('workspace').className = 'workspace';
-  document.getElementById('workspace').innerHTML = `<section class="panel"><div class="split">${assetList(chosen)}<div class="asset-view">${tabsHtml(['All SOPs', 'Published', 'Under Review', 'Draft'])}${tableShell(['SOP Code', 'SOP Title', 'Category', 'Version', 'Status', 'Last Review'], body, shown(rows.length, all.length, 'SOPs'))}</div></div></section>${detail}`;
+  document.getElementById('workspace').innerHTML = `<section class="panel"><div class="split">${assetList(chosen)}<div class="asset-view">${tabsHtml(['All SOPs', 'Published', 'Under Review', 'Draft'])}${tableShell(['SOP Code', 'SOP Title', 'Category', 'Version', 'Status', 'Last Review'], body, shown(rows.length, all.length, 'SOPs'))}</div></div>${sheet}</section>${detail}`;
   bindAssets();
   bindRows();
   bindForm();
+  document.getElementById('sop-add')?.addEventListener('click', () => {
+    const items = readSopParagraphs();
+    if (items.length >= 80) {
+      const error = document.getElementById('sop-error');
+      if (error) error.textContent = t('An SOP can hold 80 paragraphs.');
+      return;
+    }
+    drawSops(items.concat(''));
+  });
+  document.getElementById('sop-save')?.addEventListener('click', () => { saveSopParagraphs(); });
+  document.getElementById('sop-export')?.addEventListener('click', () => { exportSopParagraphs(); });
+  document.querySelectorAll('.sop-remove').forEach((button) => button.addEventListener('click', () => {
+    const items = readSopParagraphs();
+    const index = [...document.querySelectorAll('.sop-remove')].indexOf(button);
+    items.splice(index, 1);
+    drawSops(items);
+  }));
 }
 
 function workOrderFor(row) {
@@ -2658,6 +2738,106 @@ async function exportAnnualPlan() {
   const link = document.createElement('a');
   link.href = URL.createObjectURL(blob);
   link.download = `annual-plan-${ui.annualYear}-${safe}.xlsx`;
+  link.click();
+  URL.revokeObjectURL(link.href);
+}
+
+function buildSopWorkbook(model) {
+  const rtl = model.rtl;
+  const textStyle = rtl ? 14 : 11;
+  const labelStyle = rtl ? 12 : 5;
+  const valueStyle = rtl ? 13 : 6;
+  const cells = [];
+  const merges = [];
+  const place = (row, column, value, style) => cells.push({ r: row, c: column, v: value, s: style });
+  const merge = (row, column, rowTo, columnTo, value, style) => {
+    place(row, column, value, style);
+    if (row !== rowTo || column !== columnTo) merges.push(`${columnLetters(column)}${row}:${columnLetters(columnTo)}${rowTo}`);
+  };
+  merge(1, 3, 2, 7, model.title, 1);
+  merge(3, 3, 4, 7, model.department, 2);
+  model.facts.forEach((item, index) => {
+    const row = 6 + index;
+    merge(row, 1, row, 3, item.label, labelStyle);
+    merge(row, 4, row, 7, item.value, valueStyle);
+  });
+  const headingRow = 6 + model.facts.length + 1;
+  merge(headingRow, 1, headingRow, 7, model.tableTitle, 4);
+  place(headingRow + 1, 1, model.numberHeading, 9);
+  merge(headingRow + 1, 2, headingRow + 1, 7, model.paragraphHeading, 9);
+  const heights = { 1: 26, 2: 24, 3: 20, 4: 20, [headingRow]: 24, [headingRow + 1]: 22 };
+  model.lines.forEach((text, index) => {
+    const row = headingRow + 2 + index;
+    const lines = String(text || '').split('\n').reduce((count, line) => count + Math.max(1, Math.ceil(line.length / 70)), 0);
+    heights[row] = Math.min(160, Math.max(36, lines * 18));
+    place(row, 1, index + 1, 16);
+    merge(row, 2, row, 7, text, textStyle);
+  });
+  const lastRow = model.lines.length ? headingRow + 1 + model.lines.length : headingRow + 2;
+  if (!model.lines.length) {
+    heights[headingRow + 2] = 28;
+    merge(headingRow + 2, 1, headingRow + 2, 7, model.empty, textStyle);
+  }
+  const sheet = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">
+<sheetPr><pageSetUpPr fitToPage="1"/></sheetPr>
+<dimension ref="A1:G${lastRow}"/>
+<sheetViews><sheetView showGridLines="0" rightToLeft="${rtl ? 1 : 0}" workbookViewId="0"/></sheetViews>
+<sheetFormatPr defaultRowHeight="18"/>
+<cols>
+<col min="1" max="1" width="8" customWidth="1"/>
+<col min="2" max="2" width="16" customWidth="1"/>
+<col min="3" max="3" width="16" customWidth="1"/>
+<col min="4" max="4" width="18" customWidth="1"/>
+<col min="5" max="5" width="18" customWidth="1"/>
+<col min="6" max="6" width="22" customWidth="1"/>
+<col min="7" max="7" width="28" customWidth="1"/>
+</cols>
+<sheetData>${worksheetRows(cells, heights)}</sheetData>
+<mergeCells count="${merges.length}">${merges.map((ref) => `<mergeCell ref="${ref}"/>`).join('')}</mergeCells>
+<pageMargins left="0.45" right="0.45" top="0.45" bottom="0.45" header="0.2" footer="0.2"/>
+<pageSetup orientation="portrait" paperSize="9" fitToWidth="1" fitToHeight="0"/>
+${model.logo ? '<drawing r:id="rId1"/>' : ''}
+</worksheet>`;
+  return packWorkbook(sheet, model.sheetName, model.logo);
+}
+
+async function exportSopParagraphs() {
+  const equipment = equipmentOf(ui.equipmentId);
+  if (!equipment) return;
+  const lines = readSopParagraphs().map((text) => text.trim()).filter(Boolean);
+  const formNumber = formNo('sop');
+  const facts = [];
+  if (formNumber) facts.push({ label: t('Form No.:'), value: formNumber });
+  facts.push(
+    { label: t('Machine number'), value: equipment.equipment_id || '—' },
+    { label: t('Machine name'), value: equipment.name || '—' },
+    { label: t('Location / section'), value: machinePlace(equipment) },
+    { label: t('Manufacturer'), value: equipment.manufacturer || '—' },
+  );
+  let logo = null;
+  try {
+    const response = await fetch('logo-rayan.png?v=2');
+    if (response.ok) logo = new Uint8Array(await response.arrayBuffer());
+  } catch (_) {
+    logo = null;
+  }
+  const blob = buildSopWorkbook({
+    rtl: document.documentElement.dir === 'rtl',
+    sheetName: t('Standard operating procedure').slice(0, 31),
+    title: t('Standard operating procedure'),
+    department: t('Mechanical Maintenance Department'),
+    tableTitle: t('SOP paragraphs'),
+    numberHeading: t('No.'),
+    paragraphHeading: t('Paragraph'),
+    empty: t('No SOP paragraphs yet.'),
+    facts,
+    lines,
+    logo,
+  });
+  const link = document.createElement('a');
+  link.href = URL.createObjectURL(blob);
+  link.download = `sop-${equipment.equipment_id}.xlsx`;
   link.click();
   URL.revokeObjectURL(link.href);
 }
@@ -3683,7 +3863,7 @@ async function draw(page) {
   else if (page === 'pm-schedule') await drawPlans();
   else if (page === 'plants') drawPlants();
   else if (page === 'new-equipment' || page === 'equipment') drawEquipment();
-  else if (page === 'sop') drawSops();
+  else if (page === 'sop') await drawSops();
   else if (page === 'lubrication') await drawLubrication();
   else if (page === 'motor-condition') await drawMotorCondition();
   else if (page === 'daily-reports') await drawDailyReport();
