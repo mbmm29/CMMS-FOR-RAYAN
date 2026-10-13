@@ -1,10 +1,13 @@
+import io
 import os
 import re
+import zipfile
 from datetime import date, datetime, timedelta, timezone
 import json
 import secrets
 import threading
 from pathlib import Path
+from xml.etree import ElementTree as ET
 from fastapi import FastAPI, Depends, HTTPException, File, UploadFile, Query
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from fastapi.middleware.cors import CORSMiddleware
@@ -1819,6 +1822,144 @@ def get_sop_paragraphs(equipment_id:str, db:Session=Depends(get_db), u=Depends(a
     rows = db.query(SOPParagraph).filter_by(equipment_id=equipment_id).order_by(SOPParagraph.position, SOPParagraph.id).all()
     return sop_paragraph_payload(equipment_id, rows)
 
+SOP_IMPORT_MAX_BYTES = 2_000_000
+_SOP_SSML = '{http://schemas.openxmlformats.org/spreadsheetml/2006/main}'
+_SOP_SKIP_LABELS = {
+    'standard operating procedure', 'mechanical maintenance department', 'sop paragraphs',
+    'paragraph', 'no.', 'no', 'form no.:', 'form no.', 'machine number', 'machine name',
+    'location / section', 'manufacturer', 'no sop paragraphs yet.',
+    'إجراء التشغيل القياسي', 'قسم الصيانة الميكانيكية', 'فقرات إجراء التشغيل',
+    'الفقرة', 'تسلسل', 'رقم النموذج:', 'رقم المعدة', 'اسم المعدة', 'الموقع / القسم',
+    'الشركة المصنعة', 'لا توجد فقرات لهذا الإجراء.',
+}
+
+def _sop_clean_paragraphs(items):
+    cleaned = []
+    for body in items:
+        text = str(body or '').replace('\r\n', '\n').replace('\r', '\n').strip()
+        text = re.sub(r'^(?:\d{1,3}|[٠-٩]{1,3})[\.\)\-:\s]+', '', text).strip()
+        if not text:
+            continue
+        if text.lower() in _SOP_SKIP_LABELS:
+            continue
+        if len(text) > 4000:
+            raise HTTPException(400, 'A paragraph is too long.')
+        cleaned.append(text)
+    if not cleaned:
+        raise HTTPException(400, 'No SOP paragraphs found in the file.')
+    if len(cleaned) > 80:
+        raise HTTPException(400, 'An SOP can hold 80 paragraphs.')
+    return cleaned
+
+def _sop_cell_text(cell, shared):
+    kind = cell.attrib.get('t')
+    if kind == 'inlineStr':
+        return ''.join(node.text or '' for node in cell.iter(f'{_SOP_SSML}t')).strip()
+    if kind == 's':
+        value = cell.findtext(f'{_SOP_SSML}v')
+        try:
+            return shared[int(value)]
+        except (TypeError, ValueError, IndexError):
+            return ''
+    value = cell.findtext(f'{_SOP_SSML}v')
+    return (value or '').strip()
+
+def _sop_col_index(ref):
+    letters = ''.join(ch for ch in (ref or '') if ch.isalpha()).upper()
+    number = 0
+    for ch in letters:
+        number = number * 26 + (ord(ch) - 64)
+    return number
+
+def _sop_paragraphs_from_xlsx(raw):
+    try:
+        with zipfile.ZipFile(io.BytesIO(raw)) as archive:
+            names = set(archive.namelist())
+            shared = []
+            if 'xl/sharedStrings.xml' in names:
+                root = ET.fromstring(archive.read('xl/sharedStrings.xml'))
+                for item in root.findall(f'{_SOP_SSML}si'):
+                    shared.append(''.join(node.text or '' for node in item.iter(f'{_SOP_SSML}t')).strip())
+            sheet_name = next((name for name in names if name.startswith('xl/worksheets/sheet') and name.endswith('.xml')), None)
+            if not sheet_name:
+                raise ValueError('sheet')
+            sheet = ET.fromstring(archive.read(sheet_name))
+    except Exception:
+        raise HTTPException(400, 'Could not read the Excel file.') from None
+    rows = []
+    for row in sheet.findall(f'{_SOP_SSML}sheetData/{_SOP_SSML}row'):
+        values = {}
+        for cell in row.findall(f'{_SOP_SSML}c'):
+            col = _sop_col_index(cell.attrib.get('r', ''))
+            if not col:
+                continue
+            text = _sop_cell_text(cell, shared)
+            if text:
+                values[col] = text
+        if values:
+            rows.append(values)
+    paragraphs = []
+    started = False
+    for values in rows:
+        first = values.get(1, '')
+        second = values.get(2, '')
+        numbered = bool(re.fullmatch(r'\d{1,3}', first))
+        if numbered and second:
+            started = True
+            paragraphs.append(second)
+            continue
+        if started:
+            body = second or next((values[key] for key in sorted(values) if key > 1), '')
+            if body:
+                paragraphs.append(body)
+            continue
+        # Simple one-column lists: keep non-header text from column A.
+        if len(values) == 1 and first and first.lower() not in _SOP_SKIP_LABELS and not numbered:
+            paragraphs.append(first)
+    return paragraphs
+
+def _sop_paragraphs_from_text(raw, filename):
+    try:
+        text = raw.decode('utf-8-sig')
+    except UnicodeDecodeError:
+        text = raw.decode('cp1256', errors='ignore')
+    name = (filename or '').lower()
+    if name.endswith('.csv'):
+        blocks = []
+        for line in text.splitlines():
+            parts = [part.strip().strip('"') for part in re.split(r',(?=(?:[^"]*"[^"]*")*[^"]*$)', line)]
+            parts = [part for part in parts if part]
+            if not parts:
+                continue
+            if len(parts) == 1:
+                blocks.append(parts[0])
+            elif re.fullmatch(r'\d{1,3}', parts[0]):
+                blocks.append(parts[1])
+            else:
+                blocks.append(parts[-1] if len(parts) > 1 else parts[0])
+        return blocks
+    chunks = [chunk.strip() for chunk in re.split(r'\n\s*\n', text) if chunk.strip()]
+    if len(chunks) <= 1:
+        chunks = [line.strip() for line in text.splitlines() if line.strip()]
+    return chunks
+
+def extract_sop_paragraphs(filename, raw):
+    name = (filename or '').lower().strip()
+    if name.endswith('.xlsx'):
+        return _sop_clean_paragraphs(_sop_paragraphs_from_xlsx(raw))
+    if name.endswith(('.txt', '.text', '.csv', '.md')):
+        return _sop_clean_paragraphs(_sop_paragraphs_from_text(raw, name))
+    raise HTTPException(400, 'Choose an Excel (.xlsx) or text file.')
+
+def replace_sop_paragraphs(db, equipment_id, cleaned, u, action='SAVE'):
+    db.query(SOPParagraph).filter_by(equipment_id=equipment_id).delete(synchronize_session=False)
+    for index, body in enumerate(cleaned, start=1):
+        db.add(SOPParagraph(equipment_id=equipment_id, position=index, body=body))
+    audit(db, u, action, 'SOPParagraph', equipment_id, new={'count': len(cleaned)})
+    db.commit()
+    rows = db.query(SOPParagraph).filter_by(equipment_id=equipment_id).order_by(SOPParagraph.position, SOPParagraph.id).all()
+    return sop_paragraph_payload(equipment_id, rows)
+
 @app.put('/equipment/{equipment_id}/sop-paragraphs')
 def save_sop_paragraphs(equipment_id:str, data:SOPParagraphSave, db:Session=Depends(get_db), u=Depends(role(*ENGINEER))):
     if not db.query(Equipment).filter_by(equipment_id=equipment_id).first():
@@ -1833,13 +1974,25 @@ def save_sop_paragraphs(equipment_id:str, data:SOPParagraphSave, db:Session=Depe
         cleaned.append(body)
     if len(cleaned) > 80:
         raise HTTPException(400, 'An SOP can hold 80 paragraphs.')
-    db.query(SOPParagraph).filter_by(equipment_id=equipment_id).delete(synchronize_session=False)
-    for index, body in enumerate(cleaned, start=1):
-        db.add(SOPParagraph(equipment_id=equipment_id, position=index, body=body))
-    audit(db, u, 'SAVE', 'SOPParagraph', equipment_id, new={'count': len(cleaned)})
-    db.commit()
-    rows = db.query(SOPParagraph).filter_by(equipment_id=equipment_id).order_by(SOPParagraph.position, SOPParagraph.id).all()
-    return sop_paragraph_payload(equipment_id, rows)
+    return replace_sop_paragraphs(db, equipment_id, cleaned, u)
+
+@app.post('/equipment/{equipment_id}/sop-paragraphs/import')
+async def import_sop_paragraphs(
+    equipment_id: str,
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db),
+    u=Depends(role(*ENGINEER)),
+):
+    if not db.query(Equipment).filter_by(equipment_id=equipment_id).first():
+        raise HTTPException(404, 'Equipment not found')
+    raw = await file.read(SOP_IMPORT_MAX_BYTES + 1)
+    await file.close()
+    if not raw:
+        raise HTTPException(400, 'Choose a file to import.')
+    if len(raw) > SOP_IMPORT_MAX_BYTES:
+        raise HTTPException(400, 'The file must be smaller than 2 MB.')
+    cleaned = extract_sop_paragraphs(file.filename or '', raw)
+    return replace_sop_paragraphs(db, equipment_id, cleaned, u, action='IMPORT')
 
 def visible_to_technician(query, technician_id):
     """A technician sees a work order only when it was sent to that technician."""
