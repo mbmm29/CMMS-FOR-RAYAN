@@ -708,6 +708,8 @@ const CMMS_AR = {
   'The machine does not belong to the selected plant': 'المعدة لا تتبع المصنع المحدد',
   'The machine does not belong to the selected line': 'المعدة لا تتبع الخط المحدد',
   'The machine does not belong to the selected section': 'المعدة لا تتبع القسم المحدد',
+  'Order approval date': 'تاريخ اعتماد الأمر',
+  'Set when the order is approved': 'يُثبت عند اعتماد الأمر',
   'Work order code': 'ترميز أمر الصيانة',
   'Enter a work order code such as FM1.': 'أدخل ترميز أمر الصيانة مثل FM1.',
   'Set the work order code for this plant.': 'حدد ترميز أمر الصيانة لهذا المصنع.',

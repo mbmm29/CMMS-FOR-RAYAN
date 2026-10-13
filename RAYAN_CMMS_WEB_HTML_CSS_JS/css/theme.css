@@ -410,7 +410,9 @@ body .daily-paper textarea{width:100%;min-height:64px;border:1px solid #8eabda;b
 body .job-order textarea{width:100%;min-height:88px;border:1px solid #8eabda;border-radius:0;background:#fff;color:#102d60;color-scheme:light;font:14px Arial,sans-serif;padding:8px}
 .job-order .assignee-list{display:flex;flex-wrap:wrap;gap:8px 16px;font-weight:600}
 .job-order .daily-parts h3{margin:14px 0 8px;font-size:14px}
-.job-result-date{max-width:280px;margin-top:10px}
+.job-result-date{max-width:100%;margin-top:10px}
+.job-result-date span{white-space:nowrap;flex:0 0 auto}
+.job-result-date input{flex:0 1 220px;width:220px;max-width:100%}
 .job-order .lube-actions button[type=submit]{border:0;background:#075cf5;color:#fff}
 button.job-open{border:0;cursor:pointer}
 button.job-open:hover{filter:brightness(1.12)}

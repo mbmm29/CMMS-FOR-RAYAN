@@ -1931,6 +1931,12 @@ function bindJobPlace(form) {
   refreshJobNumber();
 }
 
+function approvalDateField(order) {
+  const raw = String(order?.closing_date || '').slice(0, 10);
+  const shown = raw ? fmtDate(raw) : '';
+  return `<label class="job-result-date"><span>${esc(t('Order approval date'))}</span><input class="job-code" value="${esc(shown)}" readonly placeholder="${esc(t('Set when the order is approved'))}"></label>`;
+}
+
 function workOrderForm(order) {
   const today = isoDate(new Date());
   const partRows = order ? jobPartRows(order.parts_used) : Array.from({ length: 5 }, (_, index) => `<tr><td class="lube-no">${index + 1}</td><td><input data-job-part="name"></td><td><input data-job-part="number"></td></tr>`).join('');
@@ -1939,7 +1945,6 @@ function workOrderForm(order) {
   if (order) {
     const place = jobLocation(order);
     const crew = order.crew_type === 'External' ? t('External maintenance team') : t('Company maintenance team');
-    const resultDate = String(order.closing_date || '').slice(0, 10);
     const fields = [
       jobField('Plant', `<input value="${esc(place.plant)}" readonly>`),
       jobField('Line', `<input value="${esc(place.line)}" readonly>`),
@@ -1949,7 +1954,7 @@ function workOrderForm(order) {
       jobField('Repair order no.', `<input class="job-code" value="${esc(order.work_order_id)}" readonly>`),
       jobField('Date', `<input type="date" value="${esc(String(order.planned_date || '').slice(0, 10))}" readonly>`),
     ].join('');
-    return `<form id="live-form" class="lube-paper job-order" data-order-id="${esc(order.work_order_id)}">${jobHead()}<div class="job-fields">${fields}</div><div class="job-crew"><b>${esc(crew)}</b></div><label class="job-block"><span>${esc(t('Fault'))}</span><textarea readonly>${esc(order.problem_description || '')}</textarea></label><label class="job-block"><span>${esc(t('Action taken'))}</span><textarea name="corrective_action">${esc(order.corrective_action || '')}</textarea></label><div class="job-block"><span>${esc(t('Technician signature'))}</span><input value="${esc(getSavedUser()?.full_name || assigneeNames(order))}" readonly></div>${parts}<label class="job-block"><span>${esc(t('Result'))}</span><textarea name="verification">${esc(order.verification || '')}</textarea></label><label class="job-result-date"><span>${esc(t('Date'))}</span><input name="result_date" type="date" value="${esc(resultDate)}"></label>${actions}</form>`;
+    return `<form id="live-form" class="lube-paper job-order" data-order-id="${esc(order.work_order_id)}">${jobHead()}<div class="job-fields">${fields}</div><div class="job-crew"><b>${esc(crew)}</b></div><label class="job-block"><span>${esc(t('Fault'))}</span><textarea readonly>${esc(order.problem_description || '')}</textarea></label><label class="job-block"><span>${esc(t('Action taken'))}</span><textarea name="corrective_action">${esc(order.corrective_action || '')}</textarea></label><div class="job-block"><span>${esc(t('Technician signature'))}</span><input value="${esc(getSavedUser()?.full_name || assigneeNames(order))}" readonly></div>${parts}<label class="job-block"><span>${esc(t('Result'))}</span><textarea name="verification">${esc(order.verification || '')}</textarea></label>${approvalDateField(order)}${actions}</form>`;
   }
   const plants = openPlants().map((plant) => `<option value="${esc(plant.plant_id)}">${esc(plant.name)}</option>`).join('');
   const fields = [
@@ -1961,7 +1966,7 @@ function workOrderForm(order) {
     jobField('Repair order no.', `<input id="job-number" class="job-code" value="${esc(t('Created when saved'))}" readonly>`),
     jobField('Date', `<input name="planned_date" type="date" value="${today}" required>`),
   ].join('');
-  return `<form id="live-form" class="lube-paper job-order">${jobHead()}<div class="job-fields">${fields}</div><div class="job-crew"><label><input type="radio" name="crew_type" value="Company" checked> ${esc(t('Company maintenance team'))}</label><label><input type="radio" name="crew_type" value="External"> ${esc(t('External maintenance team'))}</label></div><label class="job-block"><span>${esc(t('Fault'))}</span><textarea name="problem_description" required></textarea></label><label class="job-block"><span>${esc(t('Action taken'))}</span><textarea name="corrective_action"></textarea></label><div class="job-block"><span>${esc(t('Technician signature'))}</span>${technicianChecks([])}</div>${parts}<label class="job-block"><span>${esc(t('Result'))}</span><textarea name="verification"></textarea></label><label class="job-result-date"><span>${esc(t('Date'))}</span><input name="result_date" type="date"></label>${actions}</form>`;
+  return `<form id="live-form" class="lube-paper job-order">${jobHead()}<div class="job-fields">${fields}</div><div class="job-crew"><label><input type="radio" name="crew_type" value="Company" checked> ${esc(t('Company maintenance team'))}</label><label><input type="radio" name="crew_type" value="External"> ${esc(t('External maintenance team'))}</label></div><label class="job-block"><span>${esc(t('Fault'))}</span><textarea name="problem_description" required></textarea></label><label class="job-block"><span>${esc(t('Action taken'))}</span><textarea name="corrective_action"></textarea></label><div class="job-block"><span>${esc(t('Technician signature'))}</span>${technicianChecks([])}</div>${parts}<label class="job-block"><span>${esc(t('Result'))}</span><textarea name="verification"></textarea></label>${approvalDateField()}${actions}</form>`;
 }
 
 function planForm() {
@@ -2118,7 +2123,6 @@ function bindForm() {
             corrective_action: data.corrective_action,
             verification: data.verification,
             parts_used: partsUsed,
-            closing_date: data.result_date ? `${data.result_date}T00:00:00` : null,
           }) });
         } else {
           const technicians = formData.getAll('assigned_technician_ids').filter(Boolean);
@@ -2139,7 +2143,6 @@ function bindForm() {
             parts_used: partsUsed,
             crew_type: data.crew_type,
             planned_date: data.planned_date,
-            closing_date: data.result_date ? `${data.result_date}T00:00:00` : null,
             assigned_technician_ids: technicians,
           }) });
         }

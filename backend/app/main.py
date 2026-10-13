@@ -2099,6 +2099,7 @@ def create_work_order(data:WOCreate,db:Session=Depends(get_db),u=Depends(role(*E
         raise HTTPException(404, 'Equipment not found')
     plant_id = equipment.plant_id if equipment else payload.get('manual_plant_id')
     year = (data.planned_date or date.today()).year
+    payload.pop('closing_date', None)
     wid = next_work_order_id(db, plant_id, year)
     if db.query(WorkOrder).filter_by(work_order_id=wid).first(): raise HTTPException(409,'Work Order ID exists')
     o=WorkOrder(work_order_id=wid,created_by=u.username,**payload); db.add(o); db.flush()
@@ -2249,6 +2250,10 @@ def accept_saved_job(db, actor, work_order):
         work_order.assigned_technician_id = technician_id
     sync_job_to_daily_report(db, actor, work_order, technician_id)
 
+def plant_now():
+    """The mill clock in Asia/Baghdad, so an approval after midnight is the right day."""
+    return datetime.now(timezone(timedelta(hours=3))).replace(tzinfo=None)
+
 @app.put('/work-orders/{wo_id}',response_model=WOOut)
 def update_work_order(wo_id:str,data:WOUpdate,db:Session=Depends(get_db),u=Depends(auth)):
     o=db.query(WorkOrder).filter_by(work_order_id=wo_id).first()
@@ -2256,8 +2261,9 @@ def update_work_order(wo_id:str,data:WOUpdate,db:Session=Depends(get_db),u=Depen
     if is_technician_account(u) and u.technician_id not in current_assignees(db, o):
         raise HTTPException(403, 'This work order is not assigned to you')
     payload=data.model_dump(exclude_unset=True)
+    payload.pop('closing_date', None)
     if is_technician_account(u):
-        allowed={'status','start_time','end_time','downtime_h','labor_hours','failure_mode','failure_cause','corrective_action','result','verification','parts_used','closing_date'}
+        allowed={'status','start_time','end_time','downtime_h','labor_hours','failure_mode','failure_cause','corrective_action','result','verification','parts_used'}
         if set(payload)-allowed: raise HTTPException(403,'Technician cannot modify this field')
         if payload.get('status')=='Closed': raise HTTPException(403,'Technician cannot close Work Order')
     elif u.role not in ENGINEER: raise HTTPException(403,'Read only account')
@@ -2267,7 +2273,10 @@ def update_work_order(wo_id:str,data:WOUpdate,db:Session=Depends(get_db),u=Depen
         wanted = requested_assignees(data, payload)
     old={k:getattr(o,k) for k in payload if hasattr(o,k)}
     for k,v in payload.items(): setattr(o,k,v)
-    if o.status=='Closed': o.closed_by=u.username; o.closing_date=datetime.utcnow()
+    if o.status=='Closed':
+        o.closed_by=u.username
+        if not o.closing_date:
+            o.closing_date=plant_now()
     if wanted is not None:
         apply_assignment(db, u, o, wanted, had_assignees)
     if is_technician_account(u):
@@ -3169,7 +3178,7 @@ def complete_work_orders_on_report(db, report, user, now):
         if not order.closed_by:
             order.closed_by = user.username if user else 'SYSTEM'
         if not order.closing_date:
-            order.closing_date = now
+            order.closing_date = plant_now()
         audit(
             db, user, 'COMPLETE', 'WorkOrder', order.work_order_id,
             old={'status': previous},
