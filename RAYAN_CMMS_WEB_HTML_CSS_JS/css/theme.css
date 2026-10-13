@@ -455,7 +455,7 @@ body .detail-button.job-open-detail .job-open-glyph{font-size:16px;line-height:1
   html[dir="rtl"] body .app .main-content{margin-inline-start:0}
 }
 @page{margin:0}
-@page lubesheet{size:A3 portrait;margin:12mm}
+@page lubesheet{size:A3 portrait;margin:8mm}
 @page jobsheet{size:A3 portrait;margin:12mm}
 #job-pdf{display:none}
 @media print{
@@ -476,34 +476,42 @@ body .detail-button.job-open-detail .job-open-glyph{font-size:16px;line-height:1
   body:has(.lube-paper) .workspace{display:block!important;margin:0!important;padding:0!important;min-height:0!important;height:auto!important;background:#fff!important;width:auto!important}
   body:has(.lube-paper) .lube-paper{margin:8mm!important;padding:0!important;border:0!important;box-shadow:none!important}
   body:has(.lube-sheet) .lube-sheet{page:lubesheet;width:auto!important;max-width:none!important;margin:0!important;padding:0!important;border:0!important;border-radius:0!important;box-shadow:none!important;background:#fff!important;print-color-adjust:exact;-webkit-print-color-adjust:exact}
-  body:has(.lube-sheet) .lube-sheet .lube-head{display:grid!important;grid-template-columns:minmax(0,1fr)!important;justify-items:center!important;text-align:center!important;gap:2mm;align-items:center;padding-bottom:3mm;border-bottom:0.6mm solid #2a5287}
-  body:has(.lube-sheet) .lube-sheet .lube-head img{width:78mm!important;max-width:78mm!important;height:auto}
-  body:has(.lube-sheet) .lube-sheet .lube-head h2{font-size:16pt;line-height:1.25}
-  body:has(.lube-sheet) .lube-sheet .lube-head p{font-size:12pt}
-  body:has(.lube-sheet) .lube-sheet .lube-head small{font-size:10pt}
+  body:has(.lube-sheet) .lube-sheet .lube-head{display:grid!important;grid-template-columns:42mm minmax(0,1fr) 48mm!important;gap:3mm;align-items:center;justify-items:stretch;text-align:initial;padding-bottom:2mm;border-bottom:0.5mm solid #2a5287}
+  body:has(.lube-sheet) .lube-sheet .lube-head img{width:40mm!important;max-width:40mm!important;height:auto;justify-self:start}
+  body:has(.lube-sheet) .lube-sheet .lube-head h2{font-size:12pt;line-height:1.2;margin:0}
+  body:has(.lube-sheet) .lube-sheet .lube-head p{font-size:9pt;margin-top:1mm;font-weight:800}
+  body:has(.lube-sheet) .lube-sheet .lube-head small{font-size:8pt;margin-top:0.5mm}
   body:has(.lube-sheet) .lube-sheet .lube-head h2,
   body:has(.lube-sheet) .lube-sheet .lube-head p,
   body:has(.lube-sheet) .lube-sheet .lube-head small{text-align:center!important}
-  body:has(.lube-sheet) .lube-sheet .lube-head dl{width:min(150mm,100%);margin-top:2mm}
-  body:has(.lube-sheet) .lube-sheet .lube-meta{display:grid!important;grid-template-columns:minmax(0,1fr)!important;gap:3mm 0;margin:5mm 0}
-  body:has(.lube-sheet) .lube-sheet .lube-meta label{display:grid!important;grid-template-columns:minmax(0,1fr)!important;gap:1mm;align-items:end}
+  body:has(.lube-sheet) .lube-sheet .lube-head dl{width:100%;margin:0;border:0.35mm solid #2a5287}
+  body:has(.lube-sheet) .lube-sheet .lube-head dl div{min-height:6mm;padding:0 2mm;font-size:8pt}
+  body:has(.lube-sheet) .lube-sheet .lube-meta{display:grid!important;grid-template-columns:1fr 1fr!important;gap:1.5mm 8mm;margin:2.5mm 0 2mm}
+  body:has(.lube-sheet) .lube-sheet .lube-meta label{display:grid!important;grid-template-columns:28mm minmax(0,1fr)!important;gap:2mm;align-items:end;font-size:9pt}
+  body:has(.lube-sheet) .lube-sheet .lube-meta input,
+  body:has(.lube-sheet) .lube-sheet .lube-meta select{height:5.5mm!important;font-size:9pt!important;padding:0 1mm!important}
   body:has(.lube-sheet) .lube-sheet .lube-table{width:100%!important;min-width:0!important;table-layout:fixed}
   body:has(.lube-sheet) .lube-sheet .lube-table th,
-  body:has(.lube-sheet) .lube-sheet .lube-table td{border:0.3mm solid #2a5287;font-size:10pt;white-space:normal;overflow-wrap:anywhere}
-  body:has(.lube-sheet) .lube-sheet .lube-table th{height:12mm;background:#e7f0ff!important;color:#102d60}
-  body:has(.lube-sheet) .lube-sheet .lube-table td{height:11mm}
-  body:has(.lube-sheet) .lube-sheet .lube-table th:nth-child(1){width:7%}
-  body:has(.lube-sheet) .lube-sheet .lube-table th:nth-child(2){width:20%}
-  body:has(.lube-sheet) .lube-sheet .lube-table th:nth-child(3){width:14%}
-  body:has(.lube-sheet) .lube-sheet .lube-table th:nth-child(4){width:14%}
-  body:has(.lube-sheet) .lube-sheet .lube-table th:nth-child(5){width:10%}
+  body:has(.lube-sheet) .lube-sheet .lube-table td{border:0.3mm solid #2a5287;font-size:8pt;padding:0.4mm;white-space:normal;overflow-wrap:anywhere;vertical-align:top}
+  body:has(.lube-sheet) .lube-sheet .lube-table th{height:7mm;background:#e7f0ff!important;color:#102d60;vertical-align:middle}
+  body:has(.lube-sheet) .lube-sheet .lube-table td{height:auto;min-height:0}
+  body:has(.lube-sheet) .lube-sheet .lube-table th:nth-child(1){width:5%}
+  body:has(.lube-sheet) .lube-sheet .lube-table th:nth-child(2){width:22%}
+  body:has(.lube-sheet) .lube-sheet .lube-table th:nth-child(3){width:13%}
+  body:has(.lube-sheet) .lube-sheet .lube-table th:nth-child(4){width:13%}
+  body:has(.lube-sheet) .lube-sheet .lube-table th:nth-child(5){width:8%}
   body:has(.lube-sheet) .lube-sheet .lube-table th:nth-child(6){width:18%}
-  body:has(.lube-sheet) .lube-sheet .lube-table th:nth-child(7){width:17%}
+  body:has(.lube-sheet) .lube-sheet .lube-table th:nth-child(7){width:21%}
   body:has(.lube-sheet) .lube-sheet input,
-  body:has(.lube-sheet) .lube-sheet select{border:0!important;border-bottom:0.3mm solid #8eabda!important;background:transparent!important;color:#102d60!important;appearance:none;-webkit-appearance:none}
+  body:has(.lube-sheet) .lube-sheet select{border:0!important;border-bottom:0.25mm solid #8eabda!important;background:transparent!important;color:#102d60!important;appearance:none;-webkit-appearance:none}
   body:has(.lube-sheet) .lube-sheet .lube-table input,
-  body:has(.lube-sheet) .lube-sheet .lube-table select{border-bottom:0!important;height:6mm}
-  body:has(.lube-sheet) .lube-sheet .lube-foot{display:flex;justify-content:space-between;margin-top:4mm;font-size:10pt}
+  body:has(.lube-sheet) .lube-sheet .lube-table select{border-bottom:0!important;height:4.2mm!important;min-height:0!important;padding:0 1mm!important;font-size:7.5pt!important;line-height:1.1!important;margin:0!important}
+  body:has(.lube-sheet) .lube-sheet .lube-machine{display:grid!important;grid-template-columns:1fr 1fr;gap:0.3mm;padding:0.4mm}
+  body:has(.lube-sheet) .lube-sheet .lube-machine input[data-field="equipment_code"],
+  body:has(.lube-sheet) .lube-sheet .lube-machine input[data-field="equipment_name"]{grid-column:1 / -1}
+  body:has(.lube-sheet) .lube-sheet .lube-type{padding:0.4mm}
+  body:has(.lube-sheet) .lube-sheet .lube-order{font-size:7pt;padding:0 1mm}
+  body:has(.lube-sheet) .lube-sheet .lube-foot{display:flex;justify-content:space-between;margin-top:2mm;font-size:8pt}
   body:has(.machine-log) .equipment-list,
   body:has(.machine-log) .tabs,
   body:has(.machine-log) .metric-grid{display:none!important}
