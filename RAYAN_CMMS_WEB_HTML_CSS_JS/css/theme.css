@@ -168,6 +168,7 @@ body .workspace.due-board{grid-template-columns:minmax(0,1fr)}
   width:100%;min-width:0;height:36px;padding-inline:8px;color:#f4f8ff;background:#071428;border:1px solid #2c528c;border-radius:8px;
 }
 .annual-bar .detail-button{width:auto;height:36px;margin:0}
+.annual-bar .detail-button.primary{background:#1269f3;border-color:#3b82f6;color:#fff}
 .annual-bar .detail-button:disabled{opacity:.45;cursor:default}
 .annual-scroll{overflow:auto;max-width:100%;border:1px solid #23406e;border-radius:12px}
 .annual-sheet{border-collapse:separate;border-spacing:0;min-width:1480px;font-size:11px}
