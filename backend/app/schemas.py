@@ -500,6 +500,8 @@ class PushSubscribe(BaseModel):
 class LubricationLineIn(BaseModel):
     equipment_code: str = ''
     equipment_name: str = ''
+    plant_id: str | None = None
+    line_id: str | None = None
     component: str = ''
     quantity: str = ''
     lubricant_name: str = ''

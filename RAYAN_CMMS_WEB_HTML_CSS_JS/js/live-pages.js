@@ -115,7 +115,10 @@ function bindEquipmentCode(codeInput, nameInput) {
       lineInput.dataset.resolved = '';
       lineInput.value = lineNumber;
     }
-    if (row) showDailyLineName(row);
+    if (row) {
+      showDailyLineName(row);
+      fillLubePlace(row, found.plant_id || '', found.line_id || '');
+    }
     const plant = document.getElementById('daily-plant');
     if (plant && !plant.value && found.plant_id) plant.value = found.plant_id;
     return true;
@@ -130,7 +133,7 @@ function bindEquipmentCode(codeInput, nameInput) {
       const match = (data.matches || [])[0];
       if (!match) return;
       applyKnown(match);
-      if (!equipmentByCode(match.equipment_id)) store.equipment.push({ equipment_id: match.equipment_id, name: match.equipment_name, plant_id: match.plant_id });
+      if (!equipmentByCode(match.equipment_id)) store.equipment.push({ equipment_id: match.equipment_id, name: match.equipment_name, plant_id: match.plant_id, line_id: match.line_id });
     } catch (exception) {
       /* an unknown number keeps the name typed on the task */
     }
@@ -140,6 +143,34 @@ function bindEquipmentCode(codeInput, nameInput) {
     timer = window.setTimeout(run, 250);
   });
   codeInput.addEventListener('change', run);
+}
+
+function lubeLineOptions(plantId, selected = '') {
+  const lines = (store.lines || []).filter((line) => !plantId || line.plant_id === plantId);
+  return `<option value="">${esc(t(plantId ? 'Select line number' : 'Select a plant first'))}</option>${lines.map((line) => `<option value="${esc(line.line_id)}"${line.line_id === selected ? ' selected' : ''}>${esc(jobLineLabel(line))}</option>`).join('')}`;
+}
+
+function fillLubePlace(row, plantId = '', lineId = '') {
+  const plantSelect = row?.querySelector('[data-field="plant_id"]');
+  const lineSelect = row?.querySelector('[data-field="line_id"]');
+  if (!plantSelect || !lineSelect) return;
+  if (plantId) plantSelect.value = plantId;
+  lineSelect.innerHTML = lubeLineOptions(plantSelect.value, lineId || lineSelect.value);
+  if (lineId) lineSelect.value = lineId;
+}
+
+function bindLubeRow(row) {
+  const code = row.querySelector('[data-field="equipment_code"]');
+  const name = row.querySelector('[data-field="equipment_name"]');
+  if (code && name) bindEquipmentCode(code, name);
+  const plantSelect = row.querySelector('[data-field="plant_id"]');
+  const lineSelect = row.querySelector('[data-field="line_id"]');
+  plantSelect?.addEventListener('change', () => {
+    lineSelect.innerHTML = lubeLineOptions(plantSelect.value, '');
+  });
+  const found = matchEquipment(code?.value) || equipmentByCode(code?.value);
+  if (found) fillLubePlace(row, found.plant_id || plantSelect?.value || '', found.line_id || lineSelect?.value || '');
+  else if (plantSelect) lineSelect.innerHTML = lubeLineOptions(plantSelect.value, lineSelect.value);
 }
 
 function toast(message) {
@@ -3202,19 +3233,25 @@ function lubeTypeCell(line) {
 
 function lubeRow(line = {}, index = 0) {
   const field = (name, value, placeholder) => `<input data-field="${name}" value="${esc(value || '')}" placeholder="${esc(t(placeholder))}">`;
-  return `<tr><td class="lube-no">${index + 1}</td><td class="lube-machine">${field('equipment_code', line.equipment_code, 'Equipment number')}${field('equipment_name', line.equipment_name, 'Equipment name')}</td>${lubeTypeCell(line)}<td>${field('component', line.component, 'Component')}</td><td>${field('quantity', line.quantity, 'Qty')}</td><td>${field('lubricant_name', line.lubricant_name, 'Oil or grease name')}</td><td>${field('notes', line.notes, 'Remarks')}</td></tr>`;
+  const plantId = line.plant_id || '';
+  const lineId = line.line_id || '';
+  const plants = `<select data-field="plant_id"><option value="">${esc(t('Select plant'))}</option>${openPlants(plantId).map((plant) => `<option value="${esc(plant.plant_id)}"${plant.plant_id === plantId ? ' selected' : ''}>${esc(plant.name)}</option>`).join('')}</select>`;
+  const lines = `<select data-field="line_id">${lubeLineOptions(plantId, lineId)}</select>`;
+  return `<tr><td class="lube-no">${index + 1}</td><td class="lube-machine">${field('equipment_code', line.equipment_code, 'Equipment number')}${field('equipment_name', line.equipment_name, 'Equipment name')}${plants}${lines}</td>${lubeTypeCell(line)}<td>${field('component', line.component, 'Component')}</td><td>${field('quantity', line.quantity, 'Qty')}</td><td>${field('lubricant_name', line.lubricant_name, 'Oil or grease name')}</td><td>${field('notes', line.notes, 'Remarks')}</td></tr>`;
 }
 
 function lubeLinesFromForm() {
   return [...document.querySelectorAll('#lube-rows tr')].map((row) => ({
     equipment_code: row.querySelector('[data-field="equipment_code"]').value.trim(),
     equipment_name: row.querySelector('[data-field="equipment_name"]').value.trim(),
+    plant_id: row.querySelector('[data-field="plant_id"]')?.value || null,
+    line_id: row.querySelector('[data-field="line_id"]')?.value || null,
     component: row.querySelector('[data-field="component"]').value.trim(),
     quantity: row.querySelector('[data-field="quantity"]').value.trim(),
     lubricant_name: row.querySelector('[data-field="lubricant_name"]').value.trim(),
     notes: row.querySelector('[data-field="notes"]').value.trim(),
     work_type: row.querySelector('[data-field="work_type"]').value,
-  })).filter((line) => Object.values(line).some(Boolean));
+  })).filter((line) => [line.equipment_code, line.equipment_name, line.plant_id, line.line_id, line.component, line.quantity, line.lubricant_name, line.notes, line.work_type].some(Boolean));
 }
 
 async function saveLubrication() {
@@ -3270,11 +3307,7 @@ async function drawLubrication() {
   document.getElementById('workspace').className = 'workspace lube-board';
   document.getElementById('workspace').innerHTML = `<aside class="panel lube-list"><div class="lube-list-head"><b>${esc(t('Reports'))}</b><button type="button" class="detail-button" id="lube-new">${esc(t('New report'))}</button></div>${list}</aside><form id="lube-form" class="lube-paper lube-sheet"><header class="lube-head"><img src="logo-rayan.png?v=2" alt="Rayan"><div><h2>${esc(t('Daily report for the lubrication technician'))}</h2><p>${esc(t('Oil and grease change log'))}</p><small>${esc(t('Mechanical Maintenance Department'))}</small></div><dl><div><dt>${esc(t('Form No.:'))}</dt><dd>${esc(formNo('lubrication'))}</dd></div><div><dt>${esc(t('Report No.'))}</dt><dd>${esc(current?.report_id || t('New'))}</dd></div></dl></header><div class="lube-meta"><label><span>${esc(t('Shift'))}</span><select id="lube-shift">${LUBE_SHIFTS.map((shift) => `<option value="${esc(shift)}"${shift === (current?.shift || LUBE_SHIFTS[0]) ? ' selected' : ''}>${esc(t(shift))}</option>`).join('')}</select></label><label><span>${esc(t("Technician's name"))}</span>${techField}</label><label><span>${esc(t('Day'))}</span><input id="lube-day" value="${esc(t(current?.day_name || lubeDayName(reportDate)))}" readonly></label><label><span>${esc(t('Date'))}</span><input id="lube-date" type="date" value="${esc(reportDate)}" required></label></div><table class="lube-table"><thead><tr><th>${esc(t('Seq.'))}</th><th>${esc(t('Machine'))}</th><th>${esc(t('Work type'))}</th><th>${esc(t('Component'))}</th><th>${esc(t('Qty'))}</th><th>${esc(t('Oil or grease name'))}</th><th>${esc(t('Remarks'))}</th></tr></thead><tbody id="lube-rows">${lines.map(lubeRow).join('')}</tbody></table><div class="lube-foot"><span>PMF 17-05 rev.a</span><span>${esc(t('Mechanical Maintenance Department'))}</span></div><p class="lube-help no-print">${esc(t('An equipment number that is not registered is sent to the maintenance engineer for approval.'))}</p><p id="lube-error" class="form-error"></p><div class="lube-actions lube-form-actions no-print"><button type="button" id="lube-add">${esc(t('Add row'))}</button>${viewer ? '' : `<button type="submit" id="lube-save" class="detail-button primary">${esc(t(isLubricationTechnician() ? 'Send report' : 'Save report'))}</button>`}<button type="button" id="lube-print">${esc(t('Print'))}</button>${current && canMaintain() ? `<button type="button" class="detail-button danger" data-delete="/lubrication-reports" data-delete-id="${esc(current.report_id)}">${esc(t('Delete'))}</button>` : ''}</div></form>`;
   if (viewer) document.querySelectorAll('#lube-form input, #lube-form select, #lube-add').forEach((node) => { node.disabled = true; });
-  document.querySelectorAll('#lube-rows tr').forEach((row) => {
-    const code = row.querySelector('[data-field="equipment_code"]');
-    const name = row.querySelector('[data-field="equipment_name"]');
-    if (code && name) bindEquipmentCode(code, name);
-  });
+  document.querySelectorAll('#lube-rows tr').forEach(bindLubeRow);
   document.getElementById('lube-date')?.addEventListener('change', (event) => {
     document.getElementById('lube-day').value = t(lubeDayName(event.target.value));
     const technicianId = isTechnician() ? getSavedUser()?.technician_id : document.getElementById('lube-tech')?.value;
@@ -3289,8 +3322,7 @@ async function drawLubrication() {
   document.getElementById('lube-add')?.addEventListener('click', () => {
     const body = document.getElementById('lube-rows');
     body.insertAdjacentHTML('beforeend', lubeRow({}, body.children.length));
-    const row = body.lastElementChild;
-    bindEquipmentCode(row.querySelector('[data-field="equipment_code"]'), row.querySelector('[data-field="equipment_name"]'));
+    bindLubeRow(body.lastElementChild);
   });
   document.getElementById('lube-print')?.addEventListener('click', () => window.print());
   bindDeletes();

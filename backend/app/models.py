@@ -560,6 +560,8 @@ class LubricationLine(Base):
     sort_order: Mapped[int] = mapped_column(Integer, default=0)
     equipment_code: Mapped[str] = mapped_column(String(50), default='')
     equipment_name: Mapped[str] = mapped_column(String(150), default='')
+    plant_id: Mapped[str | None] = mapped_column(String(50), nullable=True, index=True)
+    line_id: Mapped[str | None] = mapped_column(String(50), nullable=True, index=True)
     component: Mapped[str] = mapped_column(String(150), default='')
     quantity: Mapped[str] = mapped_column(String(40), default='')
     lubricant_name: Mapped[str] = mapped_column(String(150), default='')

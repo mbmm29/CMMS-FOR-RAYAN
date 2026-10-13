@@ -214,6 +214,8 @@ def ensure_additive_columns():
             additions = {
                 'work_type': "VARCHAR(30) DEFAULT ''",
                 'work_order_id': 'VARCHAR(60)',
+                'plant_id': 'VARCHAR(50)',
+                'line_id': 'VARCHAR(50)',
             }
             with engine.begin() as conn:
                 for name, sql_type in additions.items():
@@ -4319,6 +4321,8 @@ def lube_payload(db: Session, row: LubricationReport):
             {
                 'equipment_code': line.equipment_code,
                 'equipment_name': line.equipment_name,
+                'plant_id': line.plant_id,
+                'line_id': line.line_id,
                 'component': line.component,
                 'quantity': line.quantity,
                 'lubricant_name': line.lubricant_name,
@@ -4377,13 +4381,14 @@ def settle_oil_change_pm(db: Session, order: WorkOrder, done_on: date, code: str
     order.pm_id = plan.pm_id
 
 
-def record_oil_change(db, user, report, technician_id, equipment, code, name, component, quantity, lubricant, notes, existing_order_id):
+def record_oil_change(db, user, report, technician_id, equipment, code, name, component, quantity, lubricant, notes, existing_order_id, plant_id=None, line_id=None):
     """Record a finished oil change, its work order, and the machine history."""
     details = ' — '.join(part for part in (lubricant, quantity, component, notes) if part)
     text = f'Oil change: {details}' if details else 'Oil change'
     order = db.query(WorkOrder).filter_by(work_order_id=existing_order_id).first() if existing_order_id else None
     if order is None:
-        plant_id = equipment.plant_id if equipment and equipment.plant_id else getattr(report, 'plant_id', None)
+        plant_id = (equipment.plant_id if equipment and equipment.plant_id else None) or plant_id or getattr(report, 'plant_id', None)
+        line_id = (equipment.line_id if equipment and equipment.line_id else None) or line_id
         work_order_id = next_work_order_id(db, plant_id, report.report_date.year)
         done_at = datetime.combine(report.report_date, datetime.min.time())
         order = WorkOrder(
@@ -4393,7 +4398,7 @@ def record_oil_change(db, user, report, technician_id, equipment, code, name, co
             manual_equipment_code=None if equipment else code,
             manual_equipment_name=None if equipment else name,
             manual_plant_id=None if equipment else plant_id,
-            manual_line_id=equipment.line_id if equipment else None,
+            manual_line_id=None if equipment else line_id,
             priority='Medium',
             status='Completed',
             problem_description=text,
@@ -4529,7 +4534,9 @@ def save_lubrication_report(data: LubricationSave, db: Session = Depends(get_db)
         lubricant = line.lubricant_name.strip()
         notes = line.notes.strip()
         work_type = line.work_type.strip()
-        if not any((code, name, component, quantity, lubricant, notes, work_type)):
+        plant_id = (line.plant_id or '').strip() or None
+        line_id = (line.line_id or '').strip() or None
+        if not any((code, name, component, quantity, lubricant, notes, work_type, plant_id, line_id)):
             continue
         if work_type not in LUBE_WORK_TYPES:
             raise HTTPException(400, 'Choose the work type')
@@ -4539,23 +4546,42 @@ def save_lubrication_report(data: LubricationSave, db: Session = Depends(get_db)
         if found:
             code = found.equipment_id
             name = found.name
+            if not plant_id and found.plant_id:
+                plant_id = found.plant_id
+            if not line_id and found.line_id:
+                line_id = found.line_id
         elif code:
             if not name:
                 raise HTTPException(400, 'Enter the equipment name so the engineer can approve it.')
             if propose_lubrication_equipment(db, row, technician_id, code, name):
                 proposed.append(code)
+        if plant_id and not db.query(Plant).filter_by(plant_id=plant_id).first():
+            raise HTTPException(400, 'Select a plant')
+        if line_id:
+            plant_line = db.query(Line).filter_by(line_id=line_id).first()
+            if not plant_line:
+                raise HTTPException(400, 'Select a line')
+            if plant_id and plant_line.plant_id != plant_id:
+                raise HTTPException(400, 'The line number does not belong to the selected plant')
+            if not plant_id:
+                plant_id = plant_line.plant_id
         work_order_id = None
         if work_type == 'Oil change':
+            if not plant_id and not (found and found.plant_id):
+                raise HTTPException(400, 'Select a plant before issuing the work order.')
             pooled = reuse.get(code.lower(), [])
             existing_order = pooled.pop(0) if pooled else None
             work_order_id = record_oil_change(
                 db, u, row, technician_id, found, code, name, component, quantity, lubricant, notes, existing_order,
+                plant_id=plant_id, line_id=line_id,
             )
         db.add(LubricationLine(
             report_id=row.id,
             sort_order=kept,
             equipment_code=code[:50],
             equipment_name=name[:150],
+            plant_id=plant_id,
+            line_id=line_id,
             component=component[:150],
             quantity=quantity[:40],
             lubricant_name=lubricant[:150],
