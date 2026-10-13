@@ -225,7 +225,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     if (!sheet) return;
     layout?.classList.add('reviewing');
     sheet.innerHTML = `<div class="review-bar no-print"><button type="button" id="review-close">${escapeHtml(t('Back to reports'))}</button><button type="button" class="decision print" id="review-print">${escapeHtml(t('Print'))}</button>${remove}</div>
-      <form class="lube-paper" id="review-paper">
+      <form class="lube-paper lube-sheet" id="review-paper">
         <header class="lube-head"><img src="logo-rayan.png?v=2" alt="Rayan"><div><h2>${escapeHtml(t('Daily report for the lubrication technician'))}</h2><p>${escapeHtml(t('Approved'))}</p><small>${escapeHtml(t('Mechanical Maintenance Department'))}</small></div><dl><div><dt>${escapeHtml(t('Form No.:'))}</dt><dd>${escapeHtml(state.lubeFormNo || 'PMF 17-05 rev.a')}</dd></div><div><dt>${escapeHtml(t('Report No.'))}</dt><dd>${escapeHtml(detail.report_id || report.id)}</dd></div></dl></header>
         <div class="lube-meta">
           <label><span>${escapeHtml(t('Shift'))}</span><input value="${escapeHtml(t(detail.shift || ''))}" readonly></label>
