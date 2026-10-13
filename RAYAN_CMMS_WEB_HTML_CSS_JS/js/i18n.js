@@ -783,6 +783,8 @@ const CMMS_AR = {
   'The Excel file must follow the SOP form layout.': 'يجب أن يطابق ملف الإكسل نموذج الـ SOP.',
   'Each machine has one SOP only. Publish it by importing one Excel file.': 'لكل معدة SOP واحد فقط. انشره باستيراد ملف إكسل واحد.',
   'Select a machine, then publish one SOP Excel file for it.': 'اختر معدة ثم انشر لها ملف SOP واحد بصيغة إكسل.',
+  'Select any machine to open its published SOP.': 'اختر أي معدة لفتح SOP المنشور الخاص بها.',
+  'Open any machine SOP': 'فتح SOP لأي معدة',
   'Publish SOP file': 'نشر ملف SOP',
   'Replace SOP file': 'استبدال ملف SOP',
   'Delete SOP': 'حذف SOP',

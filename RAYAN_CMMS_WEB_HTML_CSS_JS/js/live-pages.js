@@ -745,7 +745,14 @@ function tabsHtml(labels) {
 }
 
 function assetList(selectedCode) {
-  const items = visibleEquipment();
+  const plants = selectedPlantIds();
+  const items = (store.equipment || []).filter((item) => {
+    if (plants.length && !plants.includes(item.plant_id)) return false;
+    if (!plants.length && ui.plantId && item.plant_id !== ui.plantId) return false;
+    if (ui.lineId && item.line_id !== ui.lineId) return false;
+    if (ui.sectionId && item.section_id !== ui.sectionId) return false;
+    return true;
+  });
   return `<aside class="equipment-list"><h3>${esc(t('Select Equipment'))}</h3><label class="mini-search">⌕ <input id="asset-search" placeholder="${esc(t('Search equipment...'))}"></label>${items.map((item) => `<div class="asset${item.equipment_id === selectedCode ? ' selected' : ''}" data-asset="${esc(item.equipment_id)}"><span class="asset-icon">⚙</span><span><b>${esc(item.equipment_id)}</b><small>${esc(item.name)}</small></span></div>`).join('') || `<p class="live-note">${esc(t('No equipment'))}</p>`}</aside>`;
 }
 
@@ -1700,6 +1707,13 @@ function sopManualHtml(manual) {
   if (!doc || (!doc.title && !(doc.steps || []).length && !(doc.safety || []).length)) return '';
   const safetyHeaders = doc.safety_headers || {};
   const stepsHeaders = doc.steps_headers || {};
+  const safetyDetail = safetyHeaders.detail || t('Detailed standards');
+  const safetyDesc = safetyHeaders.description || t('Requirement description');
+  const safetyCat = safetyHeaders.category || t('Category');
+  const stepAction = stepsHeaders.action || t('Procedure and steps');
+  const stepStandard = stepsHeaders.standard || t('Standards and measurements');
+  const stepNotes = stepsHeaders.notes || t('Safety and quality notes');
+  const stepPhase = stepsHeaders.phase || t('Main phase');
   const meta = `
     <div class="sop-manual-section">
       <div class="sop-manual-section-title">${esc(doc.meta_heading || t('Document and equipment information'))}</div>
@@ -1710,40 +1724,40 @@ function sopManualHtml(manual) {
       </div>
     </div>`;
   const safetyRows = (doc.safety || []).map((row) => `<tr>
-      <td>${esc(row.detail || '—')}</td>
-      <td>${esc(row.description || '—')}</td>
-      <td>${esc(row.category || '—')}</td>
-    </tr>`).join('') || `<tr><td colspan="3">${esc(t('No records yet'))}</td></tr>`;
+      <td data-label="${esc(safetyDetail)}">${esc(row.detail || '—')}</td>
+      <td data-label="${esc(safetyDesc)}">${esc(row.description || '—')}</td>
+      <td data-label="${esc(safetyCat)}">${esc(row.category || '—')}</td>
+    </tr>`).join('') || `<tr><td data-label="${esc(t('Category'))}" colspan="3">${esc(t('No records yet'))}</td></tr>`;
   const safety = `
     <div class="sop-manual-section">
       <div class="sop-manual-section-title">${esc(doc.safety_heading || t('Safety, LOTO and tools'))}</div>
       <div class="sop-manual-table-wrap">
         <table class="sop-manual-table">
           <thead><tr>
-            <th>${esc(safetyHeaders.detail || t('Detailed standards'))}</th>
-            <th>${esc(safetyHeaders.description || t('Requirement description'))}</th>
-            <th>${esc(safetyHeaders.category || t('Category'))}</th>
+            <th>${esc(safetyDetail)}</th>
+            <th>${esc(safetyDesc)}</th>
+            <th>${esc(safetyCat)}</th>
           </tr></thead>
           <tbody>${safetyRows}</tbody>
         </table>
       </div>
     </div>`;
   const stepRows = (doc.steps || []).map((row) => `<tr>
-      <td>${esc(row.action || '—')}</td>
-      <td>${esc(row.standard || '—')}</td>
-      <td>${esc(row.notes || '—')}</td>
-      <td>${esc(row.phase || '—')}</td>
-    </tr>`).join('') || `<tr><td colspan="4">${esc(t('No records yet'))}</td></tr>`;
+      <td data-label="${esc(stepAction)}">${esc(row.action || '—')}</td>
+      <td data-label="${esc(stepStandard)}">${esc(row.standard || '—')}</td>
+      <td data-label="${esc(stepNotes)}">${esc(row.notes || '—')}</td>
+      <td data-label="${esc(stepPhase)}">${esc(row.phase || '—')}</td>
+    </tr>`).join('') || `<tr><td data-label="${esc(stepPhase)}" colspan="4">${esc(t('No records yet'))}</td></tr>`;
   const steps = `
     <div class="sop-manual-section">
       <div class="sop-manual-section-title">${esc(doc.steps_heading || t('Detailed maintenance steps'))}</div>
       <div class="sop-manual-table-wrap">
         <table class="sop-manual-table sop-manual-steps">
           <thead><tr>
-            <th>${esc(stepsHeaders.action || t('Procedure and steps'))}</th>
-            <th>${esc(stepsHeaders.standard || t('Standards and measurements'))}</th>
-            <th>${esc(stepsHeaders.notes || t('Safety and quality notes'))}</th>
-            <th>${esc(stepsHeaders.phase || t('Main phase'))}</th>
+            <th>${esc(stepAction)}</th>
+            <th>${esc(stepStandard)}</th>
+            <th>${esc(stepNotes)}</th>
+            <th>${esc(stepPhase)}</th>
           </tr></thead>
           <tbody>${stepRows}</tbody>
         </table>
@@ -1766,9 +1780,12 @@ function sopParagraphEditor(equipment, manual) {
   const write = locked
     ? ''
     : `<button type="button" id="sop-import" class="detail-button primary">${esc(t(hasManual ? 'Replace SOP file' : 'Publish SOP file'))}</button><input id="sop-import-file" type="file" accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" hidden>${hasManual ? `<button type="button" class="detail-button danger" data-delete="/equipment" data-delete-id="${esc(equipment.equipment_id)}" data-delete-suffix="/sop" data-delete-note="Delete this equipment SOP? The published file will be removed.">${esc(t('Delete SOP'))}</button>` : ''}`;
-  const empty = `<p class="kpi-note">${esc(t('Each machine has one SOP only. Publish it by importing one Excel file.'))}</p>`;
+  const emptyNote = isTechnician()
+    ? t('Select any machine to open its published SOP.')
+    : t('Each machine has one SOP only. Publish it by importing one Excel file.');
+  const empty = `<p class="kpi-note">${esc(emptyNote)}</p>`;
   const viewer = hasManual
-    ? `${sopManualHtml(manual)}<p class="kpi-note">${esc(t('This operating manual opens inside the site in the same form as the imported Excel file.'))}</p>`
+    ? `${sopManualHtml(manual)}${locked ? '' : `<p class="kpi-note">${esc(t('This operating manual opens inside the site in the same form as the imported Excel file.'))}</p>`}`
     : empty;
   return `<section class="sop-sheet">
     <div class="sop-sheet-bar">
@@ -1823,6 +1840,7 @@ function oneSopPerEquipment(list) {
 async function drawSops() {
   const chosen = ui.equipmentId;
   const equipment = equipmentOf(chosen);
+  const techView = isTechnician();
   let manual = null;
   if (chosen) {
     try {
@@ -1832,42 +1850,58 @@ async function drawSops() {
       manual = null;
     }
   }
-  const all = oneSopPerEquipment(scoped(store.sops));
+  // Technicians may open the published SOP for every machine.
+  const all = oneSopPerEquipment(store.sops || []);
+  const machines = store.equipment || [];
   const published = all.filter((sop) => /Published|Approved/i.test(sop.status || ''));
-  const missing = Math.max(0, visibleEquipment().length - published.length);
+  const missing = Math.max(0, machines.length - published.length);
   const rows = all.filter((sop) => {
     if (ui.tab === 'Published') return /Published|Approved/i.test(sop.status || '');
-    if (ui.tab === 'Missing') return false;
     return true;
   });
   const selected = chosen
     ? rows.find((sop) => sop.equipment_id === chosen) || all.find((sop) => sop.equipment_id === chosen)
     : (rows.find((sop) => sop.sop_id === ui.rowKey) || rows[0]);
-  document.getElementById('metric-grid').innerHTML = metrics([
-    ['Equipment', String(visibleEquipment().length), '⚙', 'blue', ''],
-    ['Published SOPs', String(published.length), '✓', 'green', ''],
-    ['Without SOP', String(missing), '!', 'orange', ''],
-    ['One SOP per machine', '1', '▤', 'purple', ''],
-    ['File publish only', 'xlsx', '◈', 'blue', ''],
-    ['Compliance', `${visibleEquipment().length ? numberText((published.length / visibleEquipment().length) * 100) : 0}%`, '◈', 'green', ''],
-  ]);
-  const body = rows.map((sop) => `<tr data-row="${esc(sop.sop_id)}" class="${selected && selected.sop_id === sop.sop_id ? 'selected' : ''}">${cell(esc(sop.sop_id), true)}${cell(esc(sop.title))}${cell(esc(sop.equipment_id || '—'))}${cell(esc(sop.revision || '—'))}${cell(liveBadge(sop.status))}${cell(esc(sop.document_path || '—'))}</tr>`);
-  let detail = selected
-    ? detailPanel('SOP Details', selected.status || '—', selected.sop_id || '—', selected.title || '', [
-      ['Equipment', selected.equipment_id], ['Category', selected.sop_type], ['Revision', selected.revision],
-      ['Effective', fmtDate(selected.effective_date)], ['Imported file', selected.document_path || '—'],
+  document.getElementById('metric-grid').innerHTML = techView
+    ? metrics([
+      ['Equipment', String(machines.length), '⚙', 'blue', ''],
+      ['Published SOPs', String(published.length), '✓', 'green', ''],
+      ['Open any machine SOP', String(published.length), '▤', 'purple', ''],
     ])
-    : `<aside class="panel detail"><h2>${esc(t('SOP Details'))}</h2><p class="live-note">${esc(t('Select a machine, then publish one SOP Excel file for it.'))}</p></aside>`;
+    : metrics([
+      ['Equipment', String(machines.length), '⚙', 'blue', ''],
+      ['Published SOPs', String(published.length), '✓', 'green', ''],
+      ['Without SOP', String(missing), '!', 'orange', ''],
+      ['One SOP per machine', '1', '▤', 'purple', ''],
+      ['File publish only', 'xlsx', '◈', 'blue', ''],
+      ['Compliance', `${machines.length ? numberText((published.length / machines.length) * 100) : 0}%`, '◈', 'green', ''],
+    ]);
+  const pickNote = techView
+    ? t('Select any machine to open its published SOP.')
+    : t('Select a machine, then publish one SOP Excel file for it.');
   const sheet = equipment
     ? sopParagraphEditor(equipment, manual)
-    : `<p class="live-note">${esc(t('Select a machine, then publish one SOP Excel file for it.'))}</p>`;
-  document.getElementById('workspace').className = 'workspace';
-  document.getElementById('workspace').innerHTML = `<section class="panel"><div class="split">${assetList(chosen)}<div class="asset-view">${tabsHtml(['All SOPs', 'Published'])}${tableShell(['SOP Code', 'SOP Title', 'Equipment', 'Version', 'Status', 'Imported file'], body, shown(rows.length, all.length, 'SOPs'))}</div></div>${sheet}</section>${detail}`;
-  if (canMaintain() && selected?.equipment_id) {
+    : `<p class="live-note">${esc(pickNote)}</p>`;
+  let markup;
+  if (techView) {
+    markup = `<section class="panel sop-tech-panel"><div class="sop-tech-layout">${assetList(chosen)}<div class="sop-tech-view">${sheet}</div></div></section>`;
+  } else {
+    const body = rows.map((sop) => `<tr data-row="${esc(sop.sop_id)}" class="${selected && selected.sop_id === sop.sop_id ? 'selected' : ''}">${cell(esc(sop.sop_id), true)}${cell(esc(sop.title))}${cell(esc(sop.equipment_id || '—'))}${cell(esc(sop.revision || '—'))}${cell(liveBadge(sop.status))}${cell(esc(sop.document_path || '—'))}</tr>`);
+    let detail = selected
+      ? detailPanel('SOP Details', selected.status || '—', selected.sop_id || '—', selected.title || '', [
+        ['Equipment', selected.equipment_id], ['Category', selected.sop_type], ['Revision', selected.revision],
+        ['Effective', fmtDate(selected.effective_date)], ['Imported file', selected.document_path || '—'],
+      ])
+      : `<aside class="panel detail"><h2>${esc(t('SOP Details'))}</h2><p class="live-note">${esc(pickNote)}</p></aside>`;
+    markup = `<section class="panel"><div class="split">${assetList(chosen)}<div class="asset-view">${tabsHtml(['All SOPs', 'Published'])}${tableShell(['SOP Code', 'SOP Title', 'Equipment', 'Version', 'Status', 'Imported file'], body, shown(rows.length, all.length, 'SOPs'))}</div></div>${sheet}</section>${detail}`;
+  }
+  document.getElementById('workspace').className = 'workspace sop-board';
+  document.getElementById('workspace').innerHTML = markup;
+  if (!techView && canMaintain() && selected?.equipment_id) {
     document.querySelector('.detail')?.insertAdjacentHTML('beforeend', `<button type="button" class="detail-button danger" data-delete="/equipment" data-delete-id="${esc(selected.equipment_id)}" data-delete-suffix="/sop" data-delete-note="Delete this equipment SOP? The published file will be removed.">${esc(t('Delete SOP'))}</button>`);
   }
   bindAssets();
-  bindRows();
+  if (!techView) bindRows();
   bindDeletes();
   const importButton = document.getElementById('sop-import');
   const importFile = document.getElementById('sop-import-file');
