@@ -36,10 +36,17 @@
   html[dir="rtl"] body.sidebar-open .shell .sidebar,
   html[dir="rtl"] body.sidebar-open .app .sidebar{transform:translate3d(0,0,0)}
   html body .mobile-menu-button{
-    top:12px;left:auto;right:auto;inset-inline-start:12px;transform:none
+    display:grid;top:calc(12px + env(safe-area-inset-top));left:auto;right:auto;
+    inset-inline-start:calc(12px + env(safe-area-inset-inline-start));z-index:50;transform:none
   }
-  html body.sidebar-open .mobile-menu-button{
-    inset-inline-start:min(84vw,300px);margin-inline-start:8px;transform:none
+  html body .mobile-sidebar-backdrop{display:block}
+  html body .shell .sidebar,
+  html[dir="rtl"] body .shell .sidebar,
+  html body .app .sidebar,
+  html[dir="rtl"] body .app .sidebar{
+    padding-top:calc(18px + env(safe-area-inset-top));
+    padding-bottom:env(safe-area-inset-bottom);
+    transition:transform .28s cubic-bezier(.2,.8,.2,1)
   }
   html body .shell .content,
   html[dir="rtl"] body .shell .content,
@@ -48,7 +55,7 @@
   html[dir="rtl"] body .app .main-content,
   html[dir="rtl"] body .main-content{
     margin-left:0;margin-right:0;margin-inline:0;width:auto;max-width:100%;min-width:0;
-    padding:72px 12px 28px
+    padding:calc(72px + env(safe-area-inset-top)) 12px calc(28px + env(safe-area-inset-bottom))
   }
   html body .shell .nav-link,
   html body .app .nav-item{text-align:start}
@@ -82,4 +89,49 @@
   html body .job-order select,
   html body .job-order textarea{font-size:16px}
 }
-@media (prefers-reduced-motion:reduce){*,*::before,*::after{scroll-behavior:auto!important;transition-duration:.01ms!important;animation-duration:.01ms!important}}
+@media (prefers-reduced-motion:reduce){
+  *,*::before,*::after{scroll-behavior:auto!important;transition-duration:.01ms!important;animation-duration:.01ms!important}
+  .page-settle{animation:none!important}
+}
+
+html{scroll-behavior:smooth}
+body{-webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility}
+.nav,.sidebar-nav,.table-wrap,.table-container,.sheet-scroll,.annual-scroll,.plan-panel ol{overscroll-behavior:contain;-webkit-overflow-scrolling:touch}
+.nav-link,.nav-item,.primary,.detail-button,.report-tab,.page-button{transition:background-color .18s ease,color .18s ease,box-shadow .18s ease,transform .18s ease}
+.page-settle{animation:cmms-settle .28s ease}
+@keyframes cmms-settle{from{opacity:.35;transform:translateY(8px)}to{opacity:1;transform:none}}
+body.sidebar-open{overflow:hidden}
+
+@media (max-width:980px){
+  html body .shell .nav-link,
+  html body .app .nav-item{justify-content:flex-start;gap:12px;font-size:15px;text-align:start}
+  html body .shell .nav-link span,
+  html body .shell .brand span,
+  html body .app .nav-item>span{display:inline;font-size:15px}
+  html body .app .brand>div:last-child{display:block}
+  html body .shell .brand,
+  html body .app .brand{justify-content:flex-start}
+  html body .shell .profile,
+  html body .app .user-card{justify-content:flex-start}
+  html body .shell .profile-id{display:flex;flex-direction:column;min-width:0}
+  html body .app .user-details{display:flex}
+  html body .shell .logout-button,
+  html body .app .signout-button,
+  html body .app .user-arrow{display:inline-flex}
+  html body input,
+  html body select,
+  html body textarea{font-size:16px}
+  html body .primary,
+  html body .detail-button,
+  html body .login-button,
+  html body .new-report-button,
+  html body .nav-link,
+  html body .nav-item{min-height:44px}
+  html body .panel.detail,
+  html body .detail.pending-review{max-height:none}
+  html body .login-page{min-height:100svh;padding:max(16px,env(safe-area-inset-top)) 14px max(18px,env(safe-area-inset-bottom))}
+  html body .login-card{width:min(100%,440px)}
+  html body .content img,
+  html body .main-content img,
+  html body .login-card img{max-width:100%;height:auto}
+}

@@ -766,6 +766,8 @@ const CMMS_AR = {
   'Phone notices': 'إشعارات الهاتف',
   'Only a technician can receive phone notices.': 'إشعارات الهاتف لحسابات الفنيين.',
   'The phone could not be registered for notices.': 'تعذر تسجيل الهاتف لاستقبال الإشعارات.',
+  'Open navigation menu': 'فتح القائمة',
+  'Close navigation menu': 'إغلاق القائمة',
 };
 
 function currentLang() {

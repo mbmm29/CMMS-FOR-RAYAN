@@ -98,7 +98,12 @@ body .detail-button.primary{width:100%}
 @media(max-width:760px){
   body .kpi-pair{grid-template-columns:1fr}
   html body .shell .content,
-  html[dir="rtl"] body .shell .content{margin-inline-start:0;padding:76px 13px 28px}
+  html[dir="rtl"] body .shell .content{margin-inline-start:0;padding:calc(68px + env(safe-area-inset-top)) 13px calc(28px + env(safe-area-inset-bottom))}
   body .metric{min-height:0}
   body .metric .glyph{top:auto;right:auto;bottom:auto}
+}
+
+@media(max-width:980px){
+  html body .shell .content,
+  html[dir="rtl"] body .shell .content{margin-inline-start:0}
 }
