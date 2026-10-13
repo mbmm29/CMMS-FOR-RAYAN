@@ -1,5 +1,5 @@
 document.addEventListener('DOMContentLoaded', async () => {
-  const state = { reports: [], filtered: [], page: 1, rows: 10, status: 'all', user: null, selected: null, formNo: 'DR' };
+  const state = { reports: [], lubeReports: [], filtered: [], page: 1, rows: 10, status: 'all', user: null, selected: null, formNo: 'DR', lubeFormNo: 'PMF 17-05 rev.a' };
   const body = document.getElementById('reportsTableBody');
   const search = document.getElementById('globalSearch');
   const from = document.getElementById('dateFrom');
@@ -52,11 +52,29 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   async function loadReports() {
     body.innerHTML = `<tr><td colspan="11" class="loading-cell">${t('Loading reports from the CMMS...')}</td></tr>`;
-    const [summaries, forms] = await Promise.all([
+    const [summaries, forms, lubrication] = await Promise.all([
       apiRequest('/daily-reports'),
       apiRequest('/form-numbers').catch(() => ({})),
+      apiRequest('/lubrication-reports').catch(() => []),
     ]);
     state.formNo = forms.daily || 'DR';
+    state.lubeFormNo = forms.lubrication || 'PMF 17-05 rev.a';
+    state.lubeReports = (lubrication || []).filter(row => (row.status || 'Approved') === 'Approved').map(row => ({
+      id: row.report_id,
+      kind: 'lubrication',
+      date: row.report_date,
+      status: 'Approved',
+      shift: row.shift,
+      technician: row.technician_name || row.technician_id || '-',
+      technicianCode: row.technician_id || '',
+      plantLine: (row.equipment_codes || []).slice(0, 3).join(', ') || '-',
+      workOrders: row.work_order_ids || [],
+      downtime: null,
+      submittedAt: row.approved_at,
+      approvedBy: row.approved_by || 'SYSTEM',
+      notes: '',
+      items: [],
+    }));
     state.reports = await Promise.all(summaries.map(async summary => {
       const detail = await apiRequest(`/daily-reports/${encodeURIComponent(summary.report_id)}`);
       const report = detail.report;
@@ -116,8 +134,9 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   function applyFilters() {
     const term = search.value.trim().toLowerCase();
-    state.filtered = state.reports.filter(report => {
-      const statusMatch = state.status === 'all' || (state.status === 'mine' ? report.technicianCode === state.user?.technician_id : report.status === state.status);
+    const source = state.status === 'lubrication' ? state.lubeReports : state.reports;
+    state.filtered = source.filter(report => {
+      const statusMatch = state.status === 'all' || state.status === 'lubrication' || (state.status === 'mine' ? report.technicianCode === state.user?.technician_id : report.status === state.status);
       const date = String(report.date || '').slice(0, 10);
       const dateMatch = (!from.value || date >= from.value) && (!to.value || date <= to.value);
       const technicianMatch = !technicianFilter.value || report.technicianCode === technicianFilter.value;
@@ -141,11 +160,11 @@ document.addEventListener('DOMContentLoaded', async () => {
       <td>${escapeHtml(report.plantLine)}</td>
       <td>${report.workOrders.length ? report.workOrders.map(escapeHtml).join(', ') : '-'}</td>
       <td>${badge(report.status)}</td>
-      <td>${asHours(report.downtime)}</td>
+      <td>${report.kind === 'lubrication' ? '-' : asHours(report.downtime)}</td>
       <td>${formatDateTime(report.submittedAt)}</td>
-      <td><button class="view-button" type="button" data-view="${escapeHtml(report.id)}" title="Review report">Review</button></td>
+      <td><button class="view-button" type="button" data-view="${escapeHtml(report.id)}" title="${escapeHtml(report.kind === 'lubrication' ? t('View') : 'Review report')}">${escapeHtml(report.kind === 'lubrication' ? t('View') : 'Review')}</button></td>
     </tr>`).join('') : '<tr><td colspan="11" class="loading-cell">No reports match this view.</td></tr>';
-    body.querySelectorAll('[data-view]').forEach(button => button.addEventListener('click', () => openReview(state.reports.find(report => report.id === button.dataset.view))));
+    body.querySelectorAll('[data-view]').forEach(button => button.addEventListener('click', () => openReview([...state.reports, ...state.lubeReports].find(report => report.id === button.dataset.view))));
     document.getElementById('selectAll').checked = false;
     renderPagination();
   }
@@ -185,8 +204,47 @@ document.addEventListener('DOMContentLoaded', async () => {
     return line?.name || '';
   }
 
+  async function openLubeReview(report) {
+    const detail = await apiRequest(`/lubrication-reports/${encodeURIComponent(report.id)}`);
+    state.selected = report;
+    const lines = detail.lines || [];
+    const rows = lines.map((line, index) => `<tr>
+      <td class="lube-no">${index + 1}</td>
+      <td class="lube-machine"><input value="${escapeHtml(line.equipment_code || '')}" readonly><input value="${escapeHtml(line.equipment_name || '')}" readonly></td>
+      <td><input value="${escapeHtml(t(line.work_type || ''))}" readonly>${line.work_order_id ? `<small class="lube-order">${escapeHtml(line.work_order_id)}</small>` : ''}</td>
+      <td><input value="${escapeHtml(line.component || '')}" readonly></td>
+      <td><input value="${escapeHtml(line.quantity || '')}" readonly></td>
+      <td><input value="${escapeHtml(line.lubricant_name || '')}" readonly></td>
+      <td><input value="${escapeHtml(line.notes || '')}" readonly></td>
+    </tr>`).join('') || `<tr><td class="annual-empty" colspan="7">${escapeHtml(t('No lines recorded.'))}</td></tr>`;
+    const remove = isEngineer() ? `<button type="button" class="decision return" id="review-delete">${escapeHtml(t('Delete'))}</button>` : '';
+    const layout = document.querySelector('.reports-layout');
+    const sheet = document.getElementById('detailsContent');
+    if (!sheet) return;
+    layout?.classList.add('reviewing');
+    sheet.innerHTML = `<div class="review-bar no-print"><button type="button" id="review-close">${escapeHtml(t('Back to reports'))}</button><button type="button" class="decision print" id="review-print">${escapeHtml(t('Print'))}</button>${remove}</div>
+      <form class="lube-paper" id="review-paper">
+        <header class="lube-head"><img src="logo-rayan.png?v=2" alt="Rayan"><div><h2>${escapeHtml(t('Daily report for the lubrication technician'))}</h2><p>${escapeHtml(t('Approved'))}</p><small>${escapeHtml(t('Mechanical Maintenance Department'))}</small></div><dl><div><dt>${escapeHtml(t('Form No.:'))}</dt><dd>${escapeHtml(state.lubeFormNo || 'PMF 17-05 rev.a')}</dd></div><div><dt>${escapeHtml(t('Report No.'))}</dt><dd>${escapeHtml(detail.report_id || report.id)}</dd></div></dl></header>
+        <div class="lube-meta">
+          <label><span>${escapeHtml(t('Shift'))}</span><input value="${escapeHtml(t(detail.shift || ''))}" readonly></label>
+          <label><span>${escapeHtml(t("Technician's name"))}</span><input value="${escapeHtml(detail.technician_name || report.technician)}" readonly></label>
+          <label><span>${escapeHtml(t('Day'))}</span><input value="${escapeHtml(t(detail.day_name || ''))}" readonly></label>
+          <label><span>${escapeHtml(t('Date'))}</span><input value="${escapeHtml(formatDate(detail.report_date || report.date))}" readonly></label>
+        </div>
+        <table class="lube-table"><thead><tr><th>${escapeHtml(t('Seq.'))}</th><th>${escapeHtml(t('Machine'))}</th><th>${escapeHtml(t('Work type'))}</th><th>${escapeHtml(t('Component'))}</th><th>${escapeHtml(t('Qty'))}</th><th>${escapeHtml(t('Oil or grease name'))}</th><th>${escapeHtml(t('Remarks'))}</th></tr></thead><tbody>${rows}</tbody></table>
+        <p class="lube-help">${escapeHtml(t('Approved by the system'))}</p>
+      </form>`;
+    document.getElementById('review-close')?.addEventListener('click', closeReview);
+    document.getElementById('review-print')?.addEventListener('click', () => window.print());
+    document.getElementById('review-delete')?.addEventListener('click', deleteSelected);
+  }
+
   function openReview(report) {
     if (!report) return;
+    if (report.kind === 'lubrication') {
+      openLubeReview(report).catch(error => showNotice(error.message, true));
+      return;
+    }
     state.selected = report;
     const activityRows = report.items.map((item, index) => `<tr>
       <td class="lube-no">${index + 1}</td>
@@ -305,7 +363,8 @@ document.addEventListener('DOMContentLoaded', async () => {
     if (!window.confirm(t('Delete this record? This cannot be undone.'))) return;
     const reportId = state.selected.id;
     try {
-      await apiRequest(`/daily-reports/${encodeURIComponent(reportId)}`, { method: 'DELETE' });
+      const path = state.selected.kind === 'lubrication' ? '/lubrication-reports' : '/daily-reports';
+      await apiRequest(`${path}/${encodeURIComponent(reportId)}`, { method: 'DELETE' });
       closeReview();
       emptyDetails();
       state.selected = null;
@@ -342,7 +401,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   }
 
   function bindControls() {
-    tabs.forEach(tab => tab.addEventListener('click', () => { state.status = tab.dataset.status; tabs.forEach(item => item.classList.toggle('active', item === tab)); applyFilters(); }));
+    tabs.forEach(tab => tab.addEventListener('click', () => { state.status = tab.dataset.status; tabs.forEach(item => item.classList.toggle('active', item === tab)); closeReview(); applyFilters(); }));
     search.addEventListener('input', applyFilters);
     from.addEventListener('change', applyFilters);
     to.addEventListener('change', applyFilters);

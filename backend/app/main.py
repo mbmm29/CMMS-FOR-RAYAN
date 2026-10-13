@@ -255,6 +255,21 @@ def ensure_additive_columns():
                 if 'order_code' not in existing:
                     conn.execute(text('ALTER TABLE plants ADD COLUMN order_code VARCHAR(12)'))
                 conn.execute(text('CREATE UNIQUE INDEX IF NOT EXISTS uq_plant_order_code ON plants (order_code)'))
+        if 'lubrication_reports' in tables:
+            existing = {c['name'] for c in inspector.get_columns('lubrication_reports')}
+            with engine.begin() as conn:
+                if 'approved_by' not in existing:
+                    conn.execute(text('ALTER TABLE lubrication_reports ADD COLUMN approved_by VARCHAR(150)'))
+                if 'approved_at' not in existing:
+                    conn.execute(text('ALTER TABLE lubrication_reports ADD COLUMN approved_at TIMESTAMP'))
+                if 'status' not in existing:
+                    conn.execute(text('ALTER TABLE lubrication_reports ADD COLUMN status VARCHAR(30)'))
+                    conn.execute(text(
+                        "UPDATE lubrication_reports SET status = 'Approved', "
+                        "approved_by = 'SYSTEM', approved_at = COALESCE(updated_at, created_at) "
+                        "WHERE status IS NULL"
+                    ))
+                    conn.execute(text("ALTER TABLE lubrication_reports ALTER COLUMN status SET DEFAULT 'Draft'"))
     except Exception:
         # Do not prevent the API from starting because of an optional migration.
         # The error will be visible in the application logs.
@@ -3661,6 +3676,9 @@ def lube_payload(db: Session, row: LubricationReport):
         'shift': row.shift,
         'technician_id': row.technician_id,
         'technician_name': technician.name if technician else row.technician_id,
+        'status': row.status or 'Draft',
+        'approved_by': row.approved_by,
+        'approved_at': row.approved_at.isoformat() if row.approved_at else None,
         'lines': [
             {
                 'equipment_code': line.equipment_code,
@@ -3804,6 +3822,8 @@ def lubrication_reports(db: Session = Depends(get_db), u=Depends(auth)):
     for row in rows:
         item = lube_payload(db, row)
         item['line_count'] = len(item['lines'])
+        item['work_order_ids'] = [line['work_order_id'] for line in item['lines'] if line.get('work_order_id')]
+        item['equipment_codes'] = [line['equipment_code'] for line in item['lines'] if line.get('equipment_code')]
         item.pop('lines')
         result.append(item)
     return result
@@ -3908,10 +3928,24 @@ def save_lubrication_report(data: LubricationSave, db: Session = Depends(get_db)
             work_order_id=work_order_id,
         ))
         kept += 1
+    if is_technician_account(u):
+        row.status = 'Approved'
+        row.approved_by = 'SYSTEM'
+        row.approved_at = datetime.utcnow()
+        for eng in db.query(User).filter(User.role.in_(list(ENGINEER)), User.is_active == True).all():
+            notify(
+                db,
+                eng.id,
+                'Lubrication report',
+                f'{row.report_id} was approved by the system',
+                'lubrication_report',
+                row.report_id,
+            )
     audit(db, u, 'CREATE' if created else 'UPDATE', 'LubricationReport', row.report_id, new={
         'date': str(data.report_date),
         'technician_id': technician_id,
         'lines': kept,
+        'status': row.status,
     })
     db.commit()
     db.refresh(row)

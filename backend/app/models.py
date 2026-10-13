@@ -492,6 +492,9 @@ class LubricationReport(Base):
     day_name: Mapped[str] = mapped_column(String(20), default='')
     shift: Mapped[str] = mapped_column(String(40))
     technician_id: Mapped[str] = mapped_column(String(50), ForeignKey('technicians.technician_id'), index=True)
+    status: Mapped[str] = mapped_column(String(30), default='Draft')
+    approved_by: Mapped[str | None] = mapped_column(String(150), nullable=True)
+    approved_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
