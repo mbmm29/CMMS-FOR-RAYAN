@@ -63,6 +63,7 @@ class PlantCreate(BaseModel):
 
 
 class PlantUpdate(BaseModel):
+    name: str | None = None
     active: bool | None = None
     order_code: str | None = None
 

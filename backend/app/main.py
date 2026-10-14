@@ -613,7 +613,12 @@ def update_plant(plant_id: str, data: PlantUpdate, db: Session = Depends(get_db)
     if not plant:
         raise HTTPException(404, 'Plant not found')
     changes = data.model_dump(exclude_unset=True)
-    old = {'active': plant.active, 'order_code': plant.order_code}
+    old = {'name': plant.name, 'active': plant.active, 'order_code': plant.order_code}
+    if 'name' in changes:
+        name = (changes['name'] or '').strip()
+        if not name:
+            raise HTTPException(400, 'Plant name is required')
+        plant.name = name[:150]
     if 'active' in changes and changes['active'] is not None:
         plant.active = changes['active']
     if 'order_code' in changes:
@@ -622,7 +627,7 @@ def update_plant(plant_id: str, data: PlantUpdate, db: Session = Depends(get_db)
         if taken:
             raise HTTPException(409, 'This work order code is already used by another plant.')
         plant.order_code = code
-    audit(db, u, 'UPDATE', 'Plant', plant_id, old=old, new={'active': plant.active, 'order_code': plant.order_code})
+    audit(db, u, 'UPDATE', 'Plant', plant_id, old=old, new={'name': plant.name, 'active': plant.active, 'order_code': plant.order_code})
     db.commit()
     db.refresh(plant)
     return as_dict(plant)

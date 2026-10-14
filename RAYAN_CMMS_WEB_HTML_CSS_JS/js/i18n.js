@@ -712,6 +712,7 @@ const CMMS_AR = {
   'Add Plant': 'إضافة مصنع',
   'Plant code': 'رمز المصنع',
   'Plant name': 'اسم المصنع',
+  'Plant name is required': 'اسم المصنع مطلوب',
   'Saved.': 'تم الحفظ.',
   'No reports yet.': 'لا توجد تقارير بعد.',
   'No matching reports.': 'لا توجد تقارير مطابقة.',

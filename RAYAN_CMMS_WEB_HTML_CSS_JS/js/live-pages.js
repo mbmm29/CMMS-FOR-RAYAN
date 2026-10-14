@@ -1519,7 +1519,7 @@ function drawPlants() {
     return `<div class="line-block"><div class="line-head"><b>${title}</b>${canMaintain() ? `<button type="button" class="detail-button danger" data-delete="/lines" data-delete-id="${esc(line.line_id)}" data-delete-keep="1">${esc(t('Delete'))}</button>` : ''}</div><div class="section-list">${chips}</div>${add}</div>`;
   }).join('') || `<p class="live-note">${esc(t('No records yet'))}</p>`;
   const lineForm = selected && canMaintain() ? `<form id="line-form" class="live-form"><div class="assign-block"><b>Add production line</b></div><label>Line number<input name="line_number" type="number" min="1" step="1" required></label><label>Name<input name="name" placeholder="Optional"></label><button class="detail-button primary" type="submit">Add line</button><p id="line-error" class="form-error"></p></form>` : '';
-  const statusForm = selected && canMaintain() ? `<form id="plant-status" class="live-form"><label>${esc(t('Work order code'))}<input name="order_code" value="${esc(selected.order_code || '')}" required maxlength="12" placeholder="FM1"></label><label>${esc(t('Status'))}<select name="active">${plantStatusOptions(selected.active)}</select></label><button class="detail-button primary" type="submit">${esc(t('Save'))}</button><p class="live-note">${esc(t('Each plant keeps its own sequence. FM1 in 2026 starts at FM12026-001.'))}</p><p id="plant-status-error" class="form-error"></p></form>` : '';
+  const statusForm = selected && canMaintain() ? `<form id="plant-status" class="live-form"><label>${esc(t('Plant name'))}<input name="name" value="${esc(selected.name || '')}" required maxlength="150"></label><label>${esc(t('Work order code'))}<input name="order_code" value="${esc(selected.order_code || '')}" required maxlength="12" placeholder="FM1"></label><label>${esc(t('Status'))}<select name="active">${plantStatusOptions(selected.active)}</select></label><button class="detail-button primary" type="submit">${esc(t('Save'))}</button><p class="live-note">${esc(t('Each plant keeps its own sequence. FM1 in 2026 starts at FM12026-001.'))}</p><p id="plant-status-error" class="form-error"></p></form>` : '';
   const detail = ui.mode === 'create' ? plantForm() : `<aside class="panel detail"><h2>Plant Details</h2><div class="detail-top"><div class="machine">▣</div>${liveBadge(selected?.active === false ? 'Inactive' : 'Active')}<h3>${esc(selected?.plant_id || '—')}</h3><p>${esc(selected?.name || '')}</p></div><div class="detail-list">${lineRows}</div>${lineForm}${statusForm}</aside>`;
   document.getElementById('workspace').className = 'workspace';
   document.getElementById('workspace').innerHTML = `<section class="panel">${tabsHtml(['All Plants', 'Active', 'Inactive'])}${tableShell(['Plant Code', 'Plant Name', 'Work order code', 'Production Lines', 'Status'], body, shown(rows.length, store.plants.length, 'plants'))}</section>${detail}`;
@@ -1564,7 +1564,14 @@ function drawPlants() {
     const error = document.getElementById('plant-status-error');
     const data = Object.fromEntries(new FormData(event.currentTarget).entries());
     try {
-      await apiRequest(`/plants/${encodeURIComponent(selected.plant_id)}`, { method: 'PUT', body: JSON.stringify({ active: data.active !== 'false', order_code: data.order_code }) });
+      await apiRequest(`/plants/${encodeURIComponent(selected.plant_id)}`, {
+        method: 'PUT',
+        body: JSON.stringify({
+          name: String(data.name || '').trim(),
+          active: data.active !== 'false',
+          order_code: data.order_code,
+        }),
+      });
       store = null;
       ui.rowKey = selected.plant_id;
       ui.mode = 'view';
