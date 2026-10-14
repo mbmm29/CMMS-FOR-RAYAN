@@ -216,7 +216,7 @@ document.addEventListener('DOMContentLoaded', async () => {
       <td class="lube-machine"><input value="${escapeHtml(line.equipment_code || '')}" readonly><input value="${escapeHtml(line.equipment_name || '')}" readonly></td>
       <td><input value="${escapeHtml(t(line.work_type || ''))}" readonly>${line.work_order_id ? `<small class="lube-order">${escapeHtml(line.work_order_id)}</small>` : ''}</td>
       <td><input value="${escapeHtml(line.component || '')}" readonly></td>
-      <td><input value="${escapeHtml(line.quantity || '')}" readonly></td>
+      <td class="lube-qty"><input value="${escapeHtml(line.quantity || '')}" readonly><span class="lube-qty-unit">${escapeHtml(line.work_type === 'Oil change' ? t('Litre') : line.work_type === 'Grease change' ? t('Gram') : '')}</span></td>
       <td><input value="${escapeHtml(line.lubricant_name || '')}" readonly></td>
       <td><input value="${escapeHtml(line.notes || '')}" readonly></td>
     </tr>`).join('') || `<tr><td class="annual-empty" colspan="7">${escapeHtml(t('No lines recorded.'))}</td></tr>`;

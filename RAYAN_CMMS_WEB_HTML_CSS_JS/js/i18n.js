@@ -580,6 +580,8 @@ const CMMS_AR = {
   'Part Name / Description': 'اسم القطعة / الوصف',
   'Part No.': 'رقم القطعة',
   'Qty': 'الكمية',
+  'Litre': 'لتر',
+  'Gram': 'غرام',
   'Remarks': 'ملاحظات',
   'GENERAL NOTES': 'ملاحظات عامة',
   'TOTAL DOWNTIME:': 'إجمالي التوقف:',

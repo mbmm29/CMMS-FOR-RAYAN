@@ -159,6 +159,18 @@ function fillLubePlace(row, plantId = '', lineId = '') {
   if (lineId) lineSelect.value = lineId;
 }
 
+function lubeQtyUnit(workType) {
+  if (workType === 'Oil change') return t('Litre');
+  if (workType === 'Grease change') return t('Gram');
+  return '';
+}
+
+function syncLubeQtyUnit(row) {
+  const unit = row?.querySelector('[data-qty-unit]');
+  if (!unit) return;
+  unit.textContent = lubeQtyUnit(row.querySelector('[data-field="work_type"]')?.value);
+}
+
 function bindLubeRow(row) {
   const code = row.querySelector('[data-field="equipment_code"]');
   const name = row.querySelector('[data-field="equipment_name"]');
@@ -171,6 +183,8 @@ function bindLubeRow(row) {
   const found = matchEquipment(code?.value) || equipmentByCode(code?.value);
   if (found) fillLubePlace(row, found.plant_id || plantSelect?.value || '', found.line_id || lineSelect?.value || '');
   else if (plantSelect) lineSelect.innerHTML = lubeLineOptions(plantSelect.value, lineSelect.value);
+  row.querySelector('[data-field="work_type"]')?.addEventListener('change', () => syncLubeQtyUnit(row));
+  syncLubeQtyUnit(row);
 }
 
 function toast(message) {
@@ -3244,7 +3258,9 @@ function lubeRow(line = {}, index = 0) {
   const lineId = line.line_id || '';
   const plants = `<select data-field="plant_id"><option value="">${esc(t('Select plant'))}</option>${openPlants(plantId).map((plant) => `<option value="${esc(plant.plant_id)}"${plant.plant_id === plantId ? ' selected' : ''}>${esc(plant.name)}</option>`).join('')}</select>`;
   const lines = `<select data-field="line_id">${lubeLineOptions(plantId, lineId)}</select>`;
-  return `<tr><td class="lube-no">${index + 1}</td><td class="lube-machine">${field('equipment_code', line.equipment_code, 'Equipment number')}${field('equipment_name', line.equipment_name, 'Equipment name')}${plants}${lines}</td>${lubeTypeCell(line)}<td>${field('component', line.component, 'Component')}</td><td>${field('quantity', line.quantity, 'Qty')}</td><td>${field('lubricant_name', line.lubricant_name, 'Oil or grease name')}</td><td>${field('notes', line.notes, 'Remarks')}</td></tr>`;
+  const qtyUnit = lubeQtyUnit(line.work_type);
+  const qty = `<td class="lube-qty">${field('quantity', line.quantity, 'Qty')}<span class="lube-qty-unit" data-qty-unit>${esc(qtyUnit)}</span></td>`;
+  return `<tr><td class="lube-no">${index + 1}</td><td class="lube-machine">${field('equipment_code', line.equipment_code, 'Equipment number')}${field('equipment_name', line.equipment_name, 'Equipment name')}${plants}${lines}</td>${lubeTypeCell(line)}<td>${field('component', line.component, 'Component')}</td>${qty}<td>${field('lubricant_name', line.lubricant_name, 'Oil or grease name')}</td><td>${field('notes', line.notes, 'Remarks')}</td></tr>`;
 }
 
 function lubeLinesFromForm() {
