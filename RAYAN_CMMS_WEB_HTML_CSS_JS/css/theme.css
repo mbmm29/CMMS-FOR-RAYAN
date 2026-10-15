@@ -344,7 +344,35 @@ body .review-reason textarea::placeholder{color:#8ea4c8}
   width:auto;min-height:40px;margin:0;padding:0 16px;border:0;border-radius:8px;
   background:#c53642;color:#fff;font-weight:800;
 }
-body .header-actions .ghost{background:transparent;color:#f4f8ff;border:1px solid #9ec4ff;box-shadow:none}
+body .header-actions .primary,
+body .header-actions .ghost{
+  -webkit-appearance:none;appearance:none;color-scheme:dark;
+  -webkit-tap-highlight-color:transparent;
+}
+body .header-actions .primary,
+body .header-actions .primary:hover,
+body .header-actions .primary:focus,
+body .header-actions .primary:focus-visible,
+body .header-actions .primary:active{
+  background:linear-gradient(135deg,#0b71ff,#004ee4)!important;
+  color:#fff!important;
+  border:0!important;
+  outline:none;
+  box-shadow:0 0 0 1px #9ec4ff55,0 8px 22px #075cf555;
+}
+body .header-actions .primary:active{filter:brightness(.9)}
+body .header-actions .ghost,
+body .header-actions .ghost:hover,
+body .header-actions .ghost:focus,
+body .header-actions .ghost:focus-visible,
+body .header-actions .ghost:active{
+  background:#10284f!important;
+  color:#f4f8ff!important;
+  border:1px solid #9ec4ff!important;
+  outline:none;
+  box-shadow:none;
+}
+body .header-actions .ghost:active{background:#16325f!important}
 .daily-paper{overflow:auto}
 .daily-paper .lube-table th:nth-child(2){width:22%}
 .daily-paper .lube-table th:nth-child(3){width:14%}
