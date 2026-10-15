@@ -1,4 +1,4 @@
-const CACHE = 'rayan-cmms-shell-5';
+const CACHE = 'rayan-cmms-shell-6';
 const SHELL = [
   '/login.html',
   '/index.html',
@@ -29,14 +29,19 @@ self.addEventListener('push', (event) => {
   } catch (_) {
     payload.body = event.data ? event.data.text() : '';
   }
-  event.waitUntil(self.registration.showNotification(payload.title, {
-    body: payload.body,
-    icon: '/icons/icon-192.png',
-    badge: '/icons/icon-192.png',
-    lang: 'ar',
-    dir: 'rtl',
-    data: { url: payload.url || '/index.html#work-orders' },
-  }));
+  event.waitUntil(Promise.all([
+    self.registration.showNotification(payload.title, {
+      body: payload.body,
+      icon: '/icons/icon-192.png',
+      badge: '/icons/icon-192.png',
+      lang: 'ar',
+      dir: 'rtl',
+      data: { url: payload.url || '/index.html#work-orders' },
+    }),
+    self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clients) => {
+      clients.forEach((client) => client.postMessage({ type: 'cmms-push', title: payload.title, body: payload.body, url: payload.url }));
+    }),
+  ]));
 });
 
 self.addEventListener('notificationclick', (event) => {

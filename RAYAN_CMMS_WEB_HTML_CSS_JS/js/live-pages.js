@@ -4283,10 +4283,141 @@ async function paint(page) {
     if (!store) await loadStore();
     if (token !== paintToken) return;
     await draw(page);
+    startLiveSync();
   } catch (error) {
     if (token !== paintToken) return;
     document.getElementById('workspace').innerHTML = `<section class="panel"><p class="live-note">${esc(error.message)}</p></section>`;
   }
+}
+
+const liveSync = {
+  timer: 0,
+  busy: false,
+  started: false,
+  orderMark: null,
+  noticeMark: null,
+};
+
+function liveSyncEditing() {
+  if (ui.mode === 'create' || ui.mode === 'job') return true;
+  if (ui.page === 'daily-reports' || ui.page === 'lubrication' || ui.page === 'motor-condition') return true;
+  if (ui.page === 'pm-schedule' && (document.getElementById('annual-rows') || document.querySelector('.week-day'))) return true;
+  if (ui.page === 'iso' || ui.page === 'spare-parts') return true;
+  return false;
+}
+
+function ordersLiveMark(orders) {
+  return (orders || [])
+    .map((order) => {
+      const reply = typeof myResponse === 'function' ? (myResponse(order) || '') : '';
+      const people = (order.assigned_technician_ids || []).join(',');
+      return `${order.work_order_id}:${order.status || ''}:${reply}:${people}`;
+    })
+    .sort()
+    .join('|');
+}
+
+function noticesLiveMark(rows) {
+  return (rows || [])
+    .filter((row) => !row.is_read)
+    .map((row) => String(row.id))
+    .sort()
+    .join('|');
+}
+
+function showLivePhoneNotice(title, body) {
+  try {
+    if (typeof Notification === 'undefined' || Notification.permission !== 'granted') return;
+    const text = String(body || '').slice(0, 180);
+    if (navigator.serviceWorker?.ready) {
+      navigator.serviceWorker.ready.then((registration) => {
+        registration.showNotification(title, {
+          body: text,
+          icon: '/icons/icon-192.png',
+          badge: '/icons/icon-192.png',
+          lang: 'ar',
+          dir: 'rtl',
+          data: { url: '/index.html#work-orders' },
+          tag: 'cmms-live-wo',
+          renotify: true,
+        });
+      }).catch(() => {
+        new Notification(title, { body: text, icon: '/icons/icon-192.png', tag: 'cmms-live-wo' });
+      });
+      return;
+    }
+    new Notification(title, { body: text, icon: '/icons/icon-192.png', tag: 'cmms-live-wo' });
+  } catch (_) {}
+}
+
+function announceLiveWorkOrders(orders, previousMark) {
+  if (!previousMark) return;
+  const known = new Set(String(previousMark).split('|').map((part) => part.split(':')[0]).filter(Boolean));
+  const fresh = (orders || []).filter((order) => order.work_order_id && !known.has(order.work_order_id));
+  if (!fresh.length) {
+    screenNotice(t('Work orders were updated.'), 'ok');
+    return;
+  }
+  const first = fresh[0];
+  const title = fresh.length === 1
+    ? `${t('New work order')}: ${first.work_order_id}`
+    : `${fresh.length} ${t('new work orders')}`;
+  const detail = first.problem_description || first.work_description || equipmentText(first) || '';
+  screenNotice(detail ? `${title} — ${detail}` : title, 'ok');
+  showLivePhoneNotice(title, detail || t('Open Work Orders'));
+}
+
+async function pollLiveUpdates(force) {
+  if (!getSavedUser?.() || liveSync.busy) return;
+  if (!force && document.hidden) return;
+  liveSync.busy = true;
+  try {
+    const [orders, notices] = await Promise.all([
+      apiRequest('/work-orders'),
+      apiRequest('/notifications').catch(() => []),
+    ]);
+    const orderMark = ordersLiveMark(orders);
+    const noticeMark = noticesLiveMark(notices);
+    const firstPass = liveSync.orderMark == null;
+    const ordersChanged = !firstPass && orderMark !== liveSync.orderMark;
+    const noticesChanged = !firstPass && noticeMark !== liveSync.noticeMark;
+    const previousOrders = liveSync.orderMark;
+    liveSync.orderMark = orderMark;
+    liveSync.noticeMark = noticeMark;
+    if (store) store.orders = orders;
+    if (firstPass) return;
+    if (ordersChanged) {
+      announceLiveWorkOrders(orders, previousOrders);
+      if (ui.page === 'work-orders' && !liveSyncEditing()) drawWorkOrders();
+    } else if (noticesChanged) {
+      const newest = (notices || []).find((row) => !row.is_read);
+      if (newest) {
+        screenNotice(`${newest.title || t('New notice')}${newest.message ? ` — ${newest.message}` : ''}`, 'ok');
+        showLivePhoneNotice(newest.title || t('New notice'), newest.message || '');
+      }
+    }
+  } catch (_) {
+    // Keep the page usable when the network blips.
+  } finally {
+    liveSync.busy = false;
+  }
+}
+
+function startLiveSync() {
+  if (liveSync.started) return;
+  liveSync.started = true;
+  const tick = () => { pollLiveUpdates(false); };
+  liveSync.timer = window.setInterval(tick, 10000);
+  document.addEventListener('visibilitychange', () => {
+    if (!document.hidden) pollLiveUpdates(true);
+  });
+  window.addEventListener('focus', () => { pollLiveUpdates(true); });
+  if (navigator.serviceWorker) {
+    navigator.serviceWorker.addEventListener('message', (event) => {
+      if (event.data?.type === 'cmms-push') pollLiveUpdates(true);
+    });
+  }
+  pollLiveUpdates(true);
 }
 
 function openCreate() {
