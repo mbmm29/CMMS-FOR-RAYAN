@@ -281,6 +281,20 @@ function assigneeNames(order) {
   return names.length ? names.join(', ') : '—';
 }
 
+function acceptedTechnicianNames(order) {
+  const accepted = (order?.assignment_states || [])
+    .filter((row) => row.response === 'Accepted')
+    .map((row) => technicianName(row.technician_id))
+    .filter((name) => name && name !== '—');
+  if (accepted.length) return accepted.join(', ');
+  const fallbackId = order?.assigned_technician_id;
+  if (fallbackId && !(order?.assignment_states || []).some((row) => row.response === 'Rejected' && row.technician_id === fallbackId)) {
+    const name = technicianName(fallbackId);
+    if (name && name !== '—') return name;
+  }
+  return '';
+}
+
 function myResponse(order) {
   const me = getSavedUser()?.technician_id;
   if (!me || !order || !assigneeIds(order).includes(me)) return '';
@@ -2423,7 +2437,7 @@ function workOrderForm(order) {
       jobField('Repair order no.', `<input class="job-code" value="${esc(order.work_order_id)}" readonly>`),
       jobField('Date', `<input type="date" value="${esc(String(order.planned_date || '').slice(0, 10))}" readonly>`),
     ].join('');
-    return `<form id="live-form" class="lube-paper job-order" data-order-id="${esc(order.work_order_id)}">${jobHead()}<div class="job-fields">${fields}</div><div class="job-crew"><b>${esc(crew)}</b></div><label class="job-block"><span>${esc(t('Fault'))}</span><textarea readonly>${esc(order.problem_description || '')}</textarea></label><label class="job-block"><span>${esc(t('Action taken'))}</span><textarea name="corrective_action">${esc(order.corrective_action || '')}</textarea></label><div class="job-block"><span>${esc(t('Technician signature'))}</span><input value="${esc(getSavedUser()?.full_name || assigneeNames(order))}" readonly></div>${parts}<label class="job-block"><span>${esc(t('Result'))}</span><textarea name="verification">${esc(order.verification || '')}</textarea></label>${approvalDateField(order)}${jobActions(order)}</form>`;
+    return `<form id="live-form" class="lube-paper job-order" data-order-id="${esc(order.work_order_id)}">${jobHead()}<div class="job-fields">${fields}</div><div class="job-crew"><b>${esc(crew)}</b></div><label class="job-block"><span>${esc(t('Fault'))}</span><textarea readonly>${esc(order.problem_description || '')}</textarea></label><label class="job-block"><span>${esc(t('Action taken'))}</span><textarea name="corrective_action">${esc(order.corrective_action || '')}</textarea></label><div class="job-block"><span>${esc(t('Technician signature'))}</span><input value="${esc(acceptedTechnicianNames(order))}" readonly placeholder="${esc(t('Shows the technician who accepted this work order'))}"></div>${parts}<label class="job-block"><span>${esc(t('Result'))}</span><textarea name="verification">${esc(order.verification || '')}</textarea></label>${approvalDateField(order)}${jobActions(order)}</form>`;
   }
   const plants = openPlants().map((plant) => `<option value="${esc(plant.plant_id)}">${esc(plant.name)}</option>`).join('');
   const fields = [

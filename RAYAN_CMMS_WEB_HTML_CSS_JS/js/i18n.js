@@ -683,6 +683,7 @@ const CMMS_AR = {
   'Fault': 'العطل',
   'Action taken': 'الاجراء المتخذ',
   'Technician signature': 'توقيع الفني',
+  'Shows the technician who accepted this work order': 'يظهر اسم الفني الذي وافق على أمر الصيانة',
   'Parts used': 'قطع الغيار المستخدمة',
   'Result': 'النتيجة',
   'Created when saved': 'يُنشأ عند الحفظ',
