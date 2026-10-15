@@ -195,6 +195,11 @@ body .workspace.due-board{grid-template-columns:minmax(0,1fr)}
 .week-day header b{display:block;color:#f4f8ff;font-size:15px}
 .week-day header small{color:#9eb4d6}
 .week-day .detail-button{width:auto;height:36px;margin:0}
+.day-actions,.day-task-actions{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.day-task-actions{grid-column:1/-1;justify-content:flex-end;margin-top:4px}
+.day-task-actions .detail-button{min-width:96px}
+.week-save-bar{display:flex;justify-content:flex-end;margin-top:14px}
+.week-save-bar .detail-button,.annual-bar #week-save{min-width:120px;height:40px}
 .day-tasks{display:flex;flex-direction:column;gap:8px;margin-top:10px}
 .day-task{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:8px;align-items:end;padding:10px;border:1px solid #23406e;border-radius:12px}
 .day-task label{display:flex;flex-direction:column;gap:4px;min-width:0;color:#b7c9e6;font-size:11px}
