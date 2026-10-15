@@ -160,6 +160,8 @@ def _send(db: Session, user_id: int, title: str, body: str, url: str, private_ke
         'url': url,
         'tag': f'cmms-{int(time.time() * 1000)}',
         'sound': True,
+        # Ask iOS for a time-sensitive banner with sound when Focus allows it.
+        'interruptionLevel': 'timeSensitive',
     }, ensure_ascii=False)
     sent = False
     for subscription in subscriptions:

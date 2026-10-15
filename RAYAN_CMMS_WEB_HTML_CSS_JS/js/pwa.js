@@ -20,6 +20,8 @@
     'Open this page from the home-screen app on iPhone to receive notices.': 'على آيفون افتح التطبيق من الشاشة الرئيسية لاستلام الإشعارات.',
     'Enable notices on this phone, then send a test notice to confirm sound and the on-screen banner.': 'فعّل الإشعارات على هذا الهاتف ثم أرسل إشعارًا تجريبيًا للتأكد من الصوت والشريط الظاهر فوق التطبيقات.',
     'On Android: App info → Notifications → General → enable Sound and Show as pop-up (like WhatsApp).': 'على أندرويد: معلومات التطبيق ← الإشعارات ← عام ← فعّل الصوت وإظهار كنافذة منبثقة (مثل واتساب).',
+    'On iPhone: turn off Focus (Personal), or allow CMMS in Focus → Apps. Then leave the app (Home) and send a test notice.': 'على آيفون: أوقف وضع التركيز (Personal) أو اسمح لـ CMMS من التركيز ← التطبيقات. ثم اخرج من التطبيق (Home) وأرسل إشعارًا تجريبيًا.',
+    'Test notice sent. Leave CMMS now (Home) to hear the banner over other apps.': 'تم إرسال إشعار تجريبي. اخرج من CMMS الآن (Home) لتسمع الصوت ويظهر الشريط فوق التطبيقات.',
     'Test notice sent. Check the phone notification tray.': 'تم إرسال إشعار تجريبي. راجع لوحة إشعارات الهاتف والصوت.',
   };
 
@@ -118,6 +120,7 @@
       requireInteraction: true,
       vibrate: [180, 80, 180, 80, 280],
       timestamp: Date.now(),
+      interruptionLevel: 'timeSensitive',
       data: { url: '/index.html#work-orders' },
       actions: [
         { action: 'open', title: 'فتح' },
@@ -126,10 +129,11 @@
     };
   }
 
-  async function showLocalNotice(title, body) {
+  async function showLocalNotice(title, body, options) {
     const text = String(body || '').slice(0, 180);
     if (!pushSupported() || Notification.permission !== 'granted') return false;
-    playNoticeTone();
+    const opts = options || {};
+    if (!opts.quiet) playNoticeTone();
     try {
       const registration = await navigator.serviceWorker.ready;
       await registration.showNotification(title, noticeDisplayOptions(text, `cmms-test-${Date.now()}`));
@@ -142,6 +146,19 @@
         return false;
       }
     }
+  }
+
+  function scheduleBackgroundTestNotice(title, body) {
+    // iOS suppresses banner/sound while the PWA is open; show after the user leaves.
+    const fire = () => {
+      if (!document.hidden) return;
+      document.removeEventListener('visibilitychange', fire);
+      showLocalNotice(title, body, { quiet: false });
+    };
+    document.addEventListener('visibilitychange', fire);
+    setTimeout(() => {
+      if (document.hidden) fire();
+    }, 1200);
   }
 
   async function subscribePhone(force) {
@@ -196,7 +213,14 @@
       clearNoticesFlag();
       throw new Error(label('The phone could not be registered for notices.'));
     }
-    await showLocalNotice(label('Phone notices are on.'), label('Test notice sent. Check the phone notification tray.'));
+    if (typeof apiRequest === 'function') {
+      try { await apiRequest('/push/test', { method: 'POST', body: '{}' }); } catch (_) {}
+    }
+    scheduleBackgroundTestNotice(
+      label('Phone notices are on.'),
+      label('Test notice sent. Leave CMMS now (Home) to hear the banner over other apps.'),
+    );
+    playNoticeTone();
     return true;
   }
 
@@ -204,14 +228,16 @@
     if (!noticeUser()) throw new Error(label('Only a technician can receive phone notices.'));
     if (Notification.permission !== 'granted' || !noticesAlreadyOn()) {
       await enablePhoneNotices();
+      return true;
     }
-    await showLocalNotice(
-      label('Notification settings'),
-      label('Test notice sent. Check the phone notification tray.'),
-    );
     if (typeof apiRequest === 'function') {
       await apiRequest('/push/test', { method: 'POST', body: '{}' });
     }
+    scheduleBackgroundTestNotice(
+      label('Notification settings'),
+      label('Test notice sent. Leave CMMS now (Home) to hear the banner over other apps.'),
+    );
+    playNoticeTone();
     return true;
   }
 

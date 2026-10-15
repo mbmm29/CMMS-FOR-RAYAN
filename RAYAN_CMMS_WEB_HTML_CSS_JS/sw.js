@@ -1,4 +1,4 @@
-const CACHE = 'rayan-cmms-shell-7';
+const CACHE = 'rayan-cmms-shell-8';
 const SHELL = [
   '/login.html',
   '/index.html',
@@ -33,9 +33,11 @@ function noticeOptions(payload) {
     tag,
     renotify: true,
     silent: false,
+    // Helps iOS show a banner with sound instead of quiet delivery to the lock screen only.
     requireInteraction: true,
     vibrate: [180, 80, 180, 80, 280],
     timestamp: Date.now(),
+    interruptionLevel: payload.interruptionLevel || 'timeSensitive',
     data: { url: payload.url || '/index.html#work-orders' },
     actions: [
       { action: 'open', title: 'فتح' },
@@ -51,18 +53,21 @@ self.addEventListener('push', (event) => {
   } catch (_) {
     payload.body = event.data ? event.data.text() : '';
   }
-  event.waitUntil(Promise.all([
-    self.registration.showNotification(payload.title || 'RAYAN CMMS', noticeOptions(payload)),
+  event.waitUntil(
     self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clients) => {
+      const focused = clients.some((client) => client.focused);
       clients.forEach((client) => client.postMessage({
         type: 'cmms-push',
         title: payload.title,
         body: payload.body,
         url: payload.url,
         sound: true,
+        focused,
       }));
+      // Always show a system notice so sound/banner can fire when the app is not focused.
+      return self.registration.showNotification(payload.title || 'RAYAN CMMS', noticeOptions(payload));
     }),
-  ]));
+  );
 });
 
 self.addEventListener('notificationclick', (event) => {

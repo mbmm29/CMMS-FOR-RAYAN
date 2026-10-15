@@ -845,6 +845,8 @@ const CMMS_AR = {
   'Enable notices on this phone, then send a test notice to confirm the tray alert.': 'فعّل الإشعارات على هذا الهاتف ثم أرسل إشعارًا تجريبيًا للتأكد من ظهوره في لوحة الإشعارات.',
   'Enable notices on this phone, then send a test notice to confirm sound and the on-screen banner.': 'فعّل الإشعارات على هذا الهاتف ثم أرسل إشعارًا تجريبيًا للتأكد من الصوت والشريط الظاهر فوق التطبيقات.',
   'On Android: App info → Notifications → General → enable Sound and Show as pop-up (like WhatsApp).': 'على أندرويد: معلومات التطبيق ← الإشعارات ← عام ← فعّل الصوت وإظهار كنافذة منبثقة (مثل واتساب).',
+  'On iPhone: turn off Focus (Personal), or allow CMMS in Focus → Apps. Then leave the app (Home) and send a test notice.': 'على آيفون: أوقف وضع التركيز (Personal) أو اسمح لـ CMMS من التركيز ← التطبيقات. ثم اخرج من التطبيق (Home) وأرسل إشعارًا تجريبيًا.',
+  'Test notice sent. Leave CMMS now (Home) to hear the banner over other apps.': 'تم إرسال إشعار تجريبي. اخرج من CMMS الآن (Home) لتسمع الصوت ويظهر الشريط فوق التطبيقات.',
   'Open this page from the home-screen app on iPhone to receive notices.': 'على آيفون افتح التطبيق من الشاشة الرئيسية لاستلام الإشعارات.',
   'New work order': 'أمر صيانة جديد',
   'new work orders': 'أوامر صيانة جديدة',

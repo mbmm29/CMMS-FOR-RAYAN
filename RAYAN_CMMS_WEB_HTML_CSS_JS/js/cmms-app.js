@@ -56,7 +56,7 @@ function renderMyAccount(){
   const workspace=document.getElementById('workspace');
   workspace.className='workspace';
   const account=getSavedUser()||{};
-  const notices=noticeRoleOk(account)?`<section class="panel user-editor account-panel notice-panel"><h2>${t('Notification settings')}</h2><p id="notice-status" class="notice-status"></p><p class="live-note">${t('Enable notices on this phone, then send a test notice to confirm sound and the on-screen banner.')}</p><p class="live-note">${t('On Android: App info → Notifications → General → enable Sound and Show as pop-up (like WhatsApp).')}</p><div class="form-actions notice-actions"><button class="detail-button primary" type="button" id="notice-enable">${t('Enable phone notices')}</button><button class="detail-button" type="button" id="notice-test">${t('Send test notice')}</button></div><p id="notice-error" class="form-error"></p></section>`:'';
+  const notices=noticeRoleOk(account)?`<section class="panel user-editor account-panel notice-panel"><h2>${t('Notification settings')}</h2><p id="notice-status" class="notice-status"></p><p class="live-note">${t('Enable notices on this phone, then send a test notice to confirm sound and the on-screen banner.')}</p><p class="live-note">${t('On Android: App info → Notifications → General → enable Sound and Show as pop-up (like WhatsApp).')}</p><p class="live-note">${t('On iPhone: turn off Focus (Personal), or allow CMMS in Focus → Apps. Then leave the app (Home) and send a test notice.')}</p><div class="form-actions notice-actions"><button class="detail-button primary" type="button" id="notice-enable">${t('Enable phone notices')}</button><button class="detail-button" type="button" id="notice-test">${t('Send test notice')}</button></div><p id="notice-error" class="form-error"></p></section>`:'';
   workspace.innerHTML=`${notices}<section class="panel user-editor account-panel"><h2>${t('User')}</h2><form id="own-account"><label>${t('Full name')}<input name="full_name" required autocomplete="name"></label><label>${t('Username')}<input name="username" required autocomplete="username"></label><label>${t('Role')}<input name="role_label" disabled></label><label>${t('New password')}<small>${t('Leave blank to keep the current password')}</small><input name="password" type="password" minlength="8" autocomplete="new-password"></label><label>${t('Confirm password')}<input name="confirm_password" type="password" minlength="8" autocomplete="new-password"></label><label>${t('Current password')}<small>${t('Required only when you set a new password')}</small><input name="current_password" type="password" autocomplete="current-password"></label><div class="form-actions"><button class="detail-button primary" type="submit">${t('Save')}</button></div><p id="own-account-error" class="form-error"></p></form></section>`;
   const form=document.getElementById('own-account');
   form.full_name.value=account.full_name||'';
@@ -84,7 +84,7 @@ function renderMyAccount(){
     try{
       await window.cmmsPush.test();
       paintNoticeStatus();
-      accountToast(t('Test notice sent. Check the phone notification tray.'));
+      accountToast(t('Test notice sent. Leave CMMS now (Home) to hear the banner over other apps.'));
     }catch(exception){
       if(noticeError)noticeError.textContent=exception.message||t('The phone could not be registered for notices.');
       paintNoticeStatus();
