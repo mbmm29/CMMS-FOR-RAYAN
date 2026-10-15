@@ -91,6 +91,10 @@ def ensure_additive_columns():
         if 'technician_plants' not in tables:
             TechnicianPlant.__table__.create(bind=engine, checkfirst=True)
             tables = set(inspect(engine).get_table_names())
+        for table in (AppSecret.__table__, PushSubscription.__table__, PushDelivery.__table__):
+            if table.name not in tables:
+                table.create(bind=engine, checkfirst=True)
+        tables = set(inspect(engine).get_table_names())
         if 'daily_report_items' in tables:
             existing = {c['name'] for c in inspector.get_columns('daily_report_items')}
             additions = {
@@ -525,9 +529,21 @@ def technician_allowed_plants(db: Session, technician_id: str | None):
 def assert_technician_can_use_plant(db: Session, technician_id: str | None, plant_id: str | None):
     if not plant_id:
         return
-    allowed = technician_allowed_plants(db, technician_id)
+    try:
+        allowed = technician_allowed_plants(db, technician_id)
+    except Exception:
+        # Never block report save because plant-access lookup failed.
+        return
     if allowed is not None and plant_id not in allowed:
         raise HTTPException(400, 'This plant is not assigned to the technician')
+
+
+def report_save_failed(exc: Exception):
+    """Surface the real failure instead of a blank HTTP 500."""
+    detail = str(exc).strip() or exc.__class__.__name__
+    if len(detail) > 280:
+        detail = detail[:277] + '...'
+    raise HTTPException(500, f'Report save failed: {detail}') from exc
 
 
 def session_payload(user: User, db: Session | None = None):
@@ -3563,139 +3579,146 @@ def create_report(
 
     rid = f'DR-{data.report_date.year}-{db.query(DailyReport).count()+1:05d}'
 
-    r = DailyReport(
-        report_id=rid,
-        report_date=data.report_date,
-        technician_id=technician_id,
-        plant_id=data.plant_id,
-        shift=data.shift,
-        shift_engineer=data.shift_engineer,
-        general_notes=data.general_notes,
-        status='Draft',
-    )
-    db.add(r)
-    db.flush()
-
-    linked_wos = []
-    machine_records = []
-
-    for item in data.items:
-        validate_report_item(db, item, technician_id)
-
-        payload = item.model_dump()
-
-        # Always calculate downtime from start/end when both are present.
-        if item.downtime_start is not None and item.downtime_end is not None:
-            payload['downtime_h'] = calculate_downtime(
-                item.downtime_start, item.downtime_end
-            )
-
-        row = DailyReportItem(report_id=r.id, **payload)
-        db.add(row)
+    try:
+        r = DailyReport(
+            report_id=rid,
+            report_date=data.report_date,
+            technician_id=technician_id,
+            plant_id=data.plant_id,
+            shift=data.shift,
+            shift_engineer=data.shift_engineer,
+            general_notes=data.general_notes,
+            status='Draft',
+        )
+        db.add(r)
         db.flush()
-        propose_unknown_equipment(db, r, row)
 
-        # Automatic WO matching/creation.
-        w, mode = get_or_create_wo(db, u, row, r)
+        linked_wos = []
+        machine_records = []
 
-        if w:
-            row.wo_id = w.work_order_id
-            linked_wos.append(w.work_order_id)
+        for item in data.items:
+            validate_report_item(db, item, technician_id)
 
-            # Keep WO data synchronized with the report's measured times.
-            if row.maintenance_start is not None:
-                # WorkOrder stores datetime; use report date + time.
-                w.start_time = datetime.combine(
-                    r.report_date, row.maintenance_start
+            payload = item.model_dump()
+
+            # Always calculate downtime from start/end when both are present.
+            if item.downtime_start is not None and item.downtime_end is not None:
+                payload['downtime_h'] = calculate_downtime(
+                    item.downtime_start, item.downtime_end
                 )
-            if row.maintenance_end is not None:
-                w.end_time = datetime.combine(
-                    r.report_date, row.maintenance_end
+
+            row = DailyReportItem(report_id=r.id, **payload)
+            db.add(row)
+            db.flush()
+            propose_unknown_equipment(db, r, row)
+
+            # Automatic WO matching/creation.
+            w, mode = get_or_create_wo(db, u, row, r)
+
+            if w:
+                row.wo_id = w.work_order_id
+                linked_wos.append(w.work_order_id)
+
+                # Keep WO data synchronized with the report's measured times.
+                if row.maintenance_start is not None:
+                    # WorkOrder stores datetime; use report date + time.
+                    w.start_time = datetime.combine(
+                        r.report_date, row.maintenance_start
+                    )
+                if row.maintenance_end is not None:
+                    w.end_time = datetime.combine(
+                        r.report_date, row.maintenance_end
+                    )
+                if row.downtime_h is not None:
+                    w.downtime_h = row.downtime_h
+                if row.action_taken:
+                    w.work_description = row.action_taken
+                    w.corrective_action = row.action_taken
+                if row.spare_parts:
+                    w.parts_used = row.spare_parts
+                if not current_assignees(db, w):
+                    w.assigned_technician_id = technician_id
+                    db.add(WorkOrderAssignment(work_order_id=w.work_order_id, technician_id=technician_id))
+
+                if w.pm_id is None and row.pm_id:
+                    w.pm_id = row.pm_id
+
+            elif mode == 'review':
+                notify(
+                    db,
+                    None,
+                    'Corrective WO Matching Review',
+                    f'{rid}: multiple open corrective WOs match {row.equipment_id}; Engineer review required',
+                    'wo_match',
+                    rid,
                 )
-            if row.downtime_h is not None:
-                w.downtime_h = row.downtime_h
-            if row.action_taken:
-                w.work_description = row.action_taken
-                w.corrective_action = row.action_taken
-            if row.spare_parts:
-                w.parts_used = row.spare_parts
-            if not current_assignees(db, w):
-                w.assigned_technician_id = technician_id
-                db.add(WorkOrderAssignment(work_order_id=w.work_order_id, technician_id=technician_id))
 
-            if w.pm_id is None and row.pm_id:
-                w.pm_id = row.pm_id
+            # The machine log keeps corrective and emergency work only. Oil changes are recorded from the lubrication report.
+            if row.maintenance_type in ('Corrective', 'Emergency') and not (row.wo_id and db.query(MachineRecord).filter_by(wo_id=row.wo_id).first()):
+                machine_record = MachineRecord(
+                    equipment_id=row.equipment_id,
+                    record_date=r.report_date,
+                    record_type=row.maintenance_type,
+                    daily_report_id=r.id,
+                    wo_id=row.wo_id,
+                    pm_id=row.pm_id,
+                    technician_id=r.technician_id,
+                    description=row.action_taken,
+                    cause=row.failure_reason,
+                    action=row.action_taken,
+                    start_time=row.maintenance_start,
+                    end_time=row.maintenance_end,
+                    downtime_h=row.downtime_h,
+                    spare_parts=row.spare_parts,
+                )
+                db.add(machine_record)
+                machine_records.append(machine_record)
 
-        elif mode == 'review':
-            notify(
-                db,
-                None,
-                'Corrective WO Matching Review',
-                f'{rid}: multiple open corrective WOs match {row.equipment_id}; Engineer review required',
-                'wo_match',
-                rid,
-            )
+            # The equipment was mentioned in the daily report, so its machine
+            # record is created automatically. Equipment status is updated only
+            # when actual maintenance is being performed.
+            eq = db.query(Equipment).filter_by(
+                equipment_id=row.equipment_id
+            ).first()
+            if eq:
+                if row.maintenance_type in ('Corrective', 'Preventive'):
+                    eq.status = 'Under Maintenance'
 
-        # The machine log keeps corrective and emergency work only. Oil changes are recorded from the lubrication report.
-        if row.maintenance_type in ('Corrective', 'Emergency') and not (row.wo_id and db.query(MachineRecord).filter_by(wo_id=row.wo_id).first()):
-            machine_record = MachineRecord(
-                equipment_id=row.equipment_id,
-                record_date=r.report_date,
-                record_type=row.maintenance_type,
-                daily_report_id=r.id,
-                wo_id=row.wo_id,
-                pm_id=row.pm_id,
-                technician_id=r.technician_id,
-                description=row.action_taken,
-                cause=row.failure_reason,
-                action=row.action_taken,
-                start_time=row.maintenance_start,
-                end_time=row.maintenance_end,
-                downtime_h=row.downtime_h,
-                spare_parts=row.spare_parts,
-            )
-            db.add(machine_record)
-            machine_records.append(machine_record)
+        # Populate report-level fields from its first item for compatibility.
+        first = data.items[0]
+        r.equipment_id = first.equipment_id
+        r.work_summary = first.action_taken
+        r.finding = first.failure_reason
+        r.action_taken = first.action_taken
+        r.general_notes = data.general_notes
+        r.labor_hours = None
 
-        # The equipment was mentioned in the daily report, so its machine
-        # record is created automatically. Equipment status is updated only
-        # when actual maintenance is being performed.
-        eq = db.query(Equipment).filter_by(
-            equipment_id=row.equipment_id
-        ).first()
-        if eq:
-            if row.maintenance_type in ('Corrective', 'Preventive'):
-                eq.status = 'Under Maintenance'
+        apply_spare_stock(db, '', spare_text_from_items(db.query(DailyReportItem).filter_by(report_id=r.id).all()))
 
-    # Populate report-level fields from its first item for compatibility.
-    first = data.items[0]
-    r.equipment_id = first.equipment_id
-    r.work_summary = first.action_taken
-    r.finding = first.failure_reason
-    r.action_taken = first.action_taken
-    r.general_notes = data.general_notes
-    r.labor_hours = None
+        audit(
+            db,
+            u,
+            'CREATE',
+            'DailyReport',
+            rid,
+            new={
+                'date': str(data.report_date),
+                'technician_id': technician_id,
+                'items': len(data.items),
+                'work_orders': linked_wos,
+            },
+        )
 
-    apply_spare_stock(db, '', spare_text_from_items(db.query(DailyReportItem).filter_by(report_id=r.id).all()))
+        db.commit()
+        db.refresh(r)
 
-    audit(
-        db,
-        u,
-        'CREATE',
-        'DailyReport',
-        rid,
-        new={
-            'date': str(data.report_date),
-            'technician_id': technician_id,
-            'items': len(data.items),
-            'work_orders': linked_wos,
-        },
-    )
-
-    db.commit()
-    db.refresh(r)
-
-    return get_report(rid, db, u)
+        return get_report(rid, db, u)
+    except HTTPException:
+        db.rollback()
+        raise
+    except Exception as exc:
+        db.rollback()
+        report_save_failed(exc)
 
 
 @app.put('/daily-reports/{report_id}')
@@ -3727,131 +3750,138 @@ def update_report(
         'shift_engineer': r.shift_engineer,
     }
 
-    header_locked = is_technician_account(u) and r.status == 'Returned'
-    if not header_locked:
-        if data.report_date is not None:
-            r.report_date = data.report_date
-        if data.shift is not None:
-            r.shift = data.shift
-        if data.shift_engineer is not None:
-            r.shift_engineer = data.shift_engineer
-        if data.general_notes is not None:
-            r.general_notes = data.general_notes
-        if data.plant_id is not None:
-            r.plant_id = data.plant_id
+    try:
+        header_locked = is_technician_account(u) and r.status == 'Returned'
+        if not header_locked:
+            if data.report_date is not None:
+                r.report_date = data.report_date
+            if data.shift is not None:
+                r.shift = data.shift
+            if data.shift_engineer is not None:
+                r.shift_engineer = data.shift_engineer
+            if data.general_notes is not None:
+                r.general_notes = data.general_notes
+            if data.plant_id is not None:
+                r.plant_id = data.plant_id
 
-    if data.items is not None:
-        if not data.items:
-            raise HTTPException(400, 'Daily Report must contain at least one item')
+        if data.items is not None:
+            if not data.items:
+                raise HTTPException(400, 'Daily Report must contain at least one item')
 
-        # For the first implementation, rebuild item rows while the report is
-        # still Draft/Returned. This keeps the API deterministic and avoids
-        # duplicate Machine Records/WO links.
-        assigned_rows = {}
-        kept_parts = None
-        existing_items = db.query(DailyReportItem).filter_by(report_id=r.id).all()
-        previous_parts = spare_text_from_items(existing_items)
-        previous_order_ids = {row.wo_id for row in existing_items if row.wo_id}
-        equipment_by_order = {row.wo_id: row.equipment_id for row in existing_items if row.wo_id}
-        if header_locked:
-            sample = next((row for row in existing_items if row.spare_parts), None)
-            kept_parts = sample.spare_parts if sample else None
-        if is_technician_account(u):
-            for existing in existing_items:
-                if existing.wo_id:
-                    assigned_rows[existing.wo_id] = {
-                        column.name: getattr(existing, column.name)
-                        for column in existing.__table__.columns
-                        if column.name != 'id'
-                    }
-        for existing in existing_items:
-            db.expunge(existing)
-        db.query(DailyReportItem).filter(
-            DailyReportItem.report_id == r.id
-        ).delete(synchronize_session=False)
-        db.flush()
-
-        saved_rows = []
-        for item in data.items:
-            validate_report_item(db, item, r.technician_id)
-            payload = item.model_dump()
-            if item.downtime_start is not None and item.downtime_end is not None:
-                payload['downtime_h'] = calculate_downtime(
-                    item.downtime_start, item.downtime_end
-                )
-            locked = assigned_rows.get(payload.get('wo_id'))
-            if locked:
-                chosen = {
-                    'action_taken': payload.get('action_taken'),
-                    'maintenance_type': payload.get('maintenance_type') or locked.get('maintenance_type'),
-                    'maintenance_start': payload.get('maintenance_start'),
-                    'maintenance_end': payload.get('maintenance_end'),
-                    'downtime_start': payload.get('downtime_start'),
-                    'downtime_end': payload.get('downtime_end'),
-                    'downtime_h': payload.get('downtime_h'),
-                    'spare_parts': payload.get('spare_parts'),
-                }
-                payload = dict(locked)
-                payload.update(chosen)
+            # For the first implementation, rebuild item rows while the report is
+            # still Draft/Returned. This keeps the API deterministic and avoids
+            # duplicate Machine Records/WO links.
+            assigned_rows = {}
+            kept_parts = None
+            existing_items = db.query(DailyReportItem).filter_by(report_id=r.id).all()
+            previous_parts = spare_text_from_items(existing_items)
+            previous_order_ids = {row.wo_id for row in existing_items if row.wo_id}
+            equipment_by_order = {row.wo_id: row.equipment_id for row in existing_items if row.wo_id}
             if header_locked:
-                payload['spare_parts'] = kept_parts
-            if payload.get('maintenance_type') not in REPORT_ORDER_TYPES:
-                payload['wo_id'] = None
-            payload.pop('report_id', None)
-            row = DailyReportItem(report_id=r.id, **payload)
-            db.add(row)
+                sample = next((row for row in existing_items if row.spare_parts), None)
+                kept_parts = sample.spare_parts if sample else None
+            if is_technician_account(u):
+                for existing in existing_items:
+                    if existing.wo_id:
+                        assigned_rows[existing.wo_id] = {
+                            column.name: getattr(existing, column.name)
+                            for column in existing.__table__.columns
+                            if column.name != 'id'
+                        }
+            for existing in existing_items:
+                db.expunge(existing)
+            db.query(DailyReportItem).filter(
+                DailyReportItem.report_id == r.id
+            ).delete(synchronize_session=False)
             db.flush()
-            saved_rows.append(row)
-            propose_unknown_equipment(db, r, row)
-            if not row.wo_id and row.maintenance_type in ('Corrective', 'Emergency'):
-                created, _mode = get_or_create_wo(db, u, row, r)
-                if created:
-                    row.wo_id = created.work_order_id
-            if row.wo_id:
-                order = db.query(WorkOrder).filter_by(work_order_id=row.wo_id).first()
-                if order:
-                    if row.action_taken:
-                        order.corrective_action = row.action_taken
-                        record_high_machine(db, order, r.technician_id, row.action_taken)
-                    if row.maintenance_start is not None:
-                        order.start_time = datetime.combine(r.report_date, row.maintenance_start)
-                    if row.maintenance_end is not None:
-                        order.end_time = datetime.combine(r.report_date, row.maintenance_end)
-                    if row.downtime_h is not None:
-                        order.downtime_h = row.downtime_h
-                    if order.created_by == 'SYSTEM' and order.work_order_type != row.maintenance_type:
-                        order.work_order_type = row.maintenance_type
 
-        kept_ids = {row.wo_id for row in saved_rows if row.wo_id}
-        for order_id in previous_order_ids - kept_ids:
-            successor = next((
-                row for row in saved_rows
-                if not row.wo_id and row.equipment_id == equipment_by_order.get(order_id)
-            ), None)
-            retire_activity_work_order(
-                db, u, r, order_id,
-                successor.maintenance_type if successor else None,
-            )
+            saved_rows = []
+            for item in data.items:
+                validate_report_item(db, item, r.technician_id)
+                payload = item.model_dump()
+                if item.downtime_start is not None and item.downtime_end is not None:
+                    payload['downtime_h'] = calculate_downtime(
+                        item.downtime_start, item.downtime_end
+                    )
+                locked = assigned_rows.get(payload.get('wo_id'))
+                if locked:
+                    chosen = {
+                        'action_taken': payload.get('action_taken'),
+                        'maintenance_type': payload.get('maintenance_type') or locked.get('maintenance_type'),
+                        'maintenance_start': payload.get('maintenance_start'),
+                        'maintenance_end': payload.get('maintenance_end'),
+                        'downtime_start': payload.get('downtime_start'),
+                        'downtime_end': payload.get('downtime_end'),
+                        'downtime_h': payload.get('downtime_h'),
+                        'spare_parts': payload.get('spare_parts'),
+                    }
+                    payload = dict(locked)
+                    payload.update(chosen)
+                if header_locked:
+                    payload['spare_parts'] = kept_parts
+                if payload.get('maintenance_type') not in REPORT_ORDER_TYPES:
+                    payload['wo_id'] = None
+                payload.pop('report_id', None)
+                row = DailyReportItem(report_id=r.id, **payload)
+                db.add(row)
+                db.flush()
+                saved_rows.append(row)
+                propose_unknown_equipment(db, r, row)
+                if not row.wo_id and row.maintenance_type in ('Corrective', 'Emergency'):
+                    created, _mode = get_or_create_wo(db, u, row, r)
+                    if created:
+                        row.wo_id = created.work_order_id
+                if row.wo_id:
+                    order = db.query(WorkOrder).filter_by(work_order_id=row.wo_id).first()
+                    if order:
+                        if row.action_taken:
+                            order.corrective_action = row.action_taken
+                            record_high_machine(db, order, r.technician_id, row.action_taken)
+                        if row.maintenance_start is not None:
+                            order.start_time = datetime.combine(r.report_date, row.maintenance_start)
+                        if row.maintenance_end is not None:
+                            order.end_time = datetime.combine(r.report_date, row.maintenance_end)
+                        if row.downtime_h is not None:
+                            order.downtime_h = row.downtime_h
+                        if order.created_by == 'SYSTEM' and order.work_order_type != row.maintenance_type:
+                            order.work_order_type = row.maintenance_type
 
-        first = data.items[0]
-        r.equipment_id = first.equipment_id
-        r.work_summary = first.action_taken
-        r.finding = first.failure_reason
-        r.action_taken = first.action_taken
-        apply_spare_stock(db, previous_parts, spare_text_from_items(saved_rows))
+            kept_ids = {row.wo_id for row in saved_rows if row.wo_id}
+            for order_id in previous_order_ids - kept_ids:
+                successor = next((
+                    row for row in saved_rows
+                    if not row.wo_id and row.equipment_id == equipment_by_order.get(order_id)
+                ), None)
+                retire_activity_work_order(
+                    db, u, r, order_id,
+                    successor.maintenance_type if successor else None,
+                )
 
-    audit(
-        db,
-        u,
-        'UPDATE',
-        'DailyReport',
-        report_id,
-        old=old,
-        new=data.model_dump(exclude_unset=True),
-    )
-    db.commit()
-    db.refresh(r)
-    return get_report(report_id, db, u)
+            first = data.items[0]
+            r.equipment_id = first.equipment_id
+            r.work_summary = first.action_taken
+            r.finding = first.failure_reason
+            r.action_taken = first.action_taken
+            apply_spare_stock(db, previous_parts, spare_text_from_items(saved_rows))
+
+        audit(
+            db,
+            u,
+            'UPDATE',
+            'DailyReport',
+            report_id,
+            old=old,
+            new=data.model_dump(exclude_unset=True),
+        )
+        db.commit()
+        db.refresh(r)
+        return get_report(report_id, db, u)
+    except HTTPException:
+        db.rollback()
+        raise
+    except Exception as exc:
+        db.rollback()
+        report_save_failed(exc)
 
 
 def assert_daily_send_window(db: Session, technician_id: str, report_id: str | None = None):
@@ -4362,34 +4392,55 @@ def notification_read(nid:int,db:Session=Depends(get_db),u=Depends(auth)):
 
 @app.get('/push/key')
 def push_key(db:Session=Depends(get_db), u=Depends(auth)):
-    return {'public_key': push_public_key(db)}
+    try:
+        return {'public_key': push_public_key(db)}
+    except Exception as exc:
+        detail = str(exc).strip() or exc.__class__.__name__
+        raise HTTPException(500, f'Push key failed: {detail[:280]}') from exc
 
 @app.get('/push/status')
 def push_status(db: Session = Depends(get_db), u=Depends(auth)):
     if u.role not in TECHNICIAN and u.role != 'MAINTENANCE_ENGINEER':
         return {'allowed': False, 'registered': 0}
-    return {
-        'allowed': True,
-        'registered': subscription_count(db, u.id),
-    }
+    try:
+        return {
+            'allowed': True,
+            'registered': subscription_count(db, u.id),
+        }
+    except Exception:
+        return {'allowed': True, 'registered': 0}
 
 @app.post('/push/subscribe')
 def push_subscribe(data:PushSubscribe, db:Session=Depends(get_db), u=Depends(auth)):
     if u.role not in TECHNICIAN and u.role != 'MAINTENANCE_ENGINEER':
         raise HTTPException(403, 'Only a technician or maintenance engineer can receive phone notices.')
-    if not save_subscription(db, u, data.endpoint, data.p256dh, data.auth):
-        raise HTTPException(400, 'The phone could not be registered for notices.')
-    return {'ok': True, 'registered': subscription_count(db, u.id)}
+    try:
+        if not save_subscription(db, u, data.endpoint, data.p256dh, data.auth):
+            raise HTTPException(400, 'The phone could not be registered for notices.')
+        return {'ok': True, 'registered': subscription_count(db, u.id)}
+    except HTTPException:
+        raise
+    except Exception as exc:
+        db.rollback()
+        detail = str(exc).strip() or exc.__class__.__name__
+        raise HTTPException(500, f'Push subscribe failed: {detail[:280]}') from exc
 
 @app.post('/push/test')
 def push_test(db: Session = Depends(get_db), u=Depends(auth)):
     if u.role not in TECHNICIAN and u.role != 'MAINTENANCE_ENGINEER':
         raise HTTPException(403, 'Only a technician or maintenance engineer can receive phone notices.')
-    if subscription_count(db, u.id) < 1:
-        raise HTTPException(400, 'Enable phone notices on this device first.')
-    if not send_test_push(db, u.id):
-        raise HTTPException(400, 'The phone could not receive the test notice. Enable phone notices again.')
-    return {'ok': True}
+    try:
+        if subscription_count(db, u.id) < 1:
+            raise HTTPException(400, 'Enable phone notices on this device first.')
+        if not send_test_push(db, u.id):
+            raise HTTPException(400, 'The phone could not receive the test notice. Enable phone notices again.')
+        return {'ok': True}
+    except HTTPException:
+        raise
+    except Exception as exc:
+        db.rollback()
+        detail = str(exc).strip() or exc.__class__.__name__
+        raise HTTPException(500, f'Push test failed: {detail[:280]}') from exc
 @app.get('/audit')
 def audit_log(db:Session=Depends(get_db),u=Depends(role(*DEVELOPER))): return db.query(AuditTrail).order_by(AuditTrail.created_at.desc()).limit(500).all()
 

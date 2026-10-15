@@ -14,7 +14,9 @@ from sqlalchemy import func, or_
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from .database import SessionLocal
+from sqlalchemy import inspect
+
+from .database import SessionLocal, engine
 from .models import (
     AnnualPMDayTask,
     AppSecret,
@@ -47,7 +49,20 @@ def _public_key(private_key):
     return base64.urlsafe_b64encode(raw).decode().rstrip('=')
 
 
+def ensure_push_tables() -> bool:
+    """Create push tables outside the request transaction when they are missing."""
+    try:
+        names = set(inspect(engine).get_table_names())
+        for table in (AppSecret.__table__, PushSubscription.__table__, PushDelivery.__table__):
+            if table.name not in names:
+                table.create(bind=engine, checkfirst=True)
+        return True
+    except Exception:
+        return False
+
+
 def vapid_material(db: Session):
+    ensure_push_tables()
     row = db.query(AppSecret).filter_by(key='vapid').first()
     if row and row.value:
         data = json.loads(row.value)
@@ -67,6 +82,8 @@ def vapid_material(db: Session):
     except IntegrityError:
         db.rollback()
         row = db.query(AppSecret).filter_by(key='vapid').first()
+        if not row or not row.value:
+            raise
         data = json.loads(row.value)
         return data['private_key'], data['public_key']
     return private_b64, public
@@ -79,9 +96,13 @@ def public_key(db: Session) -> str:
 def save_subscription(db: Session, user, endpoint: str, p256dh: str, auth: str):
     if user.role not in ('TECHNICIAN', 'LUBRICATION_TECHNICIAN', 'MAINTENANCE_ENGINEER'):
         return False
+    if not ensure_push_tables():
+        return False
     endpoint = (endpoint or '').strip()
     if not endpoint.startswith('https://') or len(endpoint) > 2000:
         return False
+    p256dh = (p256dh or '').strip()
+    auth = (auth or '').strip()
     if not p256dh or not auth or len(p256dh) > 255 or len(auth) > 255:
         return False
     row = db.query(PushSubscription).filter_by(endpoint=endpoint).first()
@@ -96,11 +117,19 @@ def save_subscription(db: Session, user, endpoint: str, p256dh: str, auth: str):
 
 
 def subscription_count(db: Session, user_id: int) -> int:
-    return db.query(PushSubscription).filter_by(user_id=user_id).count()
+    if not ensure_push_tables():
+        return 0
+    try:
+        return db.query(PushSubscription).filter_by(user_id=user_id).count()
+    except Exception:
+        db.rollback()
+        return 0
 
 
 def send_test_push(db: Session, user_id: int) -> bool:
     """Send one visible test notice to every phone registered for this account."""
+    if not ensure_push_tables():
+        return False
     private_key, _public = vapid_material(db)
     ok = _send(
         db,

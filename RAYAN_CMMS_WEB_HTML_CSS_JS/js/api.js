@@ -18,6 +18,19 @@ const API_BASE_URL = (() => {
     return origin;
 })();
 
+function formatApiDetail(detail, status) {
+    if (typeof detail === 'string' && detail.trim()) return detail;
+    if (Array.isArray(detail)) {
+        const text = detail
+            .map((item) => item?.msg || item?.detail || (typeof item === 'string' ? item : ''))
+            .filter(Boolean)
+            .join(' · ');
+        if (text) return text;
+    }
+    if (detail && typeof detail === 'object' && detail.msg) return String(detail.msg);
+    return `HTTP ${status}`;
+}
+
 async function apiRequest(endpoint, options = {}) {
     const token = localStorage.getItem("access_token");
     const wantsBlob = options.blob === true;
@@ -56,7 +69,7 @@ async function apiRequest(endpoint, options = {}) {
             } catch (_) {
                 data = null;
             }
-            throw new Error(data?.detail || `HTTP ${response.status}`);
+            throw new Error(formatApiDetail(data?.detail, response.status));
         }
         return response.blob();
     }
@@ -70,11 +83,7 @@ async function apiRequest(endpoint, options = {}) {
     }
 
     if (!response.ok) {
-        const message =
-            data?.detail ||
-            `HTTP ${response.status}`;
-
-        throw new Error(message);
+        throw new Error(formatApiDetail(data?.detail, response.status));
     }
 
     return data;
