@@ -551,12 +551,16 @@ function filtersHtml(options = {}) {
         </div>
       </div>`
     : `<label>${t('Plant')}<select data-filter="plant">${option('', t('All plants'), ui.plantId)}${openPlants().map((plant) => option(plant.plant_id, plant.name, ui.plantId)).join('')}</select></label>`;
+  const searchFilter = options.equipmentSearch === false
+    ? ''
+    : `<label class="equipment-query">${esc(t('Search'))}<span class="equipment-query-row"><input id="equipment-query" type="search" value="${esc(ui.equipmentQuery || '')}" placeholder="${esc(t('Number or name'))}" autocomplete="off"><button type="button" class="detail-button" id="equipment-query-go">${esc(t('Search'))}</button></span></label>`;
   return `<div class="live-filters">
     ${plantFilter}
     <label>${t('Line')}<select data-filter="line">${option('', t('All lines'), ui.lineId)}${scopedLines.map((line) => option(line.line_id, line.name, ui.lineId)).join('')}</select></label>
     <label>${t('Section')}<select data-filter="section">${option('', t('All sections'), ui.sectionId)}${sections.map((section) => option(section.section_id, section.name, ui.sectionId)).join('')}</select></label>
     <label>${t('Equipment')}<select data-filter="equipment">${option('', t('All equipment'), ui.equipmentId)}${equipment.map((item) => option(item.equipment_id, `${item.equipment_id} — ${item.name}`, ui.equipmentId)).join('')}</select></label>
-    <label class="equipment-query">${esc(t('Search'))}<span class="equipment-query-row"><input id="equipment-query" type="search" value="${esc(ui.equipmentQuery || '')}" placeholder="${esc(t('Number or name'))}" autocomplete="off"><button type="button" class="detail-button" id="equipment-query-go">${esc(t('Search'))}</button></span></label>
+    ${searchFilter}
+    ${options.extra || ''}
   </div>`;
 }
 
@@ -1168,7 +1172,7 @@ async function drawDashboard() {
   const components = (kpi.components || []).map((row) => `<div class="summary-row"><span>${esc(row.component_id)} · ${esc(row.name)}</span><b>${row.life_days} ${t('days')}${row.in_service ? '' : ` ${t('removed')}`}</b></div>`).join('') || `<p class="chart-empty">${esc(t('No component installation dates yet'))}</p>`;
   const workspace = document.getElementById('workspace');
   workspace.className = 'workspace kpi-layout';
-  workspace.innerHTML = `${filtersHtml({ multiPlant: true }).replace('</div>', `${extraFilters}</div>`)}
+  workspace.innerHTML = `${filtersHtml({ multiPlant: true, equipmentSearch: false, extra: extraFilters })}
     <p class="kpi-period">${esc(t('Period'))} ${esc(fmtDate(kpi.period?.from))} – ${esc(fmtDate(kpi.period?.to))} · ${kpi.period?.days || 0} ${esc(t('days'))} · ${kpi.equipment_count || 0} ${esc(t('equipment'))} · ${esc(t('idle time is 0 because it is not recorded'))}</p>
     <section class="kpi-board">
       ${card('PM overdue', String(kpi.pm_overdue ?? 0), kpiTargetText(kpi.pm_overdue_pct, null, false), `${kpiText(kpi.pm_overdue_pct, 1, '%')} ${t('of')} ${kpi.pm_due || 0} ${t('due PM plans')}`)}
