@@ -324,9 +324,9 @@ def compute_kpi(db: Session, plant_id=None, line_id=None, equipment_id=None, tec
                 key = item_plant or 'unassigned'
             day_key = report_by_id[row.report_id].report_date.isoformat()
             bucket = grouped.setdefault(key, {})
-            hours = _report_hours(row)
-            bucket[day_key] = bucket.get(day_key, 0) + hours
-            if hours > 0:
+            item_hours = _report_hours(row)
+            bucket[day_key] = bucket.get(day_key, 0) + item_hours
+            if item_hours > 0:
                 grouped_count[key] = grouped_count.get(key, 0) + 1
 
         if line_id:
