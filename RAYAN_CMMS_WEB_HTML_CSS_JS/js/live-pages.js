@@ -1127,14 +1127,12 @@ async function drawDashboard() {
     <section class="panel chart-panel"><h2>${esc(t('Work orders by type'))}</h2><p class="kpi-note">${esc(t('Total'))} ${numberText(orderTotal, 0)} ${esc(t('work orders in this period.'))}</p>${orderTotal ? donut(orderParts, orderTotal, 0) : `<p class="chart-empty">${esc(t('No work orders in this period'))}</p>`}</section>
     </div>
     <section class="panel chart-panel chart-wide"><h2>${esc(t('Downtime Pareto'))}</h2><p class="kpi-note">${esc(t(kpi.trend_by === 'line' ? 'Each line' : kpi.trend_by === 'equipment' ? 'Selected equipment' : 'Each plant'))} · ${esc(t('Bars show frequency in descending order; the line shows the cumulative percentage.'))} · ${esc(t('scheduled'))} ${kpiText(kpi.scheduled_downtime_h, 1)} · ${esc(t('unscheduled'))} ${kpiText(kpi.unscheduled_downtime_h, 1)}</p>${(kpi.pareto || []).length ? paretoChart(kpi.pareto) : `<p class="chart-empty">${esc(t('No downtime in this period'))}</p>`}</section>
-    <section class="panel chart-panel chart-wide chart-tall"><h2>${esc(t('Motor temperature'))}</h2><p class="kpi-note">${esc(t('Two lines only: Temperature 1 and Temperature 2. Date is horizontal, temperature is vertical, and equipment names appear on the points.'))}</p>${(kpi.motor?.temperature || []).some((row) => (row.points || []).some((point) => point.hours != null)) ? tempTrendChart(kpi.motor.temperature, { unit: '°C', equipmentNames: kpi.motor?.equipment_names || [] }) : `<p class="chart-empty">${esc(t('No motor readings in this period.'))}</p>`}</section>
     <section class="panel chart-panel chart-wide"><h2>${esc(t('Oil level'))}</h2><p class="kpi-note">${esc(t(motorScopeNote()))} · ${esc(t('Rank 1 is the best reading on that day.'))}</p>${bumpChart(kpi.motor?.oil_level, 'Oil level') || `<p class="chart-empty">${esc(t('No motor readings in this period.'))}</p>`}</section>
     <section class="panel chart-panel chart-wide"><h2>${esc(t('Oil condition'))}</h2><p class="kpi-note">${esc(t(motorScopeNote()))} · ${esc(t('Rank 1 is the best reading on that day.'))}</p>${bumpChart(kpi.motor?.oil_condition, 'Oil condition') || `<p class="chart-empty">${esc(t('No motor readings in this period.'))}</p>`}</section>
     <section class="panel chart-panel"><h2>${esc(t('Availability basis'))}</h2><div class="summary-row"><span>${esc(t('Uptime'))}</span><b>${kpiText(kpi.uptime_h, 1)} ${esc(t('h'))}</b></div><div class="summary-row"><span>${esc(t('Available time'))}</span><b>${kpiText(kpi.available_h, 1)} ${esc(t('h'))}</b></div><div class="summary-row"><span>${esc(t('Idle time'))}</span><b>${kpiText(kpi.idle_h, 1)} ${esc(t('h'))}</b></div><div class="summary-row"><span>${esc(t('Operating time'))}</span><b>${kpiText(kpi.operating_h, 1)} ${esc(t('h'))}</b></div><small class="kpi-note">${esc(t('Availability = uptime ÷ (available − idle). MTBF = operating time ÷ failures. MTTR = corrective hours ÷ corrective events.'))}</small></section>
     <section class="panel chart-panel"><h2>${esc(t('Work orders and PM'))}</h2><div class="summary-row"><span>${esc(t('Issued / completed'))}</span><b>${kpi.wo_issued || 0} / ${kpi.wo_completed || 0}</b></div><div class="summary-row"><span>${esc(t('PM due / on time'))}</span><b>${kpi.pm_due || 0} / ${kpi.pm_on_time || 0}</b></div><div class="summary-row"><span>${esc(t('Corrective events'))}</span><b>${kpi.corrective_events || 0}</b></div><div class="summary-row"><span>${esc(kpiTargetText(kpi.availability, targets.availability, true))}</span><b>${esc(t('Availability'))}</b></div><div class="summary-row"><span>${esc(kpiTargetText(kpi.mtbf, targets.mtbf, true))}</span><b>${esc(t('MTBF'))}</b></div><div class="summary-row"><span>${esc(kpiTargetText(kpi.mttr, targets.mttr, false))}</span><b>${esc(t('MTTR'))}</b></div>${targetForm}</section>
     <section class="panel chart-panel"><h2>${esc(t('Component life'))}</h2><p class="kpi-note">${esc(t('Removal date − installation date. In-service components use today.'))}</p>${components}<div class="summary-row"><span>${esc(t('Average life'))}</span><b>${kpi.component_life_avg == null ? '—' : `${kpi.component_life_avg} ${t('days')}`}</b></div></section>`;
   bindFilters();
-  bindTempTrendCharts(workspace);
   document.getElementById('kpi-target')?.addEventListener('submit', async (event) => {
     event.preventDefault();
     const error = document.getElementById('kpi-target-error');
@@ -2009,22 +2007,44 @@ function motorChartBlock(title, svg, status) {
   return `<section class="motor-chart"><h4>${esc(t(title))}</h4>${latest}${chart}</section>`;
 }
 
+function motorTempStateHtml(latest = {}) {
+  if (latest.state === 'high') {
+    return `<p class="temp-state high">${esc(t('Temperature is high'))}${latest.date ? ` · ${esc(fmtDate(latest.date))}` : ''}</p>`;
+  }
+  if (latest.state === 'within') {
+    return `<p class="temp-state ok">${esc(t('Within the allowed limit'))}${latest.date ? ` · ${esc(fmtDate(latest.date))}` : ''}</p>`;
+  }
+  return '';
+}
+
+function equipmentTempChart(data) {
+  return tempTrendChart(data.temperature || [], {
+    unit: '°C',
+    limit: data.temp_limit_c,
+    equipmentNames: data.equipment_names || [],
+  }) || areaChart(data.temperature || [], '°C', {
+    limit: data.temp_limit_c,
+    large: true,
+    namesOnChart: true,
+    label: t('Temperature'),
+  });
+}
+
+function equipmentLogTempHtml(data) {
+  const temperature = equipmentTempChart(data);
+  if (!temperature) {
+    return `<h3>${esc(t('Motor temperature'))}</h3><p class="live-note">${esc(t('No motor readings in this period.'))}</p>`;
+  }
+  return `<h3>${esc(t('Motor temperature'))}</h3><p class="kpi-note">${esc(t('Two lines only: Temperature 1 and Temperature 2. Date is horizontal, temperature is vertical, and equipment names appear on the points.'))}</p>${motorTempStateHtml(data.latest || {})}${motorChartBlock('Temperature', temperature, '')}`;
+}
+
 function equipmentMotorHtml(data) {
   const limit = data.temp_limit_c;
   const latest = data.latest || {};
-  const state = latest.state === 'high'
-    ? `<p class="temp-state high">${esc(t('Temperature is high'))}${latest.date ? ` · ${esc(fmtDate(latest.date))}` : ''}</p>`
-    : latest.state === 'within'
-      ? `<p class="temp-state ok">${esc(t('Within the allowed limit'))}${latest.date ? ` · ${esc(fmtDate(latest.date))}` : ''}</p>`
-      : '';
   const form = canMaintain()
     ? `<form id="motor-limit" class="live-form"><label>${esc(t('Allowed temperature (°C)'))}<input name="temp_limit_c" type="number" min="1" max="400" step="0.1" value="${limit == null ? '' : esc(String(limit))}"></label><button class="detail-button primary" type="submit">${esc(t('Save'))}</button><p class="live-note">${esc(t('A reading above this value is high. Leave it empty to clear the limit.'))}</p><p id="motor-limit-error" class="form-error"></p></form>`
     : (limit == null ? '' : `<p class="motor-status">${esc(t('Allowed temperature (°C)'))}: ${esc(String(limit))}</p>`);
-  const temperature = tempTrendChart(data.temperature || [], {
-    unit: '°C',
-    limit,
-    equipmentNames: data.equipment_names || [],
-  }) || areaChart(data.temperature || [], '°C', { limit, large: true, namesOnChart: true, label: t('Temperature') });
+  const temperature = equipmentTempChart(data);
   const level = areaChart(data.oil_level || [], '', { label: t('Oil level'), namesOnChart: true });
   const condition = areaChart(data.oil_condition || [], '', { label: t('Oil condition'), namesOnChart: true });
   const charts = [
@@ -2033,23 +2053,29 @@ function equipmentMotorHtml(data) {
     motorChartBlock('Oil condition', condition, latest.oil_condition || ''),
   ].join('');
   const empty = charts.trim() ? '' : `<p class="live-note">${esc(t('No temperature or oil readings yet.'))}</p>`;
-  return `<h3>${esc(t('Motor condition'))}</h3>${form}${state}${charts}${empty}`;
+  return `<h3>${esc(t('Motor condition'))}</h3>${form}${motorTempStateHtml(latest)}${charts}${empty}`;
 }
 
-async function loadEquipmentMotor(selected) {
+async function loadEquipmentMotor(selected, options = {}) {
   const token = ++equipmentMotorToken;
-  const box = document.getElementById('equipment-motor');
+  const box = document.getElementById(options.boxId || 'equipment-motor');
   if (!box || !selected?.equipment_id) return;
   try {
     const data = await apiRequest(`/equipment/${encodeURIComponent(selected.equipment_id)}/motor-history`);
     if (token !== equipmentMotorToken || !box.isConnected) return;
     if (!data?.included) {
+      if (options.tempOnly) {
+        box.innerHTML = `<h3>${esc(t('Motor temperature'))}</h3><p class="live-note">${esc(t('No temperature or oil readings yet.'))}</p>`;
+        return;
+      }
       box.remove();
       return;
     }
-    box.innerHTML = equipmentMotorHtml(data);
+    box.innerHTML = options.tempOnly ? equipmentLogTempHtml(data) : equipmentMotorHtml(data);
     bindTempTrendCharts(box);
-    document.getElementById('motor-limit')?.addEventListener('submit', (event) => saveEquipmentTempLimit(event, selected.equipment_id));
+    if (!options.tempOnly) {
+      document.getElementById('motor-limit')?.addEventListener('submit', (event) => saveEquipmentTempLimit(event, selected.equipment_id));
+    }
   } catch (exception) {
     if (token === equipmentMotorToken && box.isConnected) box.innerHTML = `<p class="form-error">${esc(t(exception.message || 'Could not load the chart'))}</p>`;
   }
@@ -2490,10 +2516,11 @@ function drawRecords() {
   ]);
   dateLabel(listed.map((row) => row.record_date));
   document.getElementById('workspace').className = 'workspace log-board';
-  document.getElementById('workspace').innerHTML = `<section class="panel"><div class="split">${assetList(chosen)}<div class="asset-view">${tabsHtml(['All', 'Corrective', 'Emergency', 'Oil change'])}${chosen ? machineLogPaper(equipment, rows) : `<p class="live-note">${esc(t('Select a machine to open its maintenance log.'))}</p>`}</div></div></section>`;
+  document.getElementById('workspace').innerHTML = `<section class="panel"><div class="split">${assetList(chosen)}<div class="asset-view">${tabsHtml(['All', 'Corrective', 'Emergency', 'Oil change'])}${chosen ? `${machineLogPaper(equipment, rows)}<div id="equipment-log-motor" class="equipment-motor log-temp-panel"></div>` : `<p class="live-note">${esc(t('Select a machine to open its maintenance log.'))}</p>`}</div></div></section>`;
   bindAssets();
   bindRows();
   bindDeletes();
+  if (chosen && equipment) loadEquipmentMotor(equipment, { boxId: 'equipment-log-motor', tempOnly: true });
   document.getElementById('machine-log')?.addEventListener('submit', async (event) => {
     event.preventDefault();
     if (!canMaintain() || !equipment) return;

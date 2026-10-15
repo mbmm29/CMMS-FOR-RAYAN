@@ -744,7 +744,18 @@ body .workspace .iso-form input{width:100%;max-width:none;height:40px;margin:0;p
 @media(min-width:1100px){
   body[data-live-page="equipment"] .workspace{grid-template-columns:minmax(0,1fr) minmax(340px,440px)}
 }
+.workspace.log-board .log-temp-panel{margin:16px 0 0;padding:14px 16px;border:1px solid #c5d4ea;border-radius:12px;background:#f7faff;box-shadow:0 1px 0 #ffffffa8 inset}
+.workspace.log-board .log-temp-panel h3,.workspace.log-board .log-temp-panel h4{color:#102d60}
+.workspace.log-board .log-temp-panel h4{color:#4a6490}
+.workspace.log-board .log-temp-panel .kpi-note,.workspace.log-board .log-temp-panel .live-note{color:#4a6490}
+.workspace.log-board .log-temp-panel .motor-status{color:#102d60}
+.workspace.log-board .log-temp-panel .temp-state.high{color:#b42318}
+.workspace.log-board .log-temp-panel .temp-state.ok{color:#067647}
+.workspace.log-board .log-temp-panel .temp-trend-stage{border-color:#c5d4ea;background:#071428}
+.workspace.log-board .log-temp-panel .temp-trend-chart{height:280px}
+.workspace.log-board .log-temp-panel .temp-trend-readout,.workspace.log-board .log-temp-panel .temp-trend-hint,.workspace.log-board .log-temp-panel .temp-trend-equip{color:#4a6490}
 .equipment-motor{display:grid;gap:12px;margin:14px 0 4px;padding-top:12px;border-top:1px solid #23406e;min-width:0}
+.workspace.log-board .log-temp-panel.equipment-motor{border-top:0;padding-top:14px}
 .equipment-motor h3,.equipment-motor h4{margin:0;color:#f4f8ff}
 .equipment-motor h3{font-size:14px}
 .equipment-motor h4{font-size:12px;color:#9eb4d6}
