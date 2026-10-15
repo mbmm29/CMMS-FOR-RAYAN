@@ -470,34 +470,41 @@ def create_bootstrap_system():
 @app.get('/health')
 def health(): return {'status':'ok','version':'2.0.0'}
 
+def ensure_technician_plants_table() -> bool:
+    """Create technician_plants outside any request transaction when missing."""
+    try:
+        if 'technician_plants' not in set(inspect(engine).get_table_names()):
+            TechnicianPlant.__table__.create(bind=engine, checkfirst=True)
+        return True
+    except Exception:
+        return False
+
+
 def technician_plant_ids(db: Session, technician_id: str | None) -> list[str]:
+    """Plant access for a technician.
+
+    Uses a separate session so a missing table or query error never rolls back
+    an in-progress daily/lubrication report save (that was causing HTTP 500).
+    """
     if not technician_id:
         return []
+    if not ensure_technician_plants_table():
+        return []
+    # db is unused on purpose: plant lookup must not touch the caller's transaction.
+    _ = db
+    separate = SessionLocal()
     try:
         return [
             row.plant_id
-            for row in db.query(TechnicianPlant)
+            for row in separate.query(TechnicianPlant)
             .filter(TechnicianPlant.technician_id == technician_id)
             .order_by(TechnicianPlant.plant_id)
             .all()
         ]
     except Exception:
-        db.rollback()
-        try:
-            TechnicianPlant.__table__.create(bind=engine, checkfirst=True)
-        except Exception:
-            return []
-        try:
-            return [
-                row.plant_id
-                for row in db.query(TechnicianPlant)
-                .filter(TechnicianPlant.technician_id == technician_id)
-                .order_by(TechnicianPlant.plant_id)
-                .all()
-            ]
-        except Exception:
-            db.rollback()
-            return []
+        return []
+    finally:
+        separate.close()
 
 
 def technician_allowed_plants(db: Session, technician_id: str | None):
@@ -1282,6 +1289,8 @@ def create_technician(data:TechnicianCreate,db:Session=Depends(get_db),u=Depends
 def plant_technicians(plant_id: str, db: Session = Depends(get_db), u=Depends(auth)):
     if not db.query(Plant).filter_by(plant_id=plant_id).first():
         raise HTTPException(404, 'Plant not found')
+    if not ensure_technician_plants_table():
+        return {'plant_id': plant_id, 'technician_ids': []}
     ids = [
         row.technician_id
         for row in db.query(TechnicianPlant)
@@ -1296,6 +1305,8 @@ def plant_technicians(plant_id: str, db: Session = Depends(get_db), u=Depends(au
 def set_plant_technicians(plant_id: str, data: PlantTechniciansIn, db: Session = Depends(get_db), u=Depends(role(*ENGINEER))):
     if not db.query(Plant).filter_by(plant_id=plant_id).first():
         raise HTTPException(404, 'Plant not found')
+    if not ensure_technician_plants_table():
+        raise HTTPException(500, 'Plant access table could not be created')
     wanted = []
     seen = set()
     for raw in data.technician_ids or []:
