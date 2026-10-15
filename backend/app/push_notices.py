@@ -95,6 +95,25 @@ def save_subscription(db: Session, user, endpoint: str, p256dh: str, auth: str):
     return True
 
 
+def subscription_count(db: Session, user_id: int) -> int:
+    return db.query(PushSubscription).filter_by(user_id=user_id).count()
+
+
+def send_test_push(db: Session, user_id: int) -> bool:
+    """Send one visible test notice to every phone registered for this account."""
+    private_key, _public = vapid_material(db)
+    ok = _send(
+        db,
+        user_id,
+        'اختبار إشعار RAYAN CMMS',
+        'إذا ظهرت هذه الرسالة فإشعارات الهاتف تعمل.',
+        '/index.html#work-orders',
+        private_key,
+    )
+    db.commit()
+    return ok
+
+
 # Keep the notice on the push service until the phone can receive it.
 # ttl=0 discards the message immediately when the device is briefly offline.
 PUSH_TTL_SECONDS = 24 * 60 * 60

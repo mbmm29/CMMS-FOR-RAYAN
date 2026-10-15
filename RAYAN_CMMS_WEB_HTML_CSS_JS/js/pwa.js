@@ -8,7 +8,16 @@
     'Add RAYAN CMMS to your home screen from the browser Share menu.': 'أضف RAYAN CMMS إلى الشاشة الرئيسية من قائمة المشاركة في المتصفح.',
     'Phone notices': 'إشعارات الهاتف',
     'The phone could not be registered for notices.': 'تعذر تسجيل الهاتف لاستلام الإشعارات.',
-    'Phone notices are on.': 'إشعارات الهاتف مفعّلة.'
+    'Phone notices are on.': 'إشعارات الهاتف مفعّلة.',
+    'Phone notices are off.': 'إشعارات الهاتف غير مفعّلة.',
+    'Phone notices were blocked in the browser.': 'تم منع إشعارات الهاتف من إعدادات المتصفح.',
+    'This browser cannot show phone notices.': 'هذا المتصفح لا يدعم إشعارات الهاتف.',
+    'Enable phone notices': 'تفعيل إشعارات الهاتف',
+    'Re-enable phone notices': 'إعادة تفعيل إشعارات الهاتف',
+    'Send test notice': 'إرسال إشعار تجريبي',
+    'Test notice sent. Check the phone notification tray.': 'تم إرسال إشعار تجريبي. راجع لوحة إشعارات الهاتف.',
+    'Notification settings': 'ضبط الإشعارات',
+    'Open this page from the home-screen app on iPhone to receive notices.': 'على آيفون افتح التطبيق من الشاشة الرئيسية لاستلام الإشعارات.',
   };
 
   function label(key) {
@@ -34,6 +43,15 @@
     return window.matchMedia('(max-width: 900px) and (pointer: coarse)').matches;
   }
 
+  function isIos() {
+    return /iphone|ipad|ipod/i.test(navigator.userAgent || '')
+      || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+  }
+
+  function isStandalone() {
+    return window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true;
+  }
+
   function noticesAlreadyOn() {
     return localStorage.getItem(PUSH_FLAG) === '1';
   }
@@ -46,6 +64,12 @@
     localStorage.removeItem(PUSH_FLAG);
   }
 
+  function pushSupported() {
+    return 'serviceWorker' in navigator
+      && 'PushManager' in window
+      && typeof Notification !== 'undefined';
+  }
+
   function urlBase64ToUint8Array(value) {
     const padding = '='.repeat((4 - (value.length % 4)) % 4);
     const base64 = (value + padding).replace(/-/g, '+').replace(/_/g, '/');
@@ -55,10 +79,36 @@
     return output;
   }
 
+  async function showLocalNotice(title, body) {
+    const text = String(body || '').slice(0, 180);
+    if (!pushSupported() || Notification.permission !== 'granted') return false;
+    try {
+      const registration = await navigator.serviceWorker.ready;
+      await registration.showNotification(title, {
+        body: text,
+        icon: '/icons/icon-192.png',
+        badge: '/icons/icon-192.png',
+        lang: 'ar',
+        dir: 'rtl',
+        tag: 'cmms-test',
+        renotify: true,
+        data: { url: '/index.html#work-orders' },
+      });
+      return true;
+    } catch (_) {
+      try {
+        new Notification(title, { body: text, icon: '/icons/icon-192.png', tag: 'cmms-test' });
+        return true;
+      } catch (_) {
+        return false;
+      }
+    }
+  }
+
   async function subscribePhone(force) {
     if (!noticeUser() || typeof apiRequest !== 'function') return false;
-    if (!('serviceWorker' in navigator) || !('PushManager' in window)) return false;
-    if (typeof Notification === 'undefined' || Notification.permission !== 'granted') return false;
+    if (!pushSupported()) throw new Error(label('This browser cannot show phone notices.'));
+    if (Notification.permission !== 'granted') return false;
     const registration = await navigator.serviceWorker.ready;
     const key = await apiRequest('/push/key');
     const applicationServerKey = urlBase64ToUint8Array(key.public_key);
@@ -86,6 +136,64 @@
     return true;
   }
 
+  async function enablePhoneNotices() {
+    if (!noticeUser()) throw new Error(label('Only a technician can receive phone notices.'));
+    if (!pushSupported()) throw new Error(label('This browser cannot show phone notices.'));
+    if (isIos() && !isStandalone()) {
+      throw new Error(label('Open this page from the home-screen app on iPhone to receive notices.'));
+    }
+    let permission = Notification.permission;
+    if (permission !== 'granted') {
+      permission = await Notification.requestPermission();
+    }
+    if (permission !== 'granted') {
+      clearNoticesFlag();
+      if (permission === 'denied') throw new Error(label('Phone notices were blocked in the browser.'));
+      throw new Error(label('The phone could not be registered for notices.'));
+    }
+    await navigator.serviceWorker.register('/sw.js', { scope: '/' });
+    const ok = await subscribePhone(true);
+    if (!ok) {
+      clearNoticesFlag();
+      throw new Error(label('The phone could not be registered for notices.'));
+    }
+    await showLocalNotice(label('Phone notices are on.'), label('Test notice sent. Check the phone notification tray.'));
+    return true;
+  }
+
+  async function sendTestNotice() {
+    if (!noticeUser()) throw new Error(label('Only a technician can receive phone notices.'));
+    if (Notification.permission !== 'granted' || !noticesAlreadyOn()) {
+      await enablePhoneNotices();
+    }
+    await showLocalNotice(
+      label('Notification settings'),
+      label('Test notice sent. Check the phone notification tray.'),
+    );
+    if (typeof apiRequest === 'function') {
+      await apiRequest('/push/test', { method: 'POST', body: '{}' });
+    }
+    return true;
+  }
+
+  function noticeStatus() {
+    if (!noticeUser()) return { code: 'role', text: label('Only a technician can receive phone notices.') };
+    if (!pushSupported()) return { code: 'unsupported', text: label('This browser cannot show phone notices.') };
+    if (Notification.permission === 'denied') return { code: 'denied', text: label('Phone notices were blocked in the browser.') };
+    if (isIos() && !isStandalone()) return { code: 'ios', text: label('Open this page from the home-screen app on iPhone to receive notices.') };
+    if (Notification.permission === 'granted' && noticesAlreadyOn()) return { code: 'on', text: label('Phone notices are on.') };
+    return { code: 'off', text: label('Phone notices are off.') };
+  }
+
+  window.cmmsPush = {
+    enable: enablePhoneNotices,
+    test: sendTestNotice,
+    status: noticeStatus,
+    supported: pushSupported,
+    isPhone: isPhoneDevice,
+    refreshHeader: function () { refreshPhone(); },
+  };
+
   if ('serviceWorker' in navigator) {
     window.addEventListener('load', function () {
       refreshPhone();
@@ -110,7 +218,6 @@
   style.textContent = '.install-app{border:1px solid #99baf0;background:#fff;color:#062857;border-radius:8px;padding:8px 12px;font:700 13px Arial,sans-serif;cursor:pointer}.header-actions .install-app{margin-inline-end:8px}.login-footer .install-app,.login-footer .install-app-hint{display:block;margin:12px auto 0;text-align:center}.install-app-hint{margin:8px 0 0;max-width:280px;font:12px Arial,sans-serif;color:#d7e4f8}';
   document.head.appendChild(style);
 
-  // Phone notices: main app header only, phones only, hide after successful registration.
   const appHost = document.querySelector('.header-actions');
   const phone = document.createElement('button');
   phone.type = 'button';
@@ -126,8 +233,7 @@
       && !isLoginPage()
       && isPhoneDevice()
       && Boolean(noticeUser())
-      && 'Notification' in window
-      && 'PushManager' in window
+      && pushSupported()
       && !noticesAlreadyOn()
       && Notification.permission !== 'denied';
     phone.hidden = !canAsk;
@@ -135,15 +241,9 @@
   }
 
   phone.addEventListener('click', async function () {
-    if (!noticeUser() || !isPhoneDevice() || isLoginPage()) return;
-    const permission = await Notification.requestPermission();
-    if (permission !== 'granted') {
-      clearNoticesFlag();
-      refreshPhone();
-      return;
-    }
+    if (!noticeUser() || isLoginPage()) return;
     try {
-      await subscribePhone(true);
+      await enablePhoneNotices();
       phone.hidden = true;
       if (typeof toast === 'function') toast(label('Phone notices are on.'));
       refreshPhone();
@@ -159,10 +259,8 @@
   window.addEventListener('resize', refreshPhone);
   window.addEventListener('storage', refreshPhone);
 
-  // Install app / iOS hint may still appear on login or the main header.
   const host = appHost || document.querySelector('.login-footer');
-  const standalone = window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true;
-  if (standalone || !host) return;
+  if (isStandalone() || !host) return;
 
   const button = document.createElement('button');
   button.type = 'button';
@@ -202,8 +300,7 @@
     hint.hidden = true;
   });
 
-  const ios = /iphone|ipad|ipod/i.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
-  if (ios) hint.hidden = false;
+  if (isIos()) hint.hidden = false;
 
   document.addEventListener('cmms-language', function () {
     button.textContent = label(INSTALL);

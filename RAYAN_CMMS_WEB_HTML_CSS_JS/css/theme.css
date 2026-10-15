@@ -26,6 +26,7 @@ body .badge.blue{background:#10284f;color:#b7d4ff;border-color:#2c528c}
 body .badge.purple{background:#2a1848;color:#d7c4ff;border-color:#5b3d8a}
 body .live-note,body .chart-empty,body .loading{color:#9eb4d6}
 body .detail h2,body .detail-top h3,body .detail-list b,body .user-editor h2{color:#f4f8ff}
+body .notice-panel .live-note{color:#9eb4d6;margin:0 0 12px}
 body .detail-top,body .detail h2,body .detail-list div,body .equipment-list{border-color:#23406e}
 body .detail-top p,body .detail-list span,body .asset small,body .user-editor label small{color:#9eb4d6}
 body .detail-button{background:#10284f;color:#e7eefc;border-color:#2c528c}

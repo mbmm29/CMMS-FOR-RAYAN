@@ -31,7 +31,91 @@ function accountToast(message){let toast=document.getElementById('toast');toast.
 async function loadAccounts(){let target=document.getElementById('users-table');if(!target)return;try{accountCache=await apiRequest('/users');target.innerHTML=accountCache.map(user=>`<tr><td class="code">${user.username}</td><td>${user.full_name}</td><td>${badge(accountRoleLabel(user.role))}</td><td>${user.technician_id||'—'}</td><td>${badge(user.is_active?'Active':'Inactive')}</td><td>${user.last_login?new Date(user.last_login).toLocaleString():'Never'}</td><td><button class="table-button" data-account-id="${user.id}">Edit</button></td></tr>`).join('');let active=accountCache.filter(user=>user.is_active).length;let count=role=>accountCache.filter(user=>user.role===role).length;document.getElementById('metric-grid').innerHTML=metrics([['Total Users',accountCache.length,'♙','blue'],['Active Accounts',active,'✓','green'],['Technicians',count('TECHNICIAN')+count('LUBRICATION_TECHNICIAN'),'⚒','orange'],['Engineers',count('MAINTENANCE_ENGINEER'),'◈','purple'],['Developers',count('SYSTEM_DEVELOPER'),'⚙','red'],['Inactive',accountCache.length-active,'×','blue']]);target.querySelectorAll('[data-account-id]').forEach(button=>button.addEventListener('click',()=>setUserForm(accountCache.find(user=>user.id===Number(button.dataset.accountId)))))}catch(error){target.innerHTML=`<tr><td colspan="7" class="loading error">${error.message}</td></tr>`}}
 function bindAccountForm(){setUserForm();document.getElementById('cancel-user').addEventListener('click',()=>setUserForm());document.getElementById('user-form').addEventListener('submit',async event=>{event.preventDefault();let form=event.currentTarget,values=new FormData(form),id=values.get('id'),error=document.getElementById('user-form-error'),password=values.get('password'),payload={full_name:values.get('full_name').trim(),role:values.get('role'),technician_id:values.get('technician_id').trim()||null,is_active:values.get('is_active')==='on'};if(password)payload.password=password;if(!id){payload.username=values.get('username').trim();if(!password){error.textContent='Password is required for a new account.';return}}try{await apiRequest(id?`/users/${id}`:'/users',{method:id?'PUT':'POST',body:JSON.stringify(payload)});setUserForm();await loadAccounts();accountToast('Account saved successfully.')}catch(exception){error.textContent=exception.message}})}
 function renderUsers(){let page=pages.users;document.getElementById('page-title').textContent=t(page.title);document.getElementById('page-subtitle').textContent=t(page.sub);const action=document.getElementById('primary-action');action.hidden=false;action.textContent=t(page.action);document.getElementById('metric-grid').innerHTML=metrics(page.metrics);let workspace=document.getElementById('workspace');workspace.className='workspace';workspace.innerHTML=userWorkspace();document.querySelectorAll('.nav-link').forEach(link=>link.classList.toggle('active',link.dataset.page==='users'));location.hash='users';bindAccountForm();loadAccounts()}
-function renderMyAccount(){const page=pages.user;document.getElementById('page-title').textContent=t(page.title);document.getElementById('page-subtitle').textContent=t(page.sub);document.getElementById('primary-action').hidden=true;const draft=document.getElementById('draft-action');if(draft)draft.hidden=true;document.getElementById('metric-grid').innerHTML='';const workspace=document.getElementById('workspace');workspace.className='workspace';const account=getSavedUser()||{};workspace.innerHTML=`<section class="panel user-editor account-panel"><h2>${t('User')}</h2><form id="own-account"><label>${t('Full name')}<input name="full_name" required autocomplete="name"></label><label>${t('Username')}<input name="username" required autocomplete="username"></label><label>${t('Role')}<input name="role_label" disabled></label><label>${t('New password')}<small>${t('Leave blank to keep the current password')}</small><input name="password" type="password" minlength="8" autocomplete="new-password"></label><label>${t('Confirm password')}<input name="confirm_password" type="password" minlength="8" autocomplete="new-password"></label><label>${t('Current password')}<small>${t('Required only when you set a new password')}</small><input name="current_password" type="password" autocomplete="current-password"></label><div class="form-actions"><button class="detail-button primary" type="submit">${t('Save')}</button></div><p id="own-account-error" class="form-error"></p></form></section>`;const form=document.getElementById('own-account');form.full_name.value=account.full_name||'';form.username.value=account.username||'';form.role_label.value=accountRoleLabel(account.role||'');document.querySelectorAll('.nav-link').forEach(link=>link.classList.toggle('active',link.dataset.page==='user'));location.hash='user';form.addEventListener('submit',async event=>{event.preventDefault();const error=document.getElementById('own-account-error');error.textContent='';const fullName=form.full_name.value.trim();const username=form.username.value.trim();const password=form.password.value;const confirm=form.confirm_password.value;if(password||confirm){if(password!==confirm){error.textContent=t('Passwords do not match.');return}if(!form.current_password.value){error.textContent=t('Enter your current password to set a new one.');return}}const payload={full_name:fullName,username};if(password){payload.password=password;payload.current_password=form.current_password.value}try{const saved=await apiRequest('/me',{method:'PUT',body:JSON.stringify(payload)});const previous=getSavedUser()||{};localStorage.setItem('user',JSON.stringify({...previous,...saved}));document.querySelector('.profile b').textContent=saved.full_name||saved.username;form.password.value='';form.confirm_password.value='';form.current_password.value='';accountToast(t('Your account was updated.'))}catch(exception){error.textContent=exception.message}})}
+function noticeRoleOk(account){
+  return account?.role==='TECHNICIAN'||account?.role==='LUBRICATION_TECHNICIAN'||account?.role==='MAINTENANCE_ENGINEER';
+}
+function paintNoticeStatus(){
+  const status=document.getElementById('notice-status');
+  const enable=document.getElementById('notice-enable');
+  const test=document.getElementById('notice-test');
+  if(!status||!window.cmmsPush)return;
+  const info=window.cmmsPush.status();
+  status.textContent=info.text;
+  status.dataset.state=info.code;
+  if(enable)enable.textContent=t(info.code==='on'?'Re-enable phone notices':'Enable phone notices');
+  if(test)test.disabled=info.code==='unsupported'||info.code==='role'||info.code==='denied';
+}
+function renderMyAccount(){
+  const page=pages.user;
+  document.getElementById('page-title').textContent=t(page.title);
+  document.getElementById('page-subtitle').textContent=t(page.sub);
+  document.getElementById('primary-action').hidden=true;
+  const draft=document.getElementById('draft-action');
+  if(draft)draft.hidden=true;
+  document.getElementById('metric-grid').innerHTML='';
+  const workspace=document.getElementById('workspace');
+  workspace.className='workspace';
+  const account=getSavedUser()||{};
+  const notices=noticeRoleOk(account)?`<section class="panel user-editor account-panel notice-panel"><h2>${t('Notification settings')}</h2><p id="notice-status" class="notice-status"></p><p class="live-note">${t('Enable notices on this phone, then send a test notice to confirm the tray alert.')}</p><div class="form-actions notice-actions"><button class="detail-button primary" type="button" id="notice-enable">${t('Enable phone notices')}</button><button class="detail-button" type="button" id="notice-test">${t('Send test notice')}</button></div><p id="notice-error" class="form-error"></p></section>`:'';
+  workspace.innerHTML=`${notices}<section class="panel user-editor account-panel"><h2>${t('User')}</h2><form id="own-account"><label>${t('Full name')}<input name="full_name" required autocomplete="name"></label><label>${t('Username')}<input name="username" required autocomplete="username"></label><label>${t('Role')}<input name="role_label" disabled></label><label>${t('New password')}<small>${t('Leave blank to keep the current password')}</small><input name="password" type="password" minlength="8" autocomplete="new-password"></label><label>${t('Confirm password')}<input name="confirm_password" type="password" minlength="8" autocomplete="new-password"></label><label>${t('Current password')}<small>${t('Required only when you set a new password')}</small><input name="current_password" type="password" autocomplete="current-password"></label><div class="form-actions"><button class="detail-button primary" type="submit">${t('Save')}</button></div><p id="own-account-error" class="form-error"></p></form></section>`;
+  const form=document.getElementById('own-account');
+  form.full_name.value=account.full_name||'';
+  form.username.value=account.username||'';
+  form.role_label.value=accountRoleLabel(account.role||'');
+  document.querySelectorAll('.nav-link').forEach(link=>link.classList.toggle('active',link.dataset.page==='user'));
+  location.hash='user';
+  paintNoticeStatus();
+  const noticeError=document.getElementById('notice-error');
+  document.getElementById('notice-enable')?.addEventListener('click',async()=>{
+    if(noticeError)noticeError.textContent='';
+    if(!window.cmmsPush){if(noticeError)noticeError.textContent=t('This browser cannot show phone notices.');return}
+    try{
+      await window.cmmsPush.enable();
+      paintNoticeStatus();
+      accountToast(t('Phone notices are on.'));
+    }catch(exception){
+      if(noticeError)noticeError.textContent=exception.message||t('The phone could not be registered for notices.');
+      paintNoticeStatus();
+    }
+  });
+  document.getElementById('notice-test')?.addEventListener('click',async()=>{
+    if(noticeError)noticeError.textContent='';
+    if(!window.cmmsPush){if(noticeError)noticeError.textContent=t('This browser cannot show phone notices.');return}
+    try{
+      await window.cmmsPush.test();
+      paintNoticeStatus();
+      accountToast(t('Test notice sent. Check the phone notification tray.'));
+    }catch(exception){
+      if(noticeError)noticeError.textContent=exception.message||t('The phone could not be registered for notices.');
+      paintNoticeStatus();
+    }
+  });
+  form.addEventListener('submit',async event=>{
+    event.preventDefault();
+    const error=document.getElementById('own-account-error');
+    error.textContent='';
+    const fullName=form.full_name.value.trim();
+    const username=form.username.value.trim();
+    const password=form.password.value;
+    const confirm=form.confirm_password.value;
+    if(password||confirm){
+      if(password!==confirm){error.textContent=t('Passwords do not match.');return}
+      if(!form.current_password.value){error.textContent=t('Enter your current password to set a new one.');return}
+    }
+    const payload={full_name:fullName,username};
+    if(password){payload.password=password;payload.current_password=form.current_password.value}
+    try{
+      const saved=await apiRequest('/me',{method:'PUT',body:JSON.stringify(payload)});
+      const previous=getSavedUser()||{};
+      localStorage.setItem('user',JSON.stringify({...previous,...saved}));
+      document.querySelector('.profile b').textContent=saved.full_name||saved.username;
+      form.password.value='';
+      form.confirm_password.value='';
+      form.current_password.value='';
+      accountToast(t('Your account was updated.'));
+    }catch(exception){error.textContent=exception.message}
+  });
+}
 render=page=>page==='users'?renderUsers():page==='user'?renderMyAccount():standardRender(page);
 async function initializeAccounts(){if(!hasSavedSession()){location.replace('login.html');return}try{let user=await restoreSession();if(!user){location.replace('login.html');return}document.querySelector('.profile b').textContent=user.full_name||user.username;document.querySelector('.profile small').innerHTML=`<mark></mark> ${accountRoleLabel(user.role)}`;document.querySelectorAll('.developer-only').forEach(link=>link.hidden=user.role!=='SYSTEM_DEVELOPER');if(location.hash==='#users'&&user.role!=='SYSTEM_DEVELOPER')render('dashboard');else if(location.hash==='#user')renderMyAccount()}catch(error){logout();location.replace('login.html')}}
 initializeAccounts();

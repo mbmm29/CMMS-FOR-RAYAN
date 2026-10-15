@@ -21,7 +21,16 @@ from .schemas import *
 from .security import *
 from .kpi import compute_kpi, save_kpi_target
 from .motor_catalog import OIL_CONDITIONS, OIL_LEVELS, motor_catalog_payload, motor_place, motor_sheet_allowed
-from .push_notices import clear_work_order_push, public_key as push_public_key, queue_critical_stock_pushes, queue_work_order_pushes, save_subscription, start_phone_notices
+from .push_notices import (
+    clear_work_order_push,
+    public_key as push_public_key,
+    queue_critical_stock_pushes,
+    queue_work_order_pushes,
+    save_subscription,
+    send_test_push,
+    start_phone_notices,
+    subscription_count,
+)
 
 Base.metadata.create_all(bind=engine)
 
@@ -4355,12 +4364,31 @@ def notification_read(nid:int,db:Session=Depends(get_db),u=Depends(auth)):
 def push_key(db:Session=Depends(get_db), u=Depends(auth)):
     return {'public_key': push_public_key(db)}
 
+@app.get('/push/status')
+def push_status(db: Session = Depends(get_db), u=Depends(auth)):
+    if u.role not in TECHNICIAN and u.role != 'MAINTENANCE_ENGINEER':
+        return {'allowed': False, 'registered': 0}
+    return {
+        'allowed': True,
+        'registered': subscription_count(db, u.id),
+    }
+
 @app.post('/push/subscribe')
 def push_subscribe(data:PushSubscribe, db:Session=Depends(get_db), u=Depends(auth)):
     if u.role not in TECHNICIAN and u.role != 'MAINTENANCE_ENGINEER':
         raise HTTPException(403, 'Only a technician or maintenance engineer can receive phone notices.')
     if not save_subscription(db, u, data.endpoint, data.p256dh, data.auth):
         raise HTTPException(400, 'The phone could not be registered for notices.')
+    return {'ok': True, 'registered': subscription_count(db, u.id)}
+
+@app.post('/push/test')
+def push_test(db: Session = Depends(get_db), u=Depends(auth)):
+    if u.role not in TECHNICIAN and u.role != 'MAINTENANCE_ENGINEER':
+        raise HTTPException(403, 'Only a technician or maintenance engineer can receive phone notices.')
+    if subscription_count(db, u.id) < 1:
+        raise HTTPException(400, 'Enable phone notices on this device first.')
+    if not send_test_push(db, u.id):
+        raise HTTPException(400, 'The phone could not receive the test notice. Enable phone notices again.')
     return {'ok': True}
 @app.get('/audit')
 def audit_log(db:Session=Depends(get_db),u=Depends(role(*DEVELOPER))): return db.query(AuditTrail).order_by(AuditTrail.created_at.desc()).limit(500).all()
