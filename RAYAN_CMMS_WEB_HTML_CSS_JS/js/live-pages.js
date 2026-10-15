@@ -653,7 +653,6 @@ function paretoChart(rows, options = {}) {
       availability: row.availability == null || row.availability === '' ? null : Number(row.availability),
       cumulative_pct: Number(row.cumulative_pct),
     }))
-    .filter((row) => row.count > 0 || row.hours > 0)
     .sort((left, right) => right.hours - left.hours || right.count - left.count);
   if (!items.length) return '';
   const totalHours = items.reduce((sum, row) => sum + row.hours, 0) || 1;
@@ -664,7 +663,7 @@ function paretoChart(rows, options = {}) {
       row.cumulative_pct = Math.round((1000 * running) / totalHours) / 10;
     }
     if (row.availability == null || !Number.isFinite(row.availability)) {
-      row.availability = row.cumulative_pct;
+      row.availability = row.hours > 0 ? row.cumulative_pct : 100;
     }
   });
   const width = 760;
@@ -674,7 +673,7 @@ function paretoChart(rows, options = {}) {
   const innerH = height - pad.top - pad.bottom;
   const maxHours = Math.max(...items.map((row) => row.hours), 1);
   const slot = innerW / items.length;
-  const barW = Math.max(16, Math.min(52, slot * 0.55));
+  const barW = Math.max(12, Math.min(46, slot * 0.55));
   const xAt = (index) => pad.left + (slot * index) + (slot / 2);
   const yHours = (value) => pad.top + innerH - (value / maxHours) * innerH;
   const yPct = (value) => pad.top + innerH - (Math.min(100, Math.max(0, value)) / 100) * innerH;
@@ -689,7 +688,7 @@ function paretoChart(rows, options = {}) {
   const bars = items.map((row, index) => {
     const x = xAt(index) - (barW / 2);
     const y = yHours(row.hours);
-    const h = Math.max(1, pad.top + innerH - y);
+    const h = row.hours > 0 ? Math.max(1, pad.top + innerH - y) : 0;
     return `<rect class="pareto-bar" x="${x.toFixed(1)}" y="${y.toFixed(1)}" width="${barW.toFixed(1)}" height="${h.toFixed(1)}"><title>${esc(row.name)} · ${numberText(row.hours, 1)} ${esc(t('h'))} · ${esc(t('Availability'))} ${numberText(row.availability, 1)}%</title></rect>
       <text class="pareto-label" x="${xAt(index).toFixed(1)}" y="${height - 12}" text-anchor="middle" transform="rotate(-28 ${xAt(index).toFixed(1)} ${height - 12})">${esc(shortName(row.name))}</text>`;
   }).join('');
@@ -1194,7 +1193,7 @@ async function drawDashboard() {
     <section class="panel chart-panel"><h2>${esc(t('Maintenance hours'))}</h2><p class="kpi-note">${esc(t('Total'))} ${kpiText(kpi.total_hours, 1)} ${esc(t('from daily reports and work orders.'))}</p>${kpi.total_hours ? donut(hourParts, kpi.total_hours) : `<p class="chart-empty">${esc(t('No maintenance hours yet'))}</p>`}</section>
     <section class="panel chart-panel"><h2>${esc(t('Work orders by type'))}</h2><p class="kpi-note">${esc(t('Total'))} ${numberText(orderTotal, 0)} ${esc(t('work orders in this period.'))}</p>${orderTotal ? donut(orderParts, orderTotal, 0) : `<p class="chart-empty">${esc(t('No work orders in this period'))}</p>`}</section>
     </div>
-    <section class="panel chart-panel chart-wide"><h2>${esc(t('Downtime (Hours)'))}</h2><p class="kpi-note">${esc(t(kpi.trend_by === 'line' ? 'Each line' : kpi.trend_by === 'equipment' ? 'Selected equipment' : 'Each plant'))} · ${esc(t('Black bars are plants, or lines when one plant is selected. The red line is Availability. The vertical axis is Downtime (Hours). The period follows the date filter.'))} · ${esc(fmtDate(kpi.period?.from))} – ${esc(fmtDate(kpi.period?.to))} · ${esc(t('scheduled'))} ${kpiText(kpi.scheduled_downtime_h, 1)} · ${esc(t('unscheduled'))} ${kpiText(kpi.unscheduled_downtime_h, 1)}</p>${(kpi.pareto || []).length ? paretoChart(kpi.pareto, { barLabel: kpi.trend_by === 'line' ? 'Lines' : kpi.trend_by === 'equipment' ? 'Equipment' : 'Plants' }) : `<p class="chart-empty">${esc(t('No downtime in this period'))}</p>`}</section>
+    <section class="panel chart-panel chart-wide"><h2>${esc(t('Downtime (Hours)'))}</h2><p class="kpi-note">${esc(t(kpi.trend_by === 'line' ? 'Each line' : kpi.trend_by === 'equipment' ? 'Selected equipment' : 'Each plant'))} · ${esc(t('One black bar per plant (or per line when one plant is selected). The red line is Availability.'))} · ${esc(fmtDate(kpi.period?.from))} – ${esc(fmtDate(kpi.period?.to))} · ${esc(t('scheduled'))} ${kpiText(kpi.scheduled_downtime_h, 1)} · ${esc(t('unscheduled'))} ${kpiText(kpi.unscheduled_downtime_h, 1)}</p>${(kpi.pareto || []).length ? paretoChart(kpi.pareto, { barLabel: kpi.trend_by === 'line' ? 'Lines' : kpi.trend_by === 'equipment' ? 'Equipment' : 'Plants' }) : `<p class="chart-empty">${esc(t('No downtime in this period'))}</p>`}</section>
     <section class="panel chart-panel chart-wide"><h2>${esc(t('Oil level'))}</h2><p class="kpi-note">${esc(t(motorScopeNote()))} · ${esc(t('Rank 1 is the best reading on that day.'))}</p>${bumpChart(kpi.motor?.oil_level, 'Oil level') || `<p class="chart-empty">${esc(t('No motor readings in this period.'))}</p>`}</section>
     <section class="panel chart-panel chart-wide"><h2>${esc(t('Oil condition'))}</h2><p class="kpi-note">${esc(t(motorScopeNote()))} · ${esc(t('Rank 1 is the best reading on that day.'))}</p>${bumpChart(kpi.motor?.oil_condition, 'Oil condition') || `<p class="chart-empty">${esc(t('No motor readings in this period.'))}</p>`}</section>
     <section class="panel chart-panel"><h2>${esc(t('Availability basis'))}</h2><div class="summary-row"><span>${esc(t('Uptime'))}</span><b>${kpiText(kpi.uptime_h, 1)} ${esc(t('h'))}</b></div><div class="summary-row"><span>${esc(t('Available time'))}</span><b>${kpiText(kpi.available_h, 1)} ${esc(t('h'))}</b></div><div class="summary-row"><span>${esc(t('Idle time'))}</span><b>${kpiText(kpi.idle_h, 1)} ${esc(t('h'))}</b></div><div class="summary-row"><span>${esc(t('Operating time'))}</span><b>${kpiText(kpi.operating_h, 1)} ${esc(t('h'))}</b></div><small class="kpi-note">${esc(t('Availability = uptime ÷ (available − idle). MTBF = operating time ÷ failures. MTTR = corrective hours ÷ corrective events.'))}</small></section>

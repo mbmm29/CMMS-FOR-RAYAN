@@ -412,6 +412,7 @@ const CMMS_AR = {
   'Downtime Pareto': 'باريتو التوقف',
   'Bars show frequency in descending order; the line shows the cumulative percentage.': 'الأعمدة تعرض التكرار تنازليًا، والخط يعرض النسبة التراكمية.',
   'Black bars are plants, or lines when one plant is selected. The red line is Availability. The vertical axis is Downtime (Hours). The period follows the date filter.': 'الأعمدة السوداء هي المصانع، أو الخطوط عند اختيار مصنع واحد. الخط الأحمر هو Availability. المحور العمودي هو Downtime (Hours). الفترة حسب فلتر التاريخ.',
+  'One black bar per plant (or per line when one plant is selected). The red line is Availability.': 'عمود أسود لكل مصنع (أو لكل خط عند اختيار مصنع واحد). الخط الأحمر هو Availability.',
   'Plants / lines': 'المصانع / الخطوط',
   'Plants': 'المصانع',
   'Lines': 'الخطوط',

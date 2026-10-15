@@ -310,24 +310,50 @@ def compute_kpi(db: Session, plant_id=None, line_id=None, equipment_id=None, tec
 
         grouped = {}
         grouped_count = {}
+
+        def chart_key(item_plant, item_line):
+            if equipment_id:
+                return equipment_id
+            if line_id:
+                return line_id
+            if single_plant:
+                return item_line or 'unassigned'
+            return item_plant or 'unassigned'
+
+        def add_downtime(key, day_value, amount):
+            if not key or amount is None:
+                return
+            hours_value = max(float(amount), 0)
+            if isinstance(day_value, datetime):
+                day_value = day_value.date()
+            if not day_value:
+                return
+            day_key = day_value.isoformat() if hasattr(day_value, 'isoformat') else str(day_value)
+            bucket = grouped.setdefault(key, {})
+            bucket[day_key] = bucket.get(day_key, 0) + hours_value
+            if hours_value > 0:
+                grouped_count[key] = grouped_count.get(key, 0) + 1
+
         for row in accepted_items:
             if row.maintenance_type not in FAILURE_TYPES and row.maintenance_type != 'Preventive':
                 continue
             item_plant, item_line = located(row)
-            if equipment_id:
-                key = equipment_id
-            elif line_id:
-                key = line_id
-            elif single_plant:
-                key = item_line or 'unassigned'
-            else:
-                key = item_plant or 'unassigned'
-            day_key = report_by_id[row.report_id].report_date.isoformat()
-            bucket = grouped.setdefault(key, {})
-            item_hours = _report_hours(row)
-            bucket[day_key] = bucket.get(day_key, 0) + item_hours
-            if item_hours > 0:
-                grouped_count[key] = grouped_count.get(key, 0) + 1
+            add_downtime(chart_key(item_plant, item_line), report_by_id[row.report_id].report_date, _report_hours(row))
+
+        # Work-order downtime also belongs on each plant/line bar (skip items already counted from reports).
+        for order in window_orders:
+            if order.work_order_id in covered_orders:
+                continue
+            if order.work_order_type not in FAILURE_TYPES and order.work_order_type != 'Preventive':
+                continue
+            registered = equipment_by_id.get(order.equipment_id)
+            item_plant = (registered.plant_id if registered else None) or order.manual_plant_id
+            item_line = (registered.line_id if registered else None) or order.manual_line_id
+            add_downtime(
+                chart_key(item_plant, item_line),
+                order.planned_date or order.request_date,
+                _order_hours(order),
+            )
 
         if line_id:
             chosen = line_by_id.get(line_id)
@@ -400,12 +426,13 @@ def compute_kpi(db: Session, plant_id=None, line_id=None, equipment_id=None, tec
                 asset_key = row.plant_id or 'unassigned'
             assets_by_key[asset_key] = assets_by_key.get(asset_key, 0) + 1
 
+        # One black bar per plant (or per line when a single plant is selected) — never merge plants.
         pareto = []
         for key, label in catalog:
+            if key == 'unassigned' and not grouped.get(key):
+                continue
             category_hours = round(sum(grouped.get(key, {}).values()), 2)
             count = int(grouped_count.get(key, 0))
-            if count <= 0 and category_hours <= 0:
-                continue
             assets = int(assets_by_key.get(key, 0) or 0)
             available_h = round(assets * window_days * 24, 2) if assets else 0.0
             uptime_h = max(available_h - category_hours, 0)
@@ -416,8 +443,12 @@ def compute_kpi(db: Session, plant_id=None, line_id=None, equipment_id=None, tec
                 'hours': category_hours,
                 'availability': _pct(uptime_h, available_h) if available_h else None,
             })
+        # Keep every plant/line visible; only trim when the list is very long.
         pareto.sort(key=lambda row: (-row['hours'], -row['count'], str(row['name']).lower()))
-        pareto = pareto[:12]
+        if trend_by in ('plant', 'line'):
+            pareto = pareto[:24]
+        else:
+            pareto = [row for row in pareto if row['count'] > 0 or row['hours'] > 0][:12]
         total_hours_pareto = sum(row['hours'] for row in pareto) or 1
         running = 0.0
         for row in pareto:
