@@ -16,6 +16,7 @@ class LoginResponse(BaseModel):
     full_name: str
     role: str
     technician_id: str | None = None
+    plant_ids: list[str] = Field(default_factory=list)
 
 
 class UserCreate(BaseModel):
@@ -166,8 +167,13 @@ class TechnicianCreate(BaseModel):
 
 class TechnicianOut(TechnicianCreate):
     id: int
+    plant_ids: list[str] = Field(default_factory=list)
 
     model_config = ConfigDict(from_attributes=True)
+
+
+class PlantTechniciansIn(BaseModel):
+    technician_ids: list[str] = Field(default_factory=list)
 
 
 class PMCreate(BaseModel):

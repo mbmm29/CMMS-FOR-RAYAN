@@ -435,8 +435,21 @@ function dateLabel(dates) {
   button.textContent = valid.length ? `${fmtDate(valid[0])} - ${fmtDate(valid[valid.length - 1])}` : t('No dated records');
 }
 
+function technicianAllowedPlantIds() {
+  if (!isTechnician()) return null;
+  const ids = getSavedUser()?.plant_ids;
+  if (!Array.isArray(ids) || !ids.length) return null;
+  return ids;
+}
+
 function openPlants(keepId = '') {
-  return (store?.plants || []).filter((plant) => plant.active !== false || (keepId && plant.plant_id === keepId));
+  const allowed = technicianAllowedPlantIds();
+  return (store?.plants || []).filter((plant) => {
+    const keep = keepId && plant.plant_id === keepId;
+    if (plant.active === false && !keep) return false;
+    if (allowed && !allowed.includes(plant.plant_id) && !keep) return false;
+    return true;
+  });
 }
 
 function currentFilters() {
@@ -1563,7 +1576,14 @@ function drawPlants() {
   }).join('') || `<p class="live-note">${esc(t('No records yet'))}</p>`;
   const lineForm = selected && canMaintain() ? `<form id="line-form" class="live-form"><div class="assign-block"><b>Add production line</b></div><label>Line number<input name="line_number" type="number" min="1" step="1" required></label><label>Name<input name="name" placeholder="Optional"></label><button class="detail-button primary" type="submit">Add line</button><p id="line-error" class="form-error"></p></form>` : '';
   const statusForm = selected && canMaintain() ? `<form id="plant-status" class="live-form"><label>${esc(t('Plant name'))}<input name="name" value="${esc(selected.name || '')}" required maxlength="150"></label><label>${esc(t('Work order code'))}<input name="order_code" value="${esc(selected.order_code || '')}" required maxlength="12" placeholder="FM1"></label><label>${esc(t('Status'))}<select name="active">${plantStatusOptions(selected.active)}</select></label><button class="detail-button primary" type="submit">${esc(t('Save'))}</button><p class="live-note">${esc(t('Each plant keeps its own sequence. FM1 in 2026 starts at FM12026-001.'))}</p><p id="plant-status-error" class="form-error"></p></form>` : '';
-  const detail = ui.mode === 'create' ? plantForm() : `<aside class="panel detail"><h2>Plant Details</h2><div class="detail-top"><div class="machine">▣</div>${liveBadge(selected?.active === false ? 'Inactive' : 'Active')}<h3>${esc(selected?.plant_id || '—')}</h3><p>${esc(selected?.name || '')}</p></div><div class="detail-list">${lineRows}</div>${lineForm}${statusForm}</aside>`;
+  const accessBoxes = (store.technicians || []).map((tech) => {
+    const checked = (tech.plant_ids || []).includes(selected?.plant_id);
+    return `<label><input type="checkbox" name="technician_ids" value="${esc(tech.technician_id)}"${checked ? ' checked' : ''}> ${esc(tech.name)}</label>`;
+  }).join('') || `<span>${esc(t('No technicians'))}</span>`;
+  const accessForm = selected && canMaintain()
+    ? `<form id="plant-access" class="live-form"><div class="assign-block"><b>${esc(t('Technician plant access'))}</b></div><p class="live-note">${esc(t('Checked technicians can select this plant on daily and lubrication reports.'))}</p><div class="assignee-list">${accessBoxes}</div><button class="detail-button primary" type="submit">${esc(t('Save access'))}</button><p id="plant-access-error" class="form-error"></p></form>`
+    : '';
+  const detail = ui.mode === 'create' ? plantForm() : `<aside class="panel detail"><h2>Plant Details</h2><div class="detail-top"><div class="machine">▣</div>${liveBadge(selected?.active === false ? 'Inactive' : 'Active')}<h3>${esc(selected?.plant_id || '—')}</h3><p>${esc(selected?.name || '')}</p></div><div class="detail-list">${lineRows}</div>${lineForm}${statusForm}${accessForm}</aside>`;
   document.getElementById('workspace').className = 'workspace';
   document.getElementById('workspace').innerHTML = `<section class="panel">${tabsHtml(['All Plants', 'Active', 'Inactive'])}${tableShell(['Plant Code', 'Plant Name', 'Work order code', 'Production Lines', 'Status'], body, shown(rows.length, store.plants.length, 'plants'))}</section>${detail}`;
   if (selected && canMaintain() && ui.mode !== 'create') {
@@ -1619,6 +1639,24 @@ function drawPlants() {
       ui.rowKey = selected.plant_id;
       ui.mode = 'view';
       toast(t('Saved.'));
+      await paint('plants');
+    } catch (exception) {
+      if (error) error.textContent = t(exception.message);
+    }
+  });
+  document.getElementById('plant-access')?.addEventListener('submit', async (event) => {
+    event.preventDefault();
+    const error = document.getElementById('plant-access-error');
+    const technicianIds = [...event.currentTarget.querySelectorAll('input[name="technician_ids"]:checked')].map((box) => box.value);
+    try {
+      await apiRequest(`/plants/${encodeURIComponent(selected.plant_id)}/technicians`, {
+        method: 'PUT',
+        body: JSON.stringify({ technician_ids: technicianIds }),
+      });
+      store.technicians = await apiRequest('/technicians');
+      ui.rowKey = selected.plant_id;
+      ui.mode = 'view';
+      toast(t('Technician plant access saved.'));
       await paint('plants');
     } catch (exception) {
       if (error) error.textContent = t(exception.message);

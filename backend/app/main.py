@@ -467,7 +467,36 @@ def create_bootstrap_system():
 @app.get('/health')
 def health(): return {'status':'ok','version':'2.0.0'}
 
-def session_payload(user: User):
+def technician_plant_ids(db: Session, technician_id: str | None) -> list[str]:
+    if not technician_id:
+        return []
+    return [
+        row.plant_id
+        for row in db.query(TechnicianPlant)
+        .filter(TechnicianPlant.technician_id == technician_id)
+        .order_by(TechnicianPlant.plant_id)
+        .all()
+    ]
+
+
+def technician_allowed_plants(db: Session, technician_id: str | None):
+    """None means no plant restriction yet; a set means only those plants."""
+    ids = technician_plant_ids(db, technician_id)
+    return set(ids) if ids else None
+
+
+def assert_technician_can_use_plant(db: Session, technician_id: str | None, plant_id: str | None):
+    if not plant_id:
+        return
+    allowed = technician_allowed_plants(db, technician_id)
+    if allowed is not None and plant_id not in allowed:
+        raise HTTPException(400, 'This plant is not assigned to the technician')
+
+
+def session_payload(user: User, db: Session | None = None):
+    plant_ids = []
+    if db is not None and user.technician_id:
+        plant_ids = technician_plant_ids(db, user.technician_id)
     return {
         'access_token': create_access_token(user.id, user.username, user.role),
         'user_id': user.id,
@@ -475,6 +504,7 @@ def session_payload(user: User):
         'full_name': user.full_name,
         'role': user.role,
         'technician_id': user.technician_id,
+        'plant_ids': plant_ids,
     }
 
 
@@ -483,7 +513,7 @@ def login(data:LoginRequest,db:Session=Depends(get_db)):
     u=db.query(User).filter(User.username==data.username).first()
     if not u or not u.is_active or not verify_password(data.password,u.password_hash): raise HTTPException(401,'Invalid username or password')
     u.last_login=datetime.utcnow(); db.commit()
-    return session_payload(u)
+    return session_payload(u, db)
 
 
 @app.post('/auth/refresh', response_model=LoginResponse)
@@ -492,7 +522,7 @@ def refresh_session(db: Session = Depends(get_db), u=Depends(auth)):
     account = db.query(User).filter(User.id == u.id).first()
     if not account or not account.is_active:
         raise HTTPException(401, 'Session expired')
-    return session_payload(account)
+    return session_payload(account, db)
 
 
 @app.get('/me',response_model=UserOut)
@@ -1203,11 +1233,63 @@ def create_component(data:ComponentCreate,db:Session=Depends(get_db),u=Depends(r
     while db.query(Component).filter_by(component_id=cid).first(): n+=1; cid=f'{data.equipment_id}-C{n:03d}'
     o=Component(component_id=cid,**data.model_dump()); db.add(o); audit(db,u,'CREATE','Component',cid,new=data.model_dump()); db.commit(); db.refresh(o); return o
 
+def technician_out(db: Session, row: Technician) -> dict:
+    payload = TechnicianOut.model_validate(row).model_dump()
+    payload['plant_ids'] = technician_plant_ids(db, row.technician_id)
+    return payload
+
+
 @app.get('/technicians',response_model=list[TechnicianOut])
-def technicians(db:Session=Depends(get_db),u=Depends(auth)): return db.query(Technician).order_by(Technician.name).all()
+def technicians(db:Session=Depends(get_db),u=Depends(auth)):
+    rows = db.query(Technician).order_by(Technician.name).all()
+    return [technician_out(db, row) for row in rows]
+
+
 @app.post('/technicians',response_model=TechnicianOut)
 def create_technician(data:TechnicianCreate,db:Session=Depends(get_db),u=Depends(role(*ENGINEER))):
-    o=Technician(**data.model_dump()); db.add(o); audit(db,u,'CREATE','Technician',data.technician_id,new=data.model_dump()); db.commit(); db.refresh(o); return o
+    o=Technician(**data.model_dump()); db.add(o); audit(db,u,'CREATE','Technician',data.technician_id,new=data.model_dump()); db.commit(); db.refresh(o); return technician_out(db, o)
+
+
+@app.get('/plants/{plant_id}/technicians')
+def plant_technicians(plant_id: str, db: Session = Depends(get_db), u=Depends(auth)):
+    if not db.query(Plant).filter_by(plant_id=plant_id).first():
+        raise HTTPException(404, 'Plant not found')
+    ids = [
+        row.technician_id
+        for row in db.query(TechnicianPlant)
+        .filter(TechnicianPlant.plant_id == plant_id)
+        .order_by(TechnicianPlant.technician_id)
+        .all()
+    ]
+    return {'plant_id': plant_id, 'technician_ids': ids}
+
+
+@app.put('/plants/{plant_id}/technicians')
+def set_plant_technicians(plant_id: str, data: PlantTechniciansIn, db: Session = Depends(get_db), u=Depends(role(*ENGINEER))):
+    if not db.query(Plant).filter_by(plant_id=plant_id).first():
+        raise HTTPException(404, 'Plant not found')
+    wanted = []
+    seen = set()
+    for raw in data.technician_ids or []:
+        tid = str(raw or '').strip()
+        if not tid or tid in seen:
+            continue
+        if not db.query(Technician).filter_by(technician_id=tid).first():
+            raise HTTPException(404, f'Technician not found: {tid}')
+        seen.add(tid)
+        wanted.append(tid)
+    existing = {
+        row.technician_id
+        for row in db.query(TechnicianPlant).filter(TechnicianPlant.plant_id == plant_id).all()
+    }
+    wanted_set = set(wanted)
+    for tid in existing - wanted_set:
+        db.query(TechnicianPlant).filter_by(plant_id=plant_id, technician_id=tid).delete()
+    for tid in wanted_set - existing:
+        db.add(TechnicianPlant(technician_id=tid, plant_id=plant_id))
+    audit(db, u, 'UPDATE', 'PlantTechnicians', plant_id, new={'technician_ids': wanted})
+    db.commit()
+    return {'plant_id': plant_id, 'technician_ids': wanted}
 
 @app.get('/pm',response_model=list[PMOut])
 def pm_list(equipment_id:str|None=None,db:Session=Depends(get_db),u=Depends(auth)):
@@ -3172,7 +3254,7 @@ def propose_unknown_equipment(db, report, item):
     for engineer in db.query(User).filter(User.role.in_(list(ENGINEER)), User.is_active == True).all():
         notify(db, engineer.id, 'معدات جديدة', f'{code} — {name} was reported and is waiting for approval.', 'pending_equipment', code)
 
-def validate_report_item(db: Session, item: ReportItemCreate):
+def validate_report_item(db: Session, item: ReportItemCreate, technician_id: str | None = None):
     if item.maintenance_type not in MAINT_TYPES:
         raise HTTPException(400, f'Invalid maintenance type: {item.maintenance_type}')
 
@@ -3199,6 +3281,7 @@ def validate_report_item(db: Session, item: ReportItemCreate):
         item.is_manual_entry = True
         if item.component_id or item.pm_id:
             raise HTTPException(400, 'Manual equipment entries cannot reference a component or existing PM plan')
+    assert_technician_can_use_plant(db, technician_id, item.plant_id)
 
     if item.component_id:
         component = db.query(Component).filter_by(
@@ -3448,7 +3531,7 @@ def create_report(
     machine_records = []
 
     for item in data.items:
-        validate_report_item(db, item)
+        validate_report_item(db, item, technician_id)
 
         payload = item.model_dump()
 
@@ -3641,7 +3724,7 @@ def update_report(
 
         saved_rows = []
         for item in data.items:
-            validate_report_item(db, item)
+            validate_report_item(db, item, r.technician_id)
             payload = item.model_dump()
             if item.downtime_start is not None and item.downtime_end is not None:
                 payload['downtime_h'] = calculate_downtime(
@@ -4570,6 +4653,7 @@ def save_lubrication_report(data: LubricationSave, db: Session = Depends(get_db)
                 raise HTTPException(400, 'The line number does not belong to the selected plant')
             if not plant_id:
                 plant_id = plant_line.plant_id
+        assert_technician_can_use_plant(db, technician_id, plant_id)
         work_order_id = None
         if work_type == 'Oil change':
             if not plant_id and not (found and found.plant_id):

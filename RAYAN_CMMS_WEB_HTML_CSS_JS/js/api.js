@@ -157,8 +157,8 @@ async function restoreSession() {
         const refreshed = await apiRequest("/auth/refresh", { method: "POST" });
         saveSession(refreshed);
         const user = await getCurrentUser();
-        saveSession({ ...refreshed, ...user });
-        return user;
+        saveSession({ ...user, ...refreshed });
+        return getSavedUser();
     } catch (_) {
         logout();
         return null;

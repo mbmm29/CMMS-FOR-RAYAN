@@ -494,6 +494,9 @@ body .lube-form-actions .detail-button.primary{border:0;background:#075cf5;color
 .job-block{display:grid;gap:6px;margin-top:12px;color:#102d60;font-weight:800}
 body .job-order textarea{width:100%;min-height:88px;border:1px solid #8eabda;border-radius:0;background:#fff;color:#102d60;color-scheme:light;font:14px Arial,sans-serif;padding:8px}
 .job-order .assignee-list{display:flex;flex-wrap:wrap;gap:8px 16px;font-weight:600}
+body .detail #plant-access .assignee-list{display:flex;flex-direction:column;gap:8px;margin:8px 0 12px;max-height:220px;overflow:auto;padding:8px;border:1px solid #2c528c;border-radius:10px;background:#071428}
+body .detail #plant-access .assignee-list label{display:flex;align-items:center;gap:10px;margin:0;color:#e7eefc;font-weight:600;cursor:pointer}
+body .detail #plant-access .assignee-list input{width:16px;height:16px;margin:0;accent-color:#3b82f6;flex:0 0 auto}
 .job-order .daily-parts h3{margin:14px 0 8px;font-size:14px}
 .job-result-date{max-width:100%;margin-top:10px}
 .job-result-date span{white-space:nowrap;flex:0 0 auto}

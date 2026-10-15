@@ -89,6 +89,14 @@ class Technician(Base):
     shift: Mapped[str|None]=mapped_column(String(20),nullable=True)
     status: Mapped[str]=mapped_column(String(30),default='Active')
 
+class TechnicianPlant(Base):
+    """Plants a technician may select on daily and lubrication reports."""
+    __tablename__ = 'technician_plants'
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    technician_id: Mapped[str] = mapped_column(String(50), ForeignKey('technicians.technician_id'), index=True)
+    plant_id: Mapped[str] = mapped_column(String(50), ForeignKey('plants.plant_id'), index=True)
+    __table_args__ = (UniqueConstraint('technician_id', 'plant_id', name='uq_technician_plant'),)
+
 class PMPlan(Base):
     __tablename__='pm_plans'
     id: Mapped[int]=mapped_column(Integer,primary_key=True)
