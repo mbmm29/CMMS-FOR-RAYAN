@@ -15,7 +15,7 @@ const DEFAULT_TAB = {
   'spare-parts': 'All',
 };
 const shellRender = render;
-const ui = { page: 'dashboard', tab: 'All', rowKey: '', mode: 'view', plantId: '', plantIds: [], lineId: '', sectionId: '', equipmentId: '', spareEquipment: '', technicianId: '', dateFrom: '', dateTo: '', annualPlant: '', annualYear: new Date().getFullYear(), annualItems: [], annualWeek: '', annualCopy: null, weekTasks: [], lubeId: '', dailyId: '', dailyFilter: '' };
+const ui = { page: 'dashboard', tab: 'All', rowKey: '', mode: 'view', plantId: '', plantIds: [], lineId: '', sectionId: '', equipmentId: '', equipmentQuery: '', spareEquipment: '', technicianId: '', dateFrom: '', dateTo: '', annualPlant: '', annualYear: new Date().getFullYear(), annualItems: [], annualWeek: '', annualCopy: null, weekTasks: [], lubeId: '', dailyId: '', dailyFilter: '' };
 const ANNUAL_MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 const WEEKDAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 const DAY_MAINTENANCE_TYPES = ['Preventive', 'Corrective', 'Emergency', 'Routine', 'Inspection', 'Lubrication', 'Motor condition'];
@@ -341,6 +341,14 @@ function equipmentText(row) {
   return name ? `${name} (${code || 'manual'})` : code;
 }
 
+function equipmentMatchesQuery(item, query = ui.equipmentQuery) {
+  const needle = String(query || '').trim().toLowerCase();
+  if (!needle) return true;
+  const code = String(item?.equipment_id || '').toLowerCase();
+  const name = String(item?.name || '').toLowerCase();
+  return code.includes(needle) || name.includes(needle);
+}
+
 function visibleEquipment() {
   const plants = selectedPlantIds();
   return store.equipment.filter((item) => {
@@ -349,6 +357,7 @@ function visibleEquipment() {
     if (ui.lineId && item.line_id !== ui.lineId) return false;
     if (ui.sectionId && item.section_id !== ui.sectionId) return false;
     if (ui.equipmentId && item.equipment_id !== ui.equipmentId) return false;
+    if (!equipmentMatchesQuery(item)) return false;
     return true;
   });
 }
@@ -521,8 +530,8 @@ function filtersHtml(options = {}) {
   if (ui.sectionId && !sections.some((section) => section.section_id === ui.sectionId)) ui.sectionId = '';
   if (ui.lineId && !lineIds.has(ui.lineId)) ui.lineId = '';
   const withSop = sopOnly ? equipmentIdsWithSopFile() : null;
-  const equipment = store.equipment.filter((item) => (!item.plant_id || openIds.has(item.plant_id)) && (!plants.length || plantScope.has(item.plant_id)) && (!ui.lineId || item.line_id === ui.lineId) && (!ui.sectionId || item.section_id === ui.sectionId) && (!withSop || withSop.has(item.equipment_id)));
-  if (ui.equipmentId && !equipment.some((item) => item.equipment_id === ui.equipmentId)) ui.equipmentId = '';
+  const equipment = store.equipment.filter((item) => (!item.plant_id || openIds.has(item.plant_id)) && (!plants.length || plantScope.has(item.plant_id)) && (!ui.lineId || item.line_id === ui.lineId) && (!ui.sectionId || item.section_id === ui.sectionId) && (!withSop || withSop.has(item.equipment_id)) && equipmentMatchesQuery(item));
+  if (ui.equipmentId && !equipment.some((item) => item.equipment_id === ui.equipmentId) && !String(ui.equipmentQuery || '').trim()) ui.equipmentId = '';
   const option = (value, label, selected) => `<option value="${esc(value)}"${selected === value ? ' selected' : ''}>${esc(label)}</option>`;
   const plantSummary = plants.length
     ? (plants.length === 1
@@ -547,7 +556,53 @@ function filtersHtml(options = {}) {
     <label>${t('Line')}<select data-filter="line">${option('', t('All lines'), ui.lineId)}${scopedLines.map((line) => option(line.line_id, line.name, ui.lineId)).join('')}</select></label>
     <label>${t('Section')}<select data-filter="section">${option('', t('All sections'), ui.sectionId)}${sections.map((section) => option(section.section_id, section.name, ui.sectionId)).join('')}</select></label>
     <label>${t('Equipment')}<select data-filter="equipment">${option('', t('All equipment'), ui.equipmentId)}${equipment.map((item) => option(item.equipment_id, `${item.equipment_id} — ${item.name}`, ui.equipmentId)).join('')}</select></label>
+    <label class="equipment-query">${esc(t('Search'))}<span class="equipment-query-row"><input id="equipment-query" type="search" value="${esc(ui.equipmentQuery || '')}" placeholder="${esc(t('Number or name'))}" autocomplete="off"><button type="button" class="detail-button" id="equipment-query-go">${esc(t('Search'))}</button></span></label>
   </div>`;
+}
+
+function applyEquipmentQuery(raw) {
+  const query = String(raw || '').trim();
+  ui.equipmentQuery = query;
+  if (!query) {
+    ui.rowKey = ui.equipmentId || '';
+    draw(ui.page);
+    return;
+  }
+  const openIds = new Set((store.plants || []).filter((plant) => plant.active !== false).map((plant) => plant.plant_id));
+  const plants = selectedPlantIds();
+  const plantScope = plants.length ? new Set(plants) : openIds;
+  const matches = (store.equipment || []).filter((item) => (
+    (!item.plant_id || openIds.has(item.plant_id))
+    && (!plants.length || plantScope.has(item.plant_id))
+    && (!ui.lineId || item.line_id === ui.lineId)
+    && (!ui.sectionId || item.section_id === ui.sectionId)
+    && equipmentMatchesQuery(item, query)
+  ));
+  if (!matches.length) {
+    ui.equipmentId = '';
+    ui.rowKey = '';
+    toast(t('No equipment found'));
+    draw(ui.page);
+    return;
+  }
+  const needle = query.toLowerCase();
+  const pick = matches.find((item) => String(item.equipment_id || '').toLowerCase() === needle)
+    || matches.find((item) => String(item.name || '').toLowerCase() === needle)
+    || (matches.length === 1 ? matches[0] : null);
+  if (pick) {
+    ui.equipmentId = pick.equipment_id;
+    ui.rowKey = pick.equipment_id;
+    if (pick.plant_id) {
+      ui.plantId = pick.plant_id;
+      syncPlantSelection([pick.plant_id]);
+    }
+    if (pick.line_id) ui.lineId = pick.line_id;
+    if (pick.section_id) ui.sectionId = pick.section_id || '';
+  } else {
+    ui.equipmentId = '';
+    ui.rowKey = '';
+  }
+  draw(ui.page);
 }
 
 function tableShell(columns, rows, footer) {
@@ -2933,12 +2988,22 @@ function bindFilters() {
         ui.lineId = '';
         ui.sectionId = '';
         ui.equipmentId = '';
+        ui.equipmentQuery = '';
       }
-      if (select.dataset.filter === 'line') { ui.sectionId = ''; ui.equipmentId = ''; }
-      if (select.dataset.filter === 'section') ui.equipmentId = '';
-      ui.rowKey = '';
+      if (select.dataset.filter === 'line') { ui.sectionId = ''; ui.equipmentId = ''; ui.equipmentQuery = ''; }
+      if (select.dataset.filter === 'section') { ui.equipmentId = ''; ui.equipmentQuery = ''; }
+      if (select.dataset.filter === 'equipment') ui.equipmentQuery = '';
+      ui.rowKey = select.dataset.filter === 'equipment' ? select.value : '';
       draw(ui.page);
     });
+  });
+  const queryInput = document.getElementById('equipment-query');
+  const queryGo = document.getElementById('equipment-query-go');
+  queryGo?.addEventListener('click', () => applyEquipmentQuery(queryInput?.value || ''));
+  queryInput?.addEventListener('keydown', (event) => {
+    if (event.key !== 'Enter') return;
+    event.preventDefault();
+    applyEquipmentQuery(queryInput.value || '');
   });
 }
 

@@ -48,8 +48,15 @@ body .live-filters{
 }
 body .live-filters label{min-width:0;color:#b7c9e6;font-size:11px;gap:6px}
 body .live-filters select,
-body .live-filters input[type="date"]{
+body .live-filters input[type="date"],
+body .live-filters input[type="search"]{
   width:100%;min-width:0;height:38px;padding-inline:10px;color:#f4f8ff;background:#071428;border:1px solid #2c528c;border-radius:10px;
+}
+body .live-filters .equipment-query{min-width:min(100%,240px)}
+body .live-filters .equipment-query-row{display:flex;gap:8px;align-items:stretch;min-width:0}
+body .live-filters .equipment-query-row input[type="search"]{flex:1 1 auto}
+body .live-filters .equipment-query-row .detail-button{
+  flex:0 0 auto;width:auto;min-width:72px;min-height:38px;margin:0;padding:0 14px;border-radius:10px
 }
 body .plant-menu{position:relative;display:grid;gap:6px;min-width:min(100%,220px)}
 body .plant-menu-label{color:#b7c9e6;font-size:12px;font-weight:600}

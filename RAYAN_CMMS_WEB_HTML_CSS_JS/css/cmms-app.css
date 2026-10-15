@@ -5,6 +5,9 @@
 .live-filters label{display:flex;flex-direction:column;gap:4px;font-size:11px;color:#64738e}
 .live-filters select,.live-form input,.live-form select,.live-form textarea{border:1px solid #e7ebf3;border-radius:6px;background:#fff;color:#0b2558;font:13px Arial,sans-serif}
 .live-filters select{height:36px;min-width:150px;padding:0 8px}
+.live-filters .equipment-query-row{display:flex;gap:6px;align-items:stretch}
+.live-filters .equipment-query-row input[type="search"]{height:36px;min-width:160px;flex:1 1 auto;padding:0 8px;border:1px solid #e7ebf3;border-radius:6px;background:#fff;color:#0b2558;font:13px Arial,sans-serif}
+.live-filters .equipment-query-row .detail-button{width:auto;min-height:36px;margin:0;padding:0 12px}
 .live-form label{display:block;margin:10px 0;font-size:12px}
 .live-form input,.live-form select,.live-form textarea{width:100%;margin-top:4px;padding:8px}
 .assign-block{margin:10px 0;font-size:12px}
