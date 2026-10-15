@@ -379,26 +379,50 @@ def compute_kpi(db: Session, plant_id=None, line_id=None, equipment_id=None, tec
             trend_series.append({'id': key, 'name': label, 'points': points})
         trend = [{'date': day, 'hours': round(total_by_day[day], 2)} for day in dates]
 
-        # Pareto: categories sorted by downtime frequency, with cumulative share.
+        # Downtime bars by plant/line (or equipment), with Availability on the line.
+        # The date filter sets the period; categories are plants, or lines when one plant is selected.
+        window_days = max((window_end - window_start).days + 1, 1)
+        assets_by_key = {}
+        for row in all_equipment:
+            if plant_ids and row.plant_id not in plant_ids:
+                continue
+            if line_id and row.line_id != line_id:
+                continue
+            if equipment_id and row.equipment_id != equipment_id:
+                continue
+            if equipment_id:
+                asset_key = equipment_id
+            elif line_id:
+                asset_key = line_id
+            elif single_plant:
+                asset_key = row.line_id or 'unassigned'
+            else:
+                asset_key = row.plant_id or 'unassigned'
+            assets_by_key[asset_key] = assets_by_key.get(asset_key, 0) + 1
+
         pareto = []
         for key, label in catalog:
             category_hours = round(sum(grouped.get(key, {}).values()), 2)
             count = int(grouped_count.get(key, 0))
             if count <= 0 and category_hours <= 0:
                 continue
+            assets = int(assets_by_key.get(key, 0) or 0)
+            available_h = round(assets * window_days * 24, 2) if assets else 0.0
+            uptime_h = max(available_h - category_hours, 0)
             pareto.append({
                 'id': key,
                 'name': label,
                 'count': count,
                 'hours': category_hours,
+                'availability': _pct(uptime_h, available_h) if available_h else None,
             })
-        pareto.sort(key=lambda row: (-row['count'], -row['hours'], str(row['name']).lower()))
+        pareto.sort(key=lambda row: (-row['hours'], -row['count'], str(row['name']).lower()))
         pareto = pareto[:12]
-        total_count = sum(row['count'] for row in pareto) or 1
-        running = 0
+        total_hours_pareto = sum(row['hours'] for row in pareto) or 1
+        running = 0.0
         for row in pareto:
-            running += row['count']
-            row['cumulative_pct'] = round(100 * running / total_count, 1)
+            running += row['hours']
+            row['cumulative_pct'] = round(100 * running / total_hours_pareto, 1)
 
         return {
             'availability': _pct(max(uptime, 0), available - idle) if available else None,

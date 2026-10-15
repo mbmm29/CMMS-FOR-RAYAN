@@ -110,18 +110,19 @@ body .area-chart .area-grid line{stroke:#23406e}
 body .area-chart text{fill:#9eb4d6;font-size:11px}
 body .area-chart .area-name{font-size:12px;font-weight:700;font-family:Tahoma,Arial,sans-serif}
 body .pareto-wrap{display:grid;gap:10px;min-width:0}
-body .pareto-chart{width:100%;height:320px;display:block;direction:ltr}
+body .pareto-chart{width:100%;height:340px;display:block;direction:ltr}
 body .pareto-chart .pareto-grid line{stroke:#1e3a5f;stroke-width:1}
 body .pareto-chart text{fill:#9eb4d6;font-size:11px;font-family:Tahoma,Arial,sans-serif}
 body .pareto-chart .pareto-axis{fill:#7f9bc4;font-size:11px}
-body .pareto-chart .pareto-bar{fill:#60a5fa;opacity:.92}
-body .pareto-chart .pareto-line{fill:none;stroke:#f472b6;stroke-width:2.4;stroke-linejoin:round;stroke-linecap:round}
-body .pareto-chart .pareto-dot{fill:#f472b6;stroke:#0b1c38;stroke-width:1.4}
+body .pareto-chart .pareto-bar{fill:#111827;opacity:.95}
+body .pareto-chart .pareto-line{fill:none;stroke:#e11d48;stroke-width:2.6;stroke-linejoin:round;stroke-linecap:round}
+body .pareto-chart .pareto-dot{fill:#fff;stroke:#e11d48;stroke-width:2}
+body .pareto-chart .pareto-pct{fill:#e11d48;font-size:11px;font-weight:700}
 body .pareto-chart .pareto-label{fill:#c5d6f4;font-size:10px}
 body .pareto-chart .pareto-left{fill:#9eb4d6}
-body .pareto-chart .pareto-right{fill:#f9a8d4}
-body .pareto-legend-bar{background:#60a5fa!important}
-body .pareto-legend-line{background:#f472b6!important}
+body .pareto-chart .pareto-right{fill:#fb7185}
+body .pareto-legend-bar{background:#111827!important}
+body .pareto-legend-line{background:#e11d48!important}
 body .temp-trend-wrap{display:grid;gap:10px;min-width:0}
 body .temp-trend-toolbar{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
 body .temp-trend-toolbar .detail-button{width:auto;min-width:0;min-height:34px;padding:0 14px}
