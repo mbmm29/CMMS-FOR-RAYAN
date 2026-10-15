@@ -578,6 +578,7 @@ body .detail-button.job-open-detail .job-open-glyph{font-size:16px;line-height:1
   body:has(.daily-paper) .lube-table select,
   body:has(.daily-paper) .lube-table textarea{border:0!important;background:transparent!important;color:#102d60!important;appearance:none;-webkit-appearance:none}
   body:has(.daily-paper) .lube-machine input,
+  body:has(.daily-paper) .lube-machine select,
   body:has(.daily-paper) .daily-work input{display:block;width:100%}
   body:has(.daily-paper) .daily-parts,
   body:has(.daily-paper) .daily-notes{break-inside:avoid;page-break-inside:avoid;margin-top:8px}
