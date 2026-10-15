@@ -18,6 +18,9 @@
     'Test notice sent. Check the phone notification tray.': 'تم إرسال إشعار تجريبي. راجع لوحة إشعارات الهاتف.',
     'Notification settings': 'ضبط الإشعارات',
     'Open this page from the home-screen app on iPhone to receive notices.': 'على آيفون افتح التطبيق من الشاشة الرئيسية لاستلام الإشعارات.',
+    'Enable notices on this phone, then send a test notice to confirm sound and the on-screen banner.': 'فعّل الإشعارات على هذا الهاتف ثم أرسل إشعارًا تجريبيًا للتأكد من الصوت والشريط الظاهر فوق التطبيقات.',
+    'On Android: App info → Notifications → General → enable Sound and Show as pop-up (like WhatsApp).': 'على أندرويد: معلومات التطبيق ← الإشعارات ← عام ← فعّل الصوت وإظهار كنافذة منبثقة (مثل واتساب).',
+    'Test notice sent. Check the phone notification tray.': 'تم إرسال إشعار تجريبي. راجع لوحة إشعارات الهاتف والصوت.',
   };
 
   function label(key) {
@@ -79,25 +82,61 @@
     return output;
   }
 
+  function playNoticeTone() {
+    try {
+      const AudioCtx = window.AudioContext || window.webkitAudioContext;
+      if (!AudioCtx) return;
+      const ctx = new AudioCtx();
+      const now = ctx.currentTime;
+      const gain = ctx.createGain();
+      gain.connect(ctx.destination);
+      gain.gain.setValueAtTime(0.0001, now);
+      gain.gain.exponentialRampToValueAtTime(0.22, now + 0.02);
+      gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.55);
+      [[880, 0], [1175, 0.14], [988, 0.28]].forEach(([freq, offset]) => {
+        const osc = ctx.createOscillator();
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(freq, now + offset);
+        osc.connect(gain);
+        osc.start(now + offset);
+        osc.stop(now + offset + 0.16);
+      });
+      setTimeout(() => { try { ctx.close(); } catch (_) {} }, 800);
+    } catch (_) {}
+  }
+
+  function noticeDisplayOptions(body, tag) {
+    return {
+      body: String(body || '').slice(0, 180),
+      icon: '/icons/icon-192.png',
+      badge: '/icons/icon-192.png',
+      lang: 'ar',
+      dir: 'rtl',
+      tag: tag || `cmms-${Date.now()}`,
+      renotify: true,
+      silent: false,
+      requireInteraction: true,
+      vibrate: [180, 80, 180, 80, 280],
+      timestamp: Date.now(),
+      data: { url: '/index.html#work-orders' },
+      actions: [
+        { action: 'open', title: 'فتح' },
+        { action: 'dismiss', title: 'إغلاق' },
+      ],
+    };
+  }
+
   async function showLocalNotice(title, body) {
     const text = String(body || '').slice(0, 180);
     if (!pushSupported() || Notification.permission !== 'granted') return false;
+    playNoticeTone();
     try {
       const registration = await navigator.serviceWorker.ready;
-      await registration.showNotification(title, {
-        body: text,
-        icon: '/icons/icon-192.png',
-        badge: '/icons/icon-192.png',
-        lang: 'ar',
-        dir: 'rtl',
-        tag: 'cmms-test',
-        renotify: true,
-        data: { url: '/index.html#work-orders' },
-      });
+      await registration.showNotification(title, noticeDisplayOptions(text, `cmms-test-${Date.now()}`));
       return true;
     } catch (_) {
       try {
-        new Notification(title, { body: text, icon: '/icons/icon-192.png', tag: 'cmms-test' });
+        new Notification(title, noticeDisplayOptions(text, `cmms-test-${Date.now()}`));
         return true;
       } catch (_) {
         return false;
@@ -191,13 +230,18 @@
     status: noticeStatus,
     supported: pushSupported,
     isPhone: isPhoneDevice,
+    playTone: playNoticeTone,
     refreshHeader: function () { refreshPhone(); },
   };
 
   if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.addEventListener('message', function (event) {
+      if (event.data && event.data.type === 'cmms-push') playNoticeTone();
+    });
     window.addEventListener('load', function () {
       refreshPhone();
-      navigator.serviceWorker.register('/sw.js', { scope: '/' }).then(function () {
+      navigator.serviceWorker.register('/sw.js', { scope: '/' }).then(function (registration) {
+        if (registration && registration.update) registration.update();
         refreshPhone();
         if (typeof Notification !== 'undefined' && Notification.permission === 'granted' && noticeUser()) {
           subscribePhone(false).then(function (ok) {

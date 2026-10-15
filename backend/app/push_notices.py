@@ -154,7 +154,13 @@ def _send(db: Session, user_id: int, title: str, body: str, url: str, private_ke
     subscriptions = db.query(PushSubscription).filter_by(user_id=user_id).all()
     if not subscriptions or not private_key:
         return False
-    payload = json.dumps({'title': title, 'body': body, 'url': url}, ensure_ascii=False)
+    payload = json.dumps({
+        'title': title,
+        'body': body,
+        'url': url,
+        'tag': f'cmms-{int(time.time() * 1000)}',
+        'sound': True,
+    }, ensure_ascii=False)
     sent = False
     for subscription in subscriptions:
         try:
@@ -168,6 +174,8 @@ def _send(db: Session, user_id: int, title: str, body: str, url: str, private_ke
                 vapid_claims={'sub': VAPID_SUBJECT},
                 ttl=PUSH_TTL_SECONDS,
                 timeout=15,
+                # High urgency helps Android wake and alert like a chat message.
+                headers={'Urgency': 'high'},
             )
             sent = True
         except WebPushException as error:

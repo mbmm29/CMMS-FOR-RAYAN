@@ -4330,24 +4330,30 @@ function showLivePhoneNotice(title, body) {
   try {
     if (typeof Notification === 'undefined' || Notification.permission !== 'granted') return;
     const text = String(body || '').slice(0, 180);
+    if (window.cmmsPush?.playTone) window.cmmsPush.playTone();
+    const options = {
+      body: text,
+      icon: '/icons/icon-192.png',
+      badge: '/icons/icon-192.png',
+      lang: 'ar',
+      dir: 'rtl',
+      data: { url: '/index.html#work-orders' },
+      tag: `cmms-live-${Date.now()}`,
+      renotify: true,
+      silent: false,
+      requireInteraction: true,
+      vibrate: [180, 80, 180, 80, 280],
+      timestamp: Date.now(),
+    };
     if (navigator.serviceWorker?.ready) {
       navigator.serviceWorker.ready.then((registration) => {
-        registration.showNotification(title, {
-          body: text,
-          icon: '/icons/icon-192.png',
-          badge: '/icons/icon-192.png',
-          lang: 'ar',
-          dir: 'rtl',
-          data: { url: '/index.html#work-orders' },
-          tag: 'cmms-live-wo',
-          renotify: true,
-        });
+        registration.showNotification(title, options);
       }).catch(() => {
-        new Notification(title, { body: text, icon: '/icons/icon-192.png', tag: 'cmms-live-wo' });
+        new Notification(title, options);
       });
       return;
     }
-    new Notification(title, { body: text, icon: '/icons/icon-192.png', tag: 'cmms-live-wo' });
+    new Notification(title, options);
   } catch (_) {}
 }
 

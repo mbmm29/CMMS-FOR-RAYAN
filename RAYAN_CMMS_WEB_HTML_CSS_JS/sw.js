@@ -1,4 +1,4 @@
-const CACHE = 'rayan-cmms-shell-6';
+const CACHE = 'rayan-cmms-shell-7';
 const SHELL = [
   '/login.html',
   '/index.html',
@@ -22,6 +22,28 @@ self.addEventListener('activate', (event) => {
   );
 });
 
+function noticeOptions(payload) {
+  const tag = payload.tag || `cmms-${Date.now()}`;
+  return {
+    body: payload.body || '',
+    icon: '/icons/icon-192.png',
+    badge: '/icons/icon-192.png',
+    lang: 'ar',
+    dir: 'rtl',
+    tag,
+    renotify: true,
+    silent: false,
+    requireInteraction: true,
+    vibrate: [180, 80, 180, 80, 280],
+    timestamp: Date.now(),
+    data: { url: payload.url || '/index.html#work-orders' },
+    actions: [
+      { action: 'open', title: 'فتح' },
+      { action: 'dismiss', title: 'إغلاق' },
+    ],
+  };
+}
+
 self.addEventListener('push', (event) => {
   let payload = { title: 'RAYAN CMMS', body: '', url: '/index.html#work-orders' };
   try {
@@ -30,22 +52,23 @@ self.addEventListener('push', (event) => {
     payload.body = event.data ? event.data.text() : '';
   }
   event.waitUntil(Promise.all([
-    self.registration.showNotification(payload.title, {
-      body: payload.body,
-      icon: '/icons/icon-192.png',
-      badge: '/icons/icon-192.png',
-      lang: 'ar',
-      dir: 'rtl',
-      data: { url: payload.url || '/index.html#work-orders' },
-    }),
+    self.registration.showNotification(payload.title || 'RAYAN CMMS', noticeOptions(payload)),
     self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clients) => {
-      clients.forEach((client) => client.postMessage({ type: 'cmms-push', title: payload.title, body: payload.body, url: payload.url }));
+      clients.forEach((client) => client.postMessage({
+        type: 'cmms-push',
+        title: payload.title,
+        body: payload.body,
+        url: payload.url,
+        sound: true,
+      }));
     }),
   ]));
 });
 
 self.addEventListener('notificationclick', (event) => {
+  const action = event.action;
   event.notification.close();
+  if (action === 'dismiss') return;
   const target = new URL(event.notification.data?.url || '/index.html#work-orders', self.location.origin).href;
   event.waitUntil(self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((windows) => {
     const open = windows.find((client) => client.url.startsWith(self.location.origin));
