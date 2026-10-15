@@ -10,7 +10,7 @@ import time
 from datetime import datetime, timedelta, timezone
 
 from cryptography.hazmat.primitives.asymmetric import ec
-from sqlalchemy import or_
+from sqlalchemy import func, or_
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -95,6 +95,11 @@ def save_subscription(db: Session, user, endpoint: str, p256dh: str, auth: str):
     return True
 
 
+# Keep the notice on the push service until the phone can receive it.
+# ttl=0 discards the message immediately when the device is briefly offline.
+PUSH_TTL_SECONDS = 24 * 60 * 60
+
+
 def _send(db: Session, user_id: int, title: str, body: str, url: str, private_key: str) -> bool:
     if webpush is None:
         return False
@@ -113,12 +118,16 @@ def _send(db: Session, user_id: int, title: str, body: str, url: str, private_ke
                 data=payload,
                 vapid_private_key=private_key,
                 vapid_claims={'sub': VAPID_SUBJECT},
-                timeout=10,
+                ttl=PUSH_TTL_SECONDS,
+                timeout=15,
             )
             sent = True
         except WebPushException as error:
-            status = getattr(getattr(error, 'response', None), 'status_code', None)
-            if status in (404, 410):
+            status = getattr(error, 'status_code', None)
+            if status is None:
+                status = getattr(getattr(error, 'response', None), 'status_code', None)
+            # Gone / not found / forbidden (stale endpoint or VAPID mismatch).
+            if status in (404, 410, 403):
                 db.delete(subscription)
         except Exception:
             continue
@@ -202,16 +211,20 @@ def _push_work_orders(technician_ids, work_order_id, equipment_id, manual_name):
         body = f'{detail}. أُرسل إليك، اقبله خلال 24 ساعة.'
         private_key, _public = vapid_material(db)
         for technician_id in technician_ids:
+            # Match the linked technician code without depending on letter case.
             account = db.query(User).filter(
-                User.technician_id == technician_id,
                 User.is_active == True,
                 User.role.in_(('TECHNICIAN', 'LUBRICATION_TECHNICIAN')),
+                func.lower(User.technician_id) == (technician_id or '').lower(),
             ).first()
-            if not account or not _remember(db, account.id, 'work_order', work_order_id):
+            if not account:
+                continue
+            if not _remember(db, account.id, 'work_order', work_order_id):
                 continue
             if _send(db, account.id, 'أمر صيانة جديد', body, '/index.html#work-orders', private_key):
                 db.commit()
             else:
+                # Keep the delivery slot open so the next assign/retry can push again.
                 db.rollback()
     except Exception:
         db.rollback()

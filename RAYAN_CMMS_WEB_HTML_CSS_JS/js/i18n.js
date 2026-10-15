@@ -826,6 +826,7 @@ const CMMS_AR = {
   'Equipment not found': 'المعدة غير موجودة',
   'Standard operating procedure': 'إجراء التشغيل القياسي',
   'Phone notices': 'إشعارات الهاتف',
+  'Phone notices are on.': 'إشعارات الهاتف مفعّلة.',
   'Only a technician can receive phone notices.': 'إشعارات الهاتف لحسابات الفنيين.',
   'The phone could not be registered for notices.': 'تعذر تسجيل الهاتف لاستقبال الإشعارات.',
   'Open navigation menu': 'فتح القائمة',

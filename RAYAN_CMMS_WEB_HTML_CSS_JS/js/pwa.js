@@ -6,7 +6,9 @@
   const FALLBACK = {
     'Install app': 'تثبيت التطبيق',
     'Add RAYAN CMMS to your home screen from the browser Share menu.': 'أضف RAYAN CMMS إلى الشاشة الرئيسية من قائمة المشاركة في المتصفح.',
-    'Phone notices': 'إشعارات الهاتف'
+    'Phone notices': 'إشعارات الهاتف',
+    'The phone could not be registered for notices.': 'تعذر تسجيل الهاتف لاستلام الإشعارات.',
+    'Phone notices are on.': 'إشعارات الهاتف مفعّلة.'
   };
 
   function label(key) {
@@ -33,16 +35,15 @@
   }
 
   function noticesAlreadyOn() {
-    if (localStorage.getItem(PUSH_FLAG) === '1') return true;
-    try {
-      return typeof Notification !== 'undefined' && Notification.permission === 'granted';
-    } catch (_) {
-      return false;
-    }
+    return localStorage.getItem(PUSH_FLAG) === '1';
   }
 
   function markNoticesOn() {
     localStorage.setItem(PUSH_FLAG, '1');
+  }
+
+  function clearNoticesFlag() {
+    localStorage.removeItem(PUSH_FLAG);
   }
 
   function urlBase64ToUint8Array(value) {
@@ -54,16 +55,22 @@
     return output;
   }
 
-  async function subscribePhone() {
+  async function subscribePhone(force) {
     if (!noticeUser() || typeof apiRequest !== 'function') return false;
-    if (!('serviceWorker' in navigator) || !('PushManager' in window) || Notification.permission !== 'granted') return false;
+    if (!('serviceWorker' in navigator) || !('PushManager' in window)) return false;
+    if (typeof Notification === 'undefined' || Notification.permission !== 'granted') return false;
     const registration = await navigator.serviceWorker.ready;
     const key = await apiRequest('/push/key');
+    const applicationServerKey = urlBase64ToUint8Array(key.public_key);
     let subscription = await registration.pushManager.getSubscription();
+    if (force && subscription) {
+      try { await subscription.unsubscribe(); } catch (_) {}
+      subscription = null;
+    }
     if (!subscription) {
       subscription = await registration.pushManager.subscribe({
         userVisibleOnly: true,
-        applicationServerKey: urlBase64ToUint8Array(key.public_key),
+        applicationServerKey,
       });
     }
     const json = subscription.toJSON();
@@ -84,10 +91,14 @@
       refreshPhone();
       navigator.serviceWorker.register('/sw.js', { scope: '/' }).then(function () {
         refreshPhone();
-        if (typeof Notification !== 'undefined' && Notification.permission === 'granted') {
-          subscribePhone().then(function (ok) {
-            if (ok) refreshPhone();
-          }).catch(function () {});
+        if (typeof Notification !== 'undefined' && Notification.permission === 'granted' && noticeUser()) {
+          subscribePhone(false).then(function (ok) {
+            if (!ok) clearNoticesFlag();
+            refreshPhone();
+          }).catch(function () {
+            clearNoticesFlag();
+            refreshPhone();
+          });
         }
       }).catch(function () {
         refreshPhone();
@@ -99,7 +110,7 @@
   style.textContent = '.install-app{border:1px solid #99baf0;background:#fff;color:#062857;border-radius:8px;padding:8px 12px;font:700 13px Arial,sans-serif;cursor:pointer}.header-actions .install-app{margin-inline-end:8px}.login-footer .install-app,.login-footer .install-app-hint{display:block;margin:12px auto 0;text-align:center}.install-app-hint{margin:8px 0 0;max-width:280px;font:12px Arial,sans-serif;color:#d7e4f8}';
   document.head.appendChild(style);
 
-  // Phone notices: main app header only, phones only, hide after the user enables them.
+  // Phone notices: main app header only, phones only, hide after successful registration.
   const appHost = document.querySelector('.header-actions');
   const phone = document.createElement('button');
   phone.type = 'button';
@@ -127,14 +138,18 @@
     if (!noticeUser() || !isPhoneDevice() || isLoginPage()) return;
     const permission = await Notification.requestPermission();
     if (permission !== 'granted') {
+      clearNoticesFlag();
       refreshPhone();
       return;
     }
     try {
-      await subscribePhone();
+      await subscribePhone(true);
       phone.hidden = true;
+      if (typeof toast === 'function') toast(label('Phone notices are on.'));
       refreshPhone();
     } catch (error) {
+      clearNoticesFlag();
+      refreshPhone();
       if (typeof toast === 'function') toast(error.message || label('The phone could not be registered for notices.'));
     }
   });
@@ -142,6 +157,7 @@
   refreshPhone();
   document.addEventListener('cmms-language', refreshPhone);
   window.addEventListener('resize', refreshPhone);
+  window.addEventListener('storage', refreshPhone);
 
   // Install app / iOS hint may still appear on login or the main header.
   const host = appHost || document.querySelector('.login-footer');
