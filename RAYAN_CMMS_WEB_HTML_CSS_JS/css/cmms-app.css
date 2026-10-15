@@ -27,8 +27,10 @@
 .live-filters input[type="date"]{height:36px;padding:0 8px;border:1px solid #e7ebf3;border-radius:6px;background:#fff;color:#0b2558}
 @media(max-width:900px){.kpi-board{grid-template-columns:1fr}}
 .area-chart{width:100%;height:190px;display:block;margin-top:6px}
+.area-chart.area-chart-large{height:340px;min-height:300px}
 .area-chart .area-grid line{stroke:#e7ebf3;stroke-width:1}
-.area-chart text{fill:#64738e;font-size:9px;font-family:Arial,sans-serif}
+.area-chart text{fill:#64738e;font-size:10px;font-family:Arial,sans-serif}
+.area-chart .area-name{font-size:12px;font-weight:700}
 .area-fill{stroke:none}
 .area-line{fill:none;stroke-width:2.4;stroke-linejoin:round;stroke-linecap:round}
 .area-chart circle{stroke-width:2}

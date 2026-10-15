@@ -4923,6 +4923,7 @@ def motor_chart(db, plant_id, line_id, equipment_id, start, end):
     by_code, details = motor_equipment_index(db)
     temp_1 = {}
     temp_2 = {}
+    temp_by_equipment = {}
     level_scores = {'good': 2, 'add': 1}
     level_labels = {'good': 'Oil good', 'add': 'Needs adding'}
     condition_scores = {'good': 3, 'critical': 2, 'change': 1}
@@ -4930,6 +4931,7 @@ def motor_chart(db, plant_id, line_id, equipment_id, start, end):
     level_bucket = {}
     condition_bucket = {}
     names = {}
+    selected_name = ''
     if equipment_id:
         grouped_by = 'equipment'
     elif line_id:
@@ -4959,9 +4961,12 @@ def motor_chart(db, plant_id, line_id, equipment_id, start, end):
         if not found:
             continue
         detail = details.get(found.equipment_id) or {}
+        equipment_label = detail.get('label') or found.equipment_id
+        if equipment_id:
+            selected_name = equipment_label
         if grouped_by == 'equipment':
             key = found.equipment_id
-            label = detail.get('label') or found.equipment_id
+            label = equipment_label
         elif grouped_by == 'line':
             key = found.line_id or 'unassigned'
             label = detail.get('line_name') or 'Unassigned'
@@ -4969,6 +4974,10 @@ def motor_chart(db, plant_id, line_id, equipment_id, start, end):
             key = found.plant_id or 'unassigned'
             label = detail.get('plant_name') or 'Unassigned'
         names[key] = label or key
+        samples = [value for value in (first, second) if value is not None]
+        if samples:
+            temp_by_equipment.setdefault(found.equipment_id, {}).setdefault(day, []).extend(samples)
+            names[found.equipment_id] = equipment_label
         if reading.oil_level in level_scores:
             level_bucket.setdefault(key, {}).setdefault(day, []).append((level_scores[reading.oil_level], level_labels[reading.oil_level]))
         if reading.oil_condition in condition_scores:
@@ -4984,6 +4993,24 @@ def motor_chart(db, plant_id, line_id, equipment_id, start, end):
                 'hours': round(sum(bucket[day]) / len(bucket[day]), 1) if bucket.get(day) else None,
             } for day in days],
         }
+
+    def equipment_temp_series():
+        used_days = sorted({day for values in temp_by_equipment.values() for day in values})[-12:]
+        chosen = sorted(
+            temp_by_equipment,
+            key=lambda key: (-sum(len(days) for days in temp_by_equipment[key].values()), str(names.get(key, key)).lower()),
+        )[:8]
+        built = []
+        for key in chosen:
+            points = []
+            for day in used_days:
+                samples = temp_by_equipment.get(key, {}).get(day) or []
+                points.append({
+                    'date': day,
+                    'hours': round(sum(samples) / len(samples), 1) if samples else None,
+                })
+            built.append({'id': key, 'name': names.get(key, key), 'points': points})
+        return built
 
     def bump_series(bucket):
         used_days = sorted({day for values in bucket.values() for day in values})[-12:]
@@ -5001,13 +5028,19 @@ def motor_chart(db, plant_id, line_id, equipment_id, start, end):
             built.append({'id': key, 'name': names.get(key, key), 'points': points})
         return built
 
+    if equipment_id:
+        label = selected_name or equipment_id
+        temperature = [
+            series(temp_1, 'temp_1', f'{label} · 1'),
+            series(temp_2, 'temp_2', f'{label} · 2'),
+        ]
+    else:
+        temperature = equipment_temp_series()
+
     return {
         'readings': recorded,
         'by': grouped_by,
-        'temperature': [
-            series(temp_1, 'temp_1', 'Temperature 1'),
-            series(temp_2, 'temp_2', 'Temperature 2'),
-        ],
+        'temperature': temperature,
         'oil_level': bump_series(level_bucket),
         'oil_condition': bump_series(condition_bucket),
     }
@@ -5092,9 +5125,10 @@ def equipment_motor_history(db, equipment):
         state = 'within'
     level_label = level_scores.get((latest_reading.oil_level or '').strip())
     condition_label = condition_scores.get((latest_reading.oil_condition or '').strip())
+    motor_name = (equipment.name or equipment.equipment_id or 'Motor').strip()
     temperature = [row for row in (
-        temp_series('t1', 'Temperature 1'),
-        temp_series('t2', 'Temperature 2'),
+        temp_series('t1', f'{motor_name} · 1'),
+        temp_series('t2', f'{motor_name} · 2'),
     ) if row]
     return {
         'included': True,

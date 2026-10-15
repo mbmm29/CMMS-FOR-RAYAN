@@ -706,6 +706,7 @@ const CMMS_AR = {
   'No equipment is scheduled as Motor condition for this day.': 'لا توجد معدات مجدولة بنوع حالة المحرك في هذا اليوم.',
   'Motor temperature': 'حرارة المحرك',
   'Temperature of the selected equipment.': 'حرارة المعدة المحددة.',
+  'Each equipment with its name on the chart.': 'كل معدة باسمها ظاهر على الرسم.',
   'Average of the recorded readings on each measurement day.': 'متوسط القراءات المسجّلة في كل يوم قياس.',
   'No motor readings in this period.': 'لا توجد قراءات محرك في هذه الفترة.',
   'Search reports': 'بحث في التقارير',

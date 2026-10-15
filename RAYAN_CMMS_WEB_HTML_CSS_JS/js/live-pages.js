@@ -574,9 +574,12 @@ function areaChart(series, unit = 'h', options = {}) {
   const palette = ['#075cf5', '#009c63', '#ff710d', '#7439f5', '#fa3038', '#17adae', '#0b2558', '#d4a017', '#0ea5e9', '#c026d3'];
   const rows = (series || []).filter((row) => row.points?.length);
   if (!rows.length) return '';
-  const width = 320;
-  const height = 168;
-  const pad = { left: 28, right: 8, top: 12, bottom: 28 };
+  const large = Boolean(settings.large);
+  const namesOnChart = settings.namesOnChart !== false;
+  const width = large ? 720 : 420;
+  const height = large ? 320 : 200;
+  const namePad = namesOnChart ? Math.min(168, 28 + Math.max(...rows.map((row) => String(row.name || '').length)) * 6.2) : 12;
+  const pad = { left: 36, right: namePad, top: 16, bottom: 32 };
   const innerW = width - pad.left - pad.right;
   const innerH = height - pad.top - pad.bottom;
   const dates = rows[0].points.map((point) => point.date);
@@ -588,14 +591,18 @@ function areaChart(series, unit = 'h', options = {}) {
   const xAt = (index) => pad.left + (count === 1 ? innerW / 2 : (index / (count - 1)) * innerW);
   const yAt = (value) => pad.top + innerH - ((Number(value) || 0) / max) * innerH;
   const base = (pad.top + innerH).toFixed(1);
+  const shortName = (value) => {
+    const text = String(value || '');
+    return text.length > 22 ? `${text.slice(0, 21)}…` : text;
+  };
   const grid = [0, 0.5, 1].map((step) => {
     const value = max * (1 - step);
     const y = yAt(value);
-    return `<line x1="${pad.left}" y1="${y.toFixed(1)}" x2="${width - pad.right}" y2="${y.toFixed(1)}"></line><text x="${pad.left - 4}" y="${(y + 3).toFixed(1)}" text-anchor="end">${numberText(value, max >= 10 ? 0 : 1)}</text>`;
+    return `<line x1="${pad.left}" y1="${y.toFixed(1)}" x2="${(width - pad.right).toFixed(1)}" y2="${y.toFixed(1)}"></line><text x="${pad.left - 6}" y="${(y + 3).toFixed(1)}" text-anchor="end">${numberText(value, max >= 10 ? 0 : 1)}</text>`;
   }).join('');
   const labels = dates.map((day, index) => {
-    if (count > 6 && index !== 0 && index !== count - 1 && index !== Math.floor((count - 1) / 2)) return '';
-    return `<text x="${xAt(index).toFixed(1)}" y="${height - 6}" text-anchor="middle">${esc(fmtDate(day).slice(0, 5))}</text>`;
+    if (count > 8 && index !== 0 && index !== count - 1 && index !== Math.floor((count - 1) / 2)) return '';
+    return `<text x="${xAt(index).toFixed(1)}" y="${height - 8}" text-anchor="middle">${esc(fmtDate(day).slice(0, 5))}</text>`;
   }).join('');
   const shapes = rows.map((row, seriesIndex) => {
     const color = palette[seriesIndex % palette.length];
@@ -618,27 +625,36 @@ function areaChart(series, unit = 'h', options = {}) {
     const dots = coords.map((coord, index) => {
       if (coord[1] == null) return '';
       const point = row.points[index];
+      if (point.hours == null || point.hours === '') return '';
       const hours = Number(point.hours) || 0;
-      if (!hours) return '';
       const hot = point.high === true;
       const stroke = hot ? '#fa3038' : color;
       const title = point.status
-        ? `${esc(t(row.name))} · ${esc(fmtDate(point.date))}: ${esc(t(point.status))}`
-        : `${esc(t(row.name))} · ${esc(fmtDate(point.date))}: ${numberText(hours, 1)} ${esc(unit)}`;
-      return `<circle cx="${coord[0].toFixed(1)}" cy="${coord[1].toFixed(1)}" r="3.2" fill="${hot ? '#fa3038' : '#fff'}" stroke="${stroke}"><title>${title}</title></circle>`;
+        ? `${esc(row.name)} · ${esc(fmtDate(point.date))}: ${esc(t(point.status))}`
+        : `${esc(row.name)} · ${esc(fmtDate(point.date))}: ${numberText(hours, 1)} ${esc(unit)}`;
+      return `<circle cx="${coord[0].toFixed(1)}" cy="${coord[1].toFixed(1)}" r="${large ? 4 : 3.2}" fill="${hot ? '#fa3038' : '#fff'}" stroke="${stroke}"><title>${title}</title></circle>`;
     }).join('');
+    let endLabel = '';
+    if (namesOnChart) {
+      let last = null;
+      coords.forEach((coord) => { if (coord[1] != null) last = coord; });
+      if (last) {
+        endLabel = `<text class="area-name" x="${(last[0] + 8).toFixed(1)}" y="${(last[1] + 4).toFixed(1)}" fill="${color}">${esc(shortName(row.name))}</text>`;
+      }
+    }
     const fill = area ? `<path class="area-fill" d="${area}" style="fill:url(#${chartId}${seriesIndex})"></path>` : '';
-    return `${fill}<path class="area-line" d="${line}" style="stroke:${color}"></path>${dots}`;
+    return `${fill}<path class="area-line" d="${line}" style="stroke:${color}"></path>${dots}${endLabel}`;
   }).join('');
   const gradients = rows.map((row, seriesIndex) => {
     const color = palette[seriesIndex % palette.length];
     return `<linearGradient id="${chartId}${seriesIndex}" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="${color}" stop-opacity="0.34"></stop><stop offset="100%" stop-color="${color}" stop-opacity="0.03"></stop></linearGradient>`;
   }).join('');
-  const legend = rows.map((row, seriesIndex) => `<li><i style="background:${palette[seriesIndex % palette.length]}"></i><span>${esc(t(row.name))}</span></li>`).join('');
+  const legend = rows.map((row, seriesIndex) => `<li><i style="background:${palette[seriesIndex % palette.length]}"></i><span>${esc(row.name)}</span></li>`).join('');
   const limitLine = hasLimit
-    ? `<line x1="${pad.left}" y1="${yAt(limit).toFixed(1)}" x2="${width - pad.right}" y2="${yAt(limit).toFixed(1)}" stroke="#fa3038" stroke-width="1.4" stroke-dasharray="4 3"><title>${esc(t('Allowed temperature (°C)'))}: ${numberText(limit, 1)}</title></line>`
+    ? `<line x1="${pad.left}" y1="${yAt(limit).toFixed(1)}" x2="${(width - pad.right).toFixed(1)}" y2="${yAt(limit).toFixed(1)}" stroke="#fa3038" stroke-width="1.4" stroke-dasharray="4 3"><title>${esc(t('Allowed temperature (°C)'))}: ${numberText(limit, 1)}</title></line>`
     : '';
-  return `<svg class="area-chart" viewBox="0 0 ${width} ${height}" role="img" aria-label="${esc(settings.label || 'Downtime trend')}"><defs>${gradients}</defs><g class="area-grid">${grid}</g>${limitLine}${shapes}${labels}</svg><ul class="area-legend">${legend}</ul>`;
+  const sizeClass = large ? ' area-chart-large' : '';
+  return `<svg class="area-chart${sizeClass}" viewBox="0 0 ${width} ${height}" role="img" aria-label="${esc(settings.label || 'Downtime trend')}"><defs>${gradients}</defs><g class="area-grid">${grid}</g>${limitLine}${shapes}${labels}</svg><ul class="area-legend">${legend}</ul>`;
 }
 
 function donut(parts, total, digits = 1) {
@@ -827,7 +843,7 @@ async function drawDashboard() {
     <section class="panel chart-panel"><h2>${esc(t('Work orders by type'))}</h2><p class="kpi-note">${esc(t('Total'))} ${numberText(orderTotal, 0)} ${esc(t('work orders in this period.'))}</p>${orderTotal ? donut(orderParts, orderTotal, 0) : `<p class="chart-empty">${esc(t('No work orders in this period'))}</p>`}</section>
     </div>
     <section class="panel chart-panel chart-wide"><h2>${esc(t('Downtime trend'))}</h2><p class="kpi-note">${esc(t(kpi.trend_by === 'line' ? 'Each line' : kpi.trend_by === 'equipment' ? 'Selected equipment' : 'Each plant'))} · ${esc(t('scheduled'))} ${kpiText(kpi.scheduled_downtime_h, 1)} · ${esc(t('unscheduled'))} ${kpiText(kpi.unscheduled_downtime_h, 1)}</p>${kpi.trend_series?.length ? areaChart(kpi.trend_series) : `<p class="chart-empty">${esc(t('No downtime in this period'))}</p>`}</section>
-    <section class="panel chart-panel chart-wide"><h2>${esc(t('Motor temperature'))}</h2><p class="kpi-note">${esc(t(ui.equipmentId ? 'Temperature of the selected equipment.' : 'Average of the recorded readings on each measurement day.'))}</p>${(kpi.motor?.temperature || []).some((row) => (row.points || []).some((point) => point.hours != null)) ? areaChart(kpi.motor.temperature, '°C') : `<p class="chart-empty">${esc(t('No motor readings in this period.'))}</p>`}</section>
+    <section class="panel chart-panel chart-wide chart-tall"><h2>${esc(t('Motor temperature'))}</h2><p class="kpi-note">${esc(t(ui.equipmentId ? 'Temperature of the selected equipment.' : 'Each equipment with its name on the chart.'))}</p>${(kpi.motor?.temperature || []).some((row) => (row.points || []).some((point) => point.hours != null)) ? areaChart(kpi.motor.temperature, '°C', { large: true, namesOnChart: true, label: t('Motor temperature') }) : `<p class="chart-empty">${esc(t('No motor readings in this period.'))}</p>`}</section>
     <section class="panel chart-panel chart-wide"><h2>${esc(t('Oil level'))}</h2><p class="kpi-note">${esc(t(motorScopeNote()))} · ${esc(t('Rank 1 is the best reading on that day.'))}</p>${bumpChart(kpi.motor?.oil_level, 'Oil level') || `<p class="chart-empty">${esc(t('No motor readings in this period.'))}</p>`}</section>
     <section class="panel chart-panel chart-wide"><h2>${esc(t('Oil condition'))}</h2><p class="kpi-note">${esc(t(motorScopeNote()))} · ${esc(t('Rank 1 is the best reading on that day.'))}</p>${bumpChart(kpi.motor?.oil_condition, 'Oil condition') || `<p class="chart-empty">${esc(t('No motor readings in this period.'))}</p>`}</section>
     <section class="panel chart-panel"><h2>${esc(t('Availability basis'))}</h2><div class="summary-row"><span>${esc(t('Uptime'))}</span><b>${kpiText(kpi.uptime_h, 1)} ${esc(t('h'))}</b></div><div class="summary-row"><span>${esc(t('Available time'))}</span><b>${kpiText(kpi.available_h, 1)} ${esc(t('h'))}</b></div><div class="summary-row"><span>${esc(t('Idle time'))}</span><b>${kpiText(kpi.idle_h, 1)} ${esc(t('h'))}</b></div><div class="summary-row"><span>${esc(t('Operating time'))}</span><b>${kpiText(kpi.operating_h, 1)} ${esc(t('h'))}</b></div><small class="kpi-note">${esc(t('Availability = uptime ÷ (available − idle). MTBF = operating time ÷ failures. MTTR = corrective hours ÷ corrective events.'))}</small></section>
@@ -1719,9 +1735,9 @@ function equipmentMotorHtml(data) {
   const form = canMaintain()
     ? `<form id="motor-limit" class="live-form"><label>${esc(t('Allowed temperature (°C)'))}<input name="temp_limit_c" type="number" min="1" max="400" step="0.1" value="${limit == null ? '' : esc(String(limit))}"></label><button class="detail-button primary" type="submit">${esc(t('Save'))}</button><p class="live-note">${esc(t('A reading above this value is high. Leave it empty to clear the limit.'))}</p><p id="motor-limit-error" class="form-error"></p></form>`
     : (limit == null ? '' : `<p class="motor-status">${esc(t('Allowed temperature (°C)'))}: ${esc(String(limit))}</p>`);
-  const temperature = areaChart(data.temperature || [], '°C', { limit, label: t('Temperature') });
-  const level = areaChart(data.oil_level || [], '', { label: t('Oil level') });
-  const condition = areaChart(data.oil_condition || [], '', { label: t('Oil condition') });
+  const temperature = areaChart(data.temperature || [], '°C', { limit, large: true, namesOnChart: true, label: t('Temperature') });
+  const level = areaChart(data.oil_level || [], '', { label: t('Oil level'), namesOnChart: true });
+  const condition = areaChart(data.oil_condition || [], '', { label: t('Oil condition'), namesOnChart: true });
   const charts = [
     motorChartBlock('Temperature', temperature, ''),
     motorChartBlock('Oil level', level, latest.oil_level || ''),
