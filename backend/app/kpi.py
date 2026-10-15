@@ -309,6 +309,7 @@ def compute_kpi(db: Session, plant_id=None, line_id=None, equipment_id=None, tec
             return item_plant, item_line
 
         grouped = {}
+        grouped_count = {}
         for row in accepted_items:
             if row.maintenance_type not in FAILURE_TYPES and row.maintenance_type != 'Preventive':
                 continue
@@ -323,7 +324,10 @@ def compute_kpi(db: Session, plant_id=None, line_id=None, equipment_id=None, tec
                 key = item_plant or 'unassigned'
             day_key = report_by_id[row.report_id].report_date.isoformat()
             bucket = grouped.setdefault(key, {})
-            bucket[day_key] = bucket.get(day_key, 0) + _report_hours(row)
+            hours = _report_hours(row)
+            bucket[day_key] = bucket.get(day_key, 0) + hours
+            if hours > 0:
+                grouped_count[key] = grouped_count.get(key, 0) + 1
 
         if line_id:
             chosen = line_by_id.get(line_id)
@@ -374,6 +378,27 @@ def compute_kpi(db: Session, plant_id=None, line_id=None, equipment_id=None, tec
                 points.append({'date': day, 'hours': value})
             trend_series.append({'id': key, 'name': label, 'points': points})
         trend = [{'date': day, 'hours': round(total_by_day[day], 2)} for day in dates]
+
+        # Pareto: categories sorted by downtime frequency, with cumulative share.
+        pareto = []
+        for key, label in catalog:
+            hours = round(sum(grouped.get(key, {}).values()), 2)
+            count = int(grouped_count.get(key, 0))
+            if count <= 0 and hours <= 0:
+                continue
+            pareto.append({
+                'id': key,
+                'name': label,
+                'count': count,
+                'hours': hours,
+            })
+        pareto.sort(key=lambda row: (-row['count'], -row['hours'], str(row['name']).lower()))
+        pareto = pareto[:12]
+        total_count = sum(row['count'] for row in pareto) or 1
+        running = 0
+        for row in pareto:
+            running += row['count']
+            row['cumulative_pct'] = round(100 * running / total_count, 1)
 
         return {
             'availability': _pct(max(uptime, 0), available - idle) if available else None,
@@ -427,6 +452,7 @@ def compute_kpi(db: Session, plant_id=None, line_id=None, equipment_id=None, tec
             'trend': trend[-12:],
             'trend_by': trend_by,
             'trend_series': trend_series,
+            'pareto': pareto,
         }
 
     current = pack(start, end)
