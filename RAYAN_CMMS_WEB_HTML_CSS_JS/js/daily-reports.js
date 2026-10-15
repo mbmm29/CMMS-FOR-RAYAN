@@ -53,13 +53,18 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   async function loadReports() {
     body.innerHTML = `<tr><td colspan="11" class="loading-cell">${t('Loading reports from the CMMS...')}</td></tr>`;
-    const [summaries, forms, lubrication] = await Promise.all([
+    const [summaries, forms, lubrication, plants, lines] = await Promise.all([
       apiRequest('/daily-reports'),
       apiRequest('/form-numbers').catch(() => ({})),
       apiRequest('/lubrication-reports').catch(() => []),
+      apiRequest('/plants').catch(() => []),
+      apiRequest('/lines').catch(() => []),
     ]);
     state.formNo = forms.daily || 'DR';
     state.lubeFormNo = forms.lubrication || 'PMF 17-05 rev.a';
+    state.plants = plants || [];
+    state.lines = lines || [];
+    const plantName = (id) => (state.plants.find((plant) => plant.plant_id === id)?.name || id || '');
     state.lubeReports = (lubrication || []).filter(row => (row.status || 'Approved') === 'Approved').map(row => ({
       id: row.report_id,
       kind: 'lubrication',
@@ -82,7 +87,9 @@ document.addEventListener('DOMContentLoaded', async () => {
       const items = detail.items || [];
       const first = items[0] || {};
       const workOrders = [...new Set(items.map(item => item.wo_id).filter(Boolean))];
-      const plantLine = [...new Set(items.map(item => [item.plant_id, item.line_id].filter(Boolean).join(' / ')).filter(Boolean))].join(', ') || '-';
+      const plantLine = [...new Set(items.map((item) => plantName(item.plant_id)).filter(Boolean))].join(' · ')
+        || plantName(report.plant_id)
+        || '-';
       return {
         id: report.report_id,
         date: report.report_date,
@@ -251,9 +258,10 @@ document.addEventListener('DOMContentLoaded', async () => {
     state.selected = report;
     const items = (report.items || []).slice();
     while (items.length < 10) items.push({});
+    const plantName = (id) => (state.plants || []).find((plant) => plant.plant_id === id)?.name || id || '';
     const activityRows = items.map((item, index) => `<tr>
       <td class="lube-no">${index + 1}</td>
-      <td class="lube-machine"><input value="${escapeHtml(item.equipment_code || item.equipment_id || '')}" readonly><input value="${escapeHtml(item.equipment_name || '')}" readonly><input value="${escapeHtml(lineNameOf(item, report.plantId) || item.entered_line_number || '')}" readonly></td>
+      <td class="lube-machine"><input value="${escapeHtml(item.equipment_code || item.equipment_id || '')}" readonly><input value="${escapeHtml(item.equipment_name || '')}" readonly><input value="${escapeHtml(plantName(item.plant_id) || '')}" readonly><input value="${escapeHtml(lineNameOf(item, report.plantId) || item.entered_line_number || '')}" readonly></td>
       <td><input value="${escapeHtml(t(item.maintenance_type || ''))}" readonly>${item.wo_id ? `<small class="lube-order">${escapeHtml(item.wo_id)}</small>` : ''}</td>
       <td class="daily-work"><input value="${escapeHtml(item.failure_reason || '')}" readonly><input value="${escapeHtml(item.action_taken || '')}" readonly></td>
       <td><input value="${escapeHtml(reviewValue(item.maintenance_start))}" readonly></td>
@@ -279,7 +287,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         <div class="lube-meta">
           <label><span>${escapeHtml(t('Shift'))}</span><input value="${escapeHtml(t(report.shift || ''))}" readonly></label>
           <label><span>${escapeHtml(t("Technician's name"))}</span><input value="${escapeHtml(report.technician)}" readonly></label>
-          <label><span>${escapeHtml(t('Plant'))}</span><input value="${escapeHtml(report.plantLine && report.plantLine !== '-' ? report.plantLine : (report.plantId || ''))}" readonly></label>
+          <label><span>${escapeHtml(t('Plants'))}</span><input value="${escapeHtml(report.plantLine && report.plantLine !== '-' ? report.plantLine : (report.plantId || ''))}" readonly></label>
           <label><span>${escapeHtml(t('Date'))}</span><input value="${escapeHtml(formatDate(report.date))}" readonly></label>
         </div>
         <table class="lube-table"><thead><tr><th>${escapeHtml(t('Seq.'))}</th><th>${escapeHtml(t('Machine'))}</th><th>${escapeHtml(t('Maintenance Type'))}</th><th>${escapeHtml(t('Repair Actions'))}</th><th>${escapeHtml(t('Start Time'))}</th><th>${escapeHtml(t('End Time'))}</th><th>${escapeHtml(t('Downtime (hrs)'))}</th></tr></thead><tbody>${activityRows}</tbody></table>

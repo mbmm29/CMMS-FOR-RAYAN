@@ -119,8 +119,11 @@ function bindEquipmentCode(codeInput, nameInput) {
       showDailyLineName(row);
       fillLubePlace(row, found.plant_id || '', found.line_id || '');
     }
-    const plant = document.getElementById('daily-plant');
-    if (plant && !plant.value && found.plant_id) plant.value = found.plant_id;
+    if (found.plant_id) {
+      ensureDailyPlantChecked(found.plant_id);
+      const rowPlant = row?.querySelector('[data-field="plant"]');
+      if (rowPlant) rowPlant.value = found.plant_id;
+    }
     return true;
   };
   const run = async () => {
@@ -3490,17 +3493,96 @@ function refreshDailyTotal() {
   if (node) node.textContent = total.toFixed(2);
 }
 
-function dailyPlantLines() {
-  const plantId = document.getElementById('daily-plant')?.value || '';
-  if (!plantId || !store?.lines) return [];
-  return store.lines.filter((line) => line.plant_id === plantId);
+function dailySelectedPlantIds() {
+  return [...document.querySelectorAll('#daily-plant-panel input[type="checkbox"]:checked')].map((box) => box.value);
+}
+
+function dailyPlantSummary(ids = dailySelectedPlantIds()) {
+  if (!ids.length) return t('Select plant');
+  if (ids.length === 1) return openPlants().find((plant) => plant.plant_id === ids[0])?.name || ids[0];
+  const names = ids.map((id) => openPlants().find((plant) => plant.plant_id === id)?.name || id);
+  if (names.length <= 2) return names.join(' · ');
+  return `${ids.length} ${t('plants selected')}`;
+}
+
+function dailyPlantMenuHtml(selectedIds = []) {
+  const chosen = [...new Set((selectedIds || []).filter(Boolean))];
+  return `<div class="plant-menu daily-plant-menu" id="daily-plant-menu">
+    <button type="button" class="plant-menu-toggle" id="daily-plant-toggle" aria-expanded="false" aria-haspopup="listbox">
+      <span class="plant-menu-summary" id="daily-plant-summary">${esc(dailyPlantSummary(chosen))}</span>
+      <span class="plant-menu-caret" aria-hidden="true">▾</span>
+    </button>
+    <div class="plant-menu-panel" id="daily-plant-panel" hidden role="listbox" aria-label="${esc(t('Plants'))}">
+      ${openPlants().map((plant) => `<label class="plant-menu-item"><input type="checkbox" value="${esc(plant.plant_id)}"${chosen.includes(plant.plant_id) ? ' checked' : ''}><span>${esc(plant.name)}</span></label>`).join('') || `<p class="plant-menu-empty">${esc(t('No plants'))}</p>`}
+    </div>
+  </div>`;
+}
+
+function refreshDailyPlantSummary() {
+  const summary = document.getElementById('daily-plant-summary');
+  if (summary) summary.textContent = dailyPlantSummary();
+}
+
+function ensureDailyPlantChecked(plantId) {
+  if (!plantId) return;
+  const box = [...document.querySelectorAll('#daily-plant-panel input[type="checkbox"]')].find((item) => item.value === plantId);
+  if (box && !box.checked) {
+    box.checked = true;
+    refreshDailyPlantSummary();
+  }
+}
+
+function setDailyPlantMenuOpen(open) {
+  const toggle = document.getElementById('daily-plant-toggle');
+  const panel = document.getElementById('daily-plant-panel');
+  if (!toggle || !panel) return;
+  panel.hidden = !open;
+  toggle.setAttribute('aria-expanded', open ? 'true' : 'false');
+  toggle.classList.toggle('open', Boolean(open));
+}
+
+function bindDailyPlantMenu() {
+  const toggle = document.getElementById('daily-plant-toggle');
+  const panel = document.getElementById('daily-plant-panel');
+  if (!toggle || !panel) return;
+  toggle.addEventListener('click', (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+    setDailyPlantMenuOpen(panel.hidden);
+  });
+  panel.addEventListener('click', (event) => event.stopPropagation());
+  panel.querySelectorAll('input[type="checkbox"]').forEach((box) => {
+    box.addEventListener('change', () => {
+      refreshDailyPlantSummary();
+      document.querySelectorAll('#daily-rows tr').forEach((row) => {
+        const plant = row.querySelector('[data-field="plant"]');
+        const selected = dailySelectedPlantIds();
+        if (plant && !plant.value && selected.length === 1) plant.value = selected[0];
+        showDailyLineName(row);
+      });
+    });
+  });
+  if (!ui._dailyPlantMenuDocBound) {
+    ui._dailyPlantMenuDocBound = true;
+    document.addEventListener('click', (event) => {
+      if (event.target.closest?.('#daily-plant-menu')) return;
+      setDailyPlantMenuOpen(false);
+    });
+  }
+}
+
+function dailyPlantLines(plantId = '') {
+  const ids = plantId ? [plantId] : dailySelectedPlantIds();
+  if (!ids.length || !store?.lines) return [];
+  return store.lines.filter((line) => ids.includes(line.plant_id));
 }
 
 function applyDailyLine(row, number) {
   const input = row.querySelector('[data-field="line"]');
   if (!input) return;
   const value = String(number ?? '').trim();
-  const lines = dailyPlantLines();
+  const plantId = row.querySelector('[data-field="plant"]')?.value || '';
+  const lines = dailyPlantLines(plantId);
   const exact = lines.filter((line) => String(line.line_number) === value);
   const longer = lines.some((line) => {
     const text = String(line.line_number);
@@ -3512,6 +3594,11 @@ function applyDailyLine(row, number) {
   if (named) {
     input.value = named.name;
     input.dataset.resolved = '1';
+    if (!plantId && named.plant_id) {
+      const plant = row.querySelector('[data-field="plant"]');
+      if (plant) plant.value = named.plant_id;
+      ensureDailyPlantChecked(named.plant_id);
+    }
     return;
   }
   input.dataset.resolved = '';
@@ -3525,35 +3612,39 @@ function showDailyLineName(row) {
   applyDailyLine(row, number);
 }
 
-function dailyRow(item = {}, index = 0) {
+function dailyRow(item = {}, index = 0, selectedPlants = null) {
   const options = [`<option value="">${esc(t('Select'))}</option>`, ...DAILY_TYPES.map((type) => `<option value="${esc(type)}"${item.maintenance_type === type ? ' selected' : ''}>${esc(t(type))}</option>`)];
   const order = item.wo_id ? `<small class="lube-order">${esc(item.wo_id)}</small>` : '';
-  const plantId = document.getElementById('daily-plant')?.value || item.plant_id || '';
+  const selected = selectedPlants || dailySelectedPlantIds();
+  const plantId = item.plant_id || (selected.length === 1 ? selected[0] : '') || '';
   const line = store.lines.find((row) => row.line_id === item.line_id)
     || store.lines.find((row) => String(row.line_number) === String(item.entered_line_number || '') && (!plantId || row.plant_id === plantId));
   const lineNumber = item.entered_line_number || (line?.line_number ?? '');
   const lineLabel = line?.name || lineNumber;
   const start = item.maintenance_start ? String(item.maintenance_start).slice(0, 5) : '';
   const end = item.maintenance_end ? String(item.maintenance_end).slice(0, 5) : '';
-  return `<tr data-wo="${esc(item.wo_id || '')}" data-line-number="${esc(lineNumber)}" data-line-id="${esc(line?.line_id || '')}"><td class="lube-no">${index + 1}</td><td class="lube-machine"><input data-field="code" placeholder="${esc(t('Equipment number'))}" value="${esc(item.equipment_code || item.equipment_id || '')}"><input data-field="name" placeholder="${esc(t('Equipment name'))}" value="${esc(item.equipment_name || '')}"><input data-field="line" data-resolved="${line?.name ? '1' : ''}" placeholder="${esc(t('Line'))}" value="${esc(lineLabel)}"></td><td class="lube-type"><select data-field="type">${options.join('')}</select>${order}</td><td class="daily-work"><input data-field="failure" placeholder="${esc(t('Failure Reason'))}" value="${esc(item.failure_reason || '')}"><input data-field="action" placeholder="${esc(t('Repair Actions'))}" value="${esc(item.action_taken || '')}"></td><td><input data-field="start" type="time" value="${esc(start)}"></td><td><input data-field="end" type="time" value="${esc(end)}"></td><td><input data-field="downtime" value="${item.downtime_h != null && item.downtime_h !== '' ? Number(item.downtime_h).toFixed(2) : ''}" readonly></td></tr>`;
+  const plants = `<select data-field="plant"><option value="">${esc(t('Select plant'))}</option>${openPlants(plantId || line?.plant_id).map((plant) => `<option value="${esc(plant.plant_id)}"${plant.plant_id === (plantId || line?.plant_id || '') ? ' selected' : ''}>${esc(plant.name)}</option>`).join('')}</select>`;
+  return `<tr data-wo="${esc(item.wo_id || '')}" data-line-number="${esc(lineNumber)}" data-line-id="${esc(line?.line_id || '')}"><td class="lube-no">${index + 1}</td><td class="lube-machine"><input data-field="code" placeholder="${esc(t('Equipment number'))}" value="${esc(item.equipment_code || item.equipment_id || '')}"><input data-field="name" placeholder="${esc(t('Equipment name'))}" value="${esc(item.equipment_name || '')}">${plants}<input data-field="line" data-resolved="${line?.name ? '1' : ''}" placeholder="${esc(t('Line'))}" value="${esc(lineLabel)}"></td><td class="lube-type"><select data-field="type">${options.join('')}</select>${order}</td><td class="daily-work"><input data-field="failure" placeholder="${esc(t('Failure Reason'))}" value="${esc(item.failure_reason || '')}"><input data-field="action" placeholder="${esc(t('Repair Actions'))}" value="${esc(item.action_taken || '')}"></td><td><input data-field="start" type="time" value="${esc(start)}"></td><td><input data-field="end" type="time" value="${esc(end)}"></td><td><input data-field="downtime" value="${item.downtime_h != null && item.downtime_h !== '' ? Number(item.downtime_h).toFixed(2) : ''}" readonly></td></tr>`;
 }
 
 function dailyItemsFromForm() {
-  const plantId = document.getElementById('daily-plant').value;
-  if (!plantId) throw new Error('Select a plant at the top of the report.');
+  const selected = dailySelectedPlantIds();
+  if (!selected.length) throw new Error('Select a plant at the top of the report.');
   const items = [];
   document.querySelectorAll('#daily-rows tr').forEach((row) => {
-    const get = (field) => row.querySelector(`[data-field="${field}"]`).value.trim();
+    const get = (field) => row.querySelector(`[data-field="${field}"]`)?.value.trim() || '';
     const code = get('code');
     const name = get('name');
-    const touched = [code, name, get('type'), get('failure'), get('action'), get('start'), get('end')].some(Boolean);
+    const touched = [code, name, get('type'), get('failure'), get('action'), get('start'), get('end'), get('plant')].some(Boolean);
     if (!touched) return;
     if (!code || !name || !get('type')) throw new Error('Each activity needs an equipment number, a name, and a maintenance type.');
+    const known = equipmentByCode(code);
+    const plantId = get('plant') || known?.plant_id || (selected.length === 1 ? selected[0] : '');
+    if (!plantId) throw new Error('Each activity needs a plant.');
     const start = get('start') || null;
     const end = get('end') || null;
     const lineNumber = row.dataset.lineNumber || get('line');
     const line = store.lines.find((item) => item.plant_id === plantId && String(item.line_number) === String(lineNumber));
-    const known = equipmentByCode(code);
     items.push({
       equipment_id: known ? known.equipment_id : code,
       equipment_code: code,
@@ -3588,14 +3679,17 @@ function fillKnownEquipmentRow(row) {
   if (!found) return;
   if (!code.value) code.value = found.equipment_id || '';
   if (!name.value) name.value = found.name || '';
+  if (found.plant_id) {
+    ensureDailyPlantChecked(found.plant_id);
+    const plant = row.querySelector('[data-field="plant"]');
+    if (plant) plant.value = found.plant_id;
+  }
   const lineNumber = equipmentLineNumber(found);
   if (line && lineNumber && !row.dataset.lineNumber && !line.value) {
     line.dataset.resolved = '';
     line.value = lineNumber;
   }
   showDailyLineName(row);
-  const plant = document.getElementById('daily-plant');
-  if (plant && !plant.value && found.plant_id) plant.value = found.plant_id;
 }
 
 function syncDailyOrder(row) {
@@ -3610,6 +3704,10 @@ function bindDailyRow(row) {
   const name = row.querySelector('[data-field="name"]');
   if (code && name) bindEquipmentCode(code, name);
   fillKnownEquipmentRow(row);
+  row.querySelector('[data-field="plant"]')?.addEventListener('change', (event) => {
+    ensureDailyPlantChecked(event.target.value);
+    showDailyLineName(row);
+  });
   const lineInput = row.querySelector('[data-field="line"]');
   lineInput?.addEventListener('beforeinput', (event) => {
     if (lineInput.dataset.resolved !== '1' || !row.dataset.lineNumber) return;
@@ -3818,12 +3916,14 @@ async function saveDailyReport(submit) {
     return;
   }
   try {
+    const selectedPlants = dailySelectedPlantIds();
+    const items = dailyItemsFromForm();
     const payload = {
       report_date: form.querySelector('#daily-date').value,
-      plant_id: form.querySelector('#daily-plant').value || null,
+      plant_id: selectedPlants.length === 1 ? selectedPlants[0] : (items.find((item) => item.plant_id)?.plant_id || null),
       shift: form.querySelector('#daily-shift').value,
       general_notes: form.querySelector('#daily-notes').value.trim() || null,
-      items: dailyItemsFromForm(),
+      items,
     };
     if (!payload.report_date) throw new Error('Report date is required.');
     const response = reportId
@@ -3899,8 +3999,11 @@ async function drawDailyReport() {
     if (!sendButton.hidden) sendButton.textContent = t('Send report');
   }
   const reportDate = String(report?.report_date || openReportDate(dailyCache)).slice(0, 10);
-  const plantId = report?.plant_id || items.find((item) => item.plant_id)?.plant_id || '';
-  const plants = [`<option value="">${esc(t('Select plant'))}</option>`, ...openPlants(plantId).map((plant) => `<option value="${esc(plant.plant_id)}"${plant.plant_id === plantId ? ' selected' : ''}>${esc(plant.name)}</option>`)].join('');
+  const plantIds = [...new Set([
+    report?.plant_id,
+    ...items.map((item) => item.plant_id),
+  ].filter(Boolean))];
+  const plantMenu = dailyPlantMenuHtml(plantIds);
   const techName = report?.technician_name || getSavedUser()?.full_name || '';
   const visibleReports = () => (ui.dailyFilter
     ? dailyCache.filter((row) => String(row.report_date).slice(0, 10) === ui.dailyFilter)
@@ -3908,19 +4011,20 @@ async function drawDailyReport() {
   const list = dailyListHtml(visibleReports(), report?.report_id || '', techName);
   const workspace = document.getElementById('workspace');
   workspace.className = 'workspace lube-board';
-  workspace.innerHTML = `<aside class="panel lube-list"><div class="lube-list-head"><b>${esc(t('Reports'))}</b><button type="button" class="detail-button" id="daily-new">${esc(t('New report'))}</button></div><label class="daily-filter"><span>${esc(t('Date'))}</span><input id="daily-filter" type="date" value="${esc(ui.dailyFilter || '')}"></label>${rejectedFieldHtml(dailyCache, report?.report_id || '')}<div id="daily-report-list">${list}</div></aside><form id="daily-form" class="lube-paper daily-paper" data-report-id="${esc(report?.report_id || '')}" data-status="${esc(report?.status || 'Draft')}">${windowLock ? `<div class="send-watch no-print" id="send-watch"><span>${esc(t('Time left before the next report'))}</span><b id="send-watch-time">00:00:00</b></div>` : ''}<header class="lube-head"><img src="logo-rayan.png?v=3" alt="Rayan"><div><h2>${esc(t('DAILY MAINTENANCE REPORT'))}</h2><p>${esc(t(report?.status || 'Draft report'))}</p><small>${esc(t('Mechanical Maintenance Department'))}</small></div><dl><div><dt>${esc(t('Form No.:'))}</dt><dd class="form-no">${esc(formNo('daily'))}</dd></div><div><dt>${esc(t('Approved by'))}</dt><dd class="approved-name">${esc(report?.approved_by || '—')}</dd></div></dl></header><div class="lube-meta"><label><span>${esc(t('Shift'))}</span><select id="daily-shift">${LUBE_SHIFTS.map((shift) => `<option value="${esc(shift)}"${shift === (report?.shift || LUBE_SHIFTS[0]) ? ' selected' : ''}>${esc(t(shift))}</option>`).join('')}</select></label><label><span>${esc(t("Technician's name"))}</span><input id="daily-tech" value="${esc(techName)}" readonly></label><label><span>${esc(t('Plant'))}</span><select id="daily-plant">${plants}</select></label><label><span>${esc(t('Date'))}</span><input id="daily-date" type="date" value="${esc(reportDate)}" required></label></div><div class="sheet-scroll"><table class="lube-table"><thead><tr><th>${esc(t('Seq.'))}</th><th>${esc(t('Machine'))}</th><th>${esc(t('Maintenance Type'))}</th><th>${esc(t('Repair Actions'))}</th><th>${esc(t('Start Time'))}</th><th>${esc(t('End Time'))}</th><th>${esc(t('Downtime (hrs)'))}</th></tr></thead><tbody id="daily-rows">${items.map(dailyRow).join('')}</tbody></table></div><section class="daily-parts"><div class="lube-list-head"><h3>${esc(t('SPARE PARTS USED'))}</h3><button type="button" class="no-print" id="daily-add-part">${esc(t('Add part'))}</button></div><div class="sheet-scroll"><table class="lube-table"><thead><tr><th>${esc(t('No.'))}</th><th>${esc(t('Part'))}</th><th>${esc(t('Part No.'))}</th><th>${esc(t('Qty'))}</th></tr></thead><tbody id="daily-parts">${parts.map(dailyPartRow).join('')}</tbody></table></div></section><label class="daily-notes"><span>${esc(t('GENERAL NOTES'))}</span><div class="daily-note-box"><textarea id="daily-notes">${esc(report?.general_notes || '')}</textarea><b class="daily-tdt">TDT: <span id="daily-total">0.00</span></b></div></label><section class="daily-photos no-print"><div class="lube-list-head"><h3>${esc(t('Photos'))}</h3><button type="button" id="daily-add-photo">${esc(t('Add photo'))}</button></div><p class="photo-hint">${esc(t('Each photo prints on a full A3 page.'))}</p><div class="photo-strip" id="daily-photo-strip"></div><input id="daily-photo-file" type="file" accept="image/*" multiple hidden></section><p id="daily-error" class="form-error"></p><div class="lube-actions no-print"><button type="button" id="daily-add">${esc(t('Add row'))}</button>${returned && !windowLock ? `<button type="button" id="daily-resend">${esc(t('Resend the report'))}</button>` : ''}<button type="button" id="daily-print">${esc(t('Print'))}</button></div></form><div id="daily-photo-print"></div>`;
+  workspace.innerHTML = `<aside class="panel lube-list"><div class="lube-list-head"><b>${esc(t('Reports'))}</b><button type="button" class="detail-button" id="daily-new">${esc(t('New report'))}</button></div><label class="daily-filter"><span>${esc(t('Date'))}</span><input id="daily-filter" type="date" value="${esc(ui.dailyFilter || '')}"></label>${rejectedFieldHtml(dailyCache, report?.report_id || '')}<div id="daily-report-list">${list}</div></aside><form id="daily-form" class="lube-paper daily-paper" data-report-id="${esc(report?.report_id || '')}" data-status="${esc(report?.status || 'Draft')}">${windowLock ? `<div class="send-watch no-print" id="send-watch"><span>${esc(t('Time left before the next report'))}</span><b id="send-watch-time">00:00:00</b></div>` : ''}<header class="lube-head"><img src="logo-rayan.png?v=3" alt="Rayan"><div><h2>${esc(t('DAILY MAINTENANCE REPORT'))}</h2><p>${esc(t(report?.status || 'Draft report'))}</p><small>${esc(t('Mechanical Maintenance Department'))}</small></div><dl><div><dt>${esc(t('Form No.:'))}</dt><dd class="form-no">${esc(formNo('daily'))}</dd></div><div><dt>${esc(t('Approved by'))}</dt><dd class="approved-name">${esc(report?.approved_by || '—')}</dd></div></dl></header><div class="lube-meta"><label><span>${esc(t('Shift'))}</span><select id="daily-shift">${LUBE_SHIFTS.map((shift) => `<option value="${esc(shift)}"${shift === (report?.shift || LUBE_SHIFTS[0]) ? ' selected' : ''}>${esc(t(shift))}</option>`).join('')}</select></label><label><span>${esc(t("Technician's name"))}</span><input id="daily-tech" value="${esc(techName)}" readonly></label><label class="daily-plant-field"><span>${esc(t('Plants'))}</span>${plantMenu}</label><label><span>${esc(t('Date'))}</span><input id="daily-date" type="date" value="${esc(reportDate)}" required></label></div><div class="sheet-scroll"><table class="lube-table"><thead><tr><th>${esc(t('Seq.'))}</th><th>${esc(t('Machine'))}</th><th>${esc(t('Maintenance Type'))}</th><th>${esc(t('Repair Actions'))}</th><th>${esc(t('Start Time'))}</th><th>${esc(t('End Time'))}</th><th>${esc(t('Downtime (hrs)'))}</th></tr></thead><tbody id="daily-rows">${items.map((item, index) => dailyRow(item, index, plantIds)).join('')}</tbody></table></div><section class="daily-parts"><div class="lube-list-head"><h3>${esc(t('SPARE PARTS USED'))}</h3><button type="button" class="no-print" id="daily-add-part">${esc(t('Add part'))}</button></div><div class="sheet-scroll"><table class="lube-table"><thead><tr><th>${esc(t('No.'))}</th><th>${esc(t('Part'))}</th><th>${esc(t('Part No.'))}</th><th>${esc(t('Qty'))}</th></tr></thead><tbody id="daily-parts">${parts.map(dailyPartRow).join('')}</tbody></table></div></section><label class="daily-notes"><span>${esc(t('GENERAL NOTES'))}</span><div class="daily-note-box"><textarea id="daily-notes">${esc(report?.general_notes || '')}</textarea><b class="daily-tdt">TDT: <span id="daily-total">0.00</span></b></div></label><section class="daily-photos no-print"><div class="lube-list-head"><h3>${esc(t('Photos'))}</h3><button type="button" id="daily-add-photo">${esc(t('Add photo'))}</button></div><p class="photo-hint">${esc(t('Each photo prints on a full A3 page.'))}</p><div class="photo-strip" id="daily-photo-strip"></div><input id="daily-photo-file" type="file" accept="image/*" multiple hidden></section><p id="daily-error" class="form-error"></p><div class="lube-actions no-print"><button type="button" id="daily-add">${esc(t('Add row'))}</button>${returned && !windowLock ? `<button type="button" id="daily-resend">${esc(t('Resend the report'))}</button>` : ''}<button type="button" id="daily-print">${esc(t('Print'))}</button></div></form><div id="daily-photo-print"></div>`;
   workspace.insertAdjacentHTML('beforeend', spareDataLists());
   if (windowLock) startSendWatch(windowLock.opens);
   dailyPhotosEditable = !locked;
   startDailyPhotos(report?.report_id || '', detail?.photos || []);
-  if (locked) document.querySelectorAll('#daily-form input, #daily-form select, #daily-form textarea, #daily-add, #daily-add-part, #daily-add-photo').forEach((node) => { node.disabled = true; });
+  if (locked) document.querySelectorAll('#daily-form input, #daily-form select, #daily-form textarea, #daily-add, #daily-add-part, #daily-add-photo, #daily-plant-toggle').forEach((node) => { node.disabled = true; });
   if (returned) {
-    ['daily-shift', 'daily-plant', 'daily-date', 'daily-notes'].forEach((id) => {
+    ['daily-shift', 'daily-date', 'daily-notes'].forEach((id) => {
       const node = document.getElementById(id);
       if (node) node.disabled = true;
     });
-    document.querySelectorAll('#daily-parts input, #daily-add-part').forEach((node) => { node.disabled = true; });
+    document.querySelectorAll('#daily-plant-panel input, #daily-plant-toggle, #daily-parts input, #daily-add-part').forEach((node) => { node.disabled = true; });
   }
+  bindDailyPlantMenu();
   document.querySelectorAll('#daily-rows tr').forEach(bindDailyRow);
   document.getElementById('daily-rows')?.addEventListener('input', (event) => {
     const row = event.target.closest('tr');
@@ -3929,9 +4033,6 @@ async function drawDailyReport() {
     refreshDailyTotal();
   });
   refreshDailyTotal();
-  document.getElementById('daily-plant')?.addEventListener('change', () => {
-    document.querySelectorAll('#daily-rows tr').forEach(showDailyLineName);
-  });
   document.getElementById('daily-date')?.addEventListener('change', (event) => {
     const found = dailyCache.find((row) => String(row.report_date).slice(0, 10) === event.target.value && row.status === 'Draft');
     if (found && found.report_id !== document.getElementById('daily-form')?.dataset.reportId) {

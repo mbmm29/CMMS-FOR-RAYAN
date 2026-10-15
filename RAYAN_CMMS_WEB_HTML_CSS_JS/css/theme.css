@@ -264,6 +264,21 @@ body .lube-paper input,body .lube-paper select{width:100%;height:32px;border:0;b
 .lube-qty input{flex:1 1 auto;min-width:0}
 .lube-qty-unit{flex:0 0 auto;font-size:11px;font-weight:800;color:#102d60;white-space:nowrap}
 .lube-qty-unit:empty{display:none}
+body .daily-paper .daily-plant-field{align-items:start}
+body .daily-paper .daily-plant-menu{min-width:0;width:100%}
+body .daily-paper .plant-menu-toggle{
+  min-height:32px;padding:0 10px;border:0;border-bottom:1px solid #8eabda;border-radius:0;
+  background:#fff;color:#102d60;font:14px Arial,sans-serif
+}
+body .daily-paper .plant-menu-toggle.open,
+body .daily-paper .plant-menu-toggle:hover{border-color:#2a5287;background:#f7faff}
+body .daily-paper .plant-menu-panel{
+  border:1px solid #8eabda;border-radius:8px;background:#fff;box-shadow:0 10px 24px #102d6020;color:#102d60
+}
+body .daily-paper .plant-menu-item{color:#102d60}
+body .daily-paper .plant-menu-item:hover{background:#eef4ff}
+body .daily-paper .plant-menu-item input{accent-color:#2a5287}
+body .daily-paper .plant-menu-empty{color:#31517f}
 .lube-order{display:block;padding:2px 4px;color:#31517f;font-size:10px;font-weight:700}
 .lube-table .lube-no{text-align:center;font-weight:800;background:#f7faff}
 .lube-machine input,.lube-machine select{display:block;height:28px;width:100%;margin:0 0 2px}
