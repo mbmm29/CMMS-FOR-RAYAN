@@ -1354,7 +1354,7 @@ def register_plan_equipment(db, user, plant_id: str, code: str, name: str, maint
     found = db.query(Equipment).filter(func.lower(Equipment.equipment_id) == code.lower()).first()
     if found:
         return found.equipment_id, found.name, False
-    if maintenance_type != 'Preventive' or not name:
+    if maintenance_type not in ('Preventive', 'Motor condition') or not name:
         return code, name, False
     created = Equipment(
         equipment_id=code,
@@ -3256,6 +3256,7 @@ MAINT_TYPES = {
     "Inspection",
     "Lubrication",
     "Emergency",
+    "Motor condition",
 }
 
 def propose_unknown_equipment(db, report, item):
@@ -4781,7 +4782,11 @@ def motor_equipment_index(db):
 
 
 def motor_due_equipment(db, day):
-    """Preventive tasks for this day, limited to equipment that exists in the register."""
+    """Equipment due on the motor-condition sheet for this day.
+
+    Only annual-plan tasks marked as "Motor condition" fill the form — not every
+    Preventive row.
+    """
     by_code, details = motor_equipment_index(db)
     inactive_plants = {row.plant_id for row in db.query(Plant).all() if row.active is False}
     chosen = []
@@ -4797,7 +4802,8 @@ def motor_due_equipment(db, day):
 
     tasks = db.query(AnnualPMDayTask).filter(AnnualPMDayTask.work_date == day).all()
     for task in tasks:
-        if (task.maintenance_type or 'Preventive').strip().lower() != 'preventive':
+        kind = (task.maintenance_type or '').strip().lower()
+        if kind not in ('motor condition', 'حالة المحرك'):
             continue
         found = by_code.get((task.machine_code or '').strip().lower())
         if found:
@@ -4808,7 +4814,8 @@ def motor_due_equipment(db, day):
         PMPlan.equipment_id.isnot(None),
     ).all()
     for plan in plans:
-        if (plan.pm_type or 'Preventive').strip().lower() not in ('', 'preventive'):
+        kind = (plan.pm_type or '').strip().lower()
+        if kind not in ('motor condition', 'حالة المحرك'):
             continue
         found = by_code.get((plan.equipment_id or '').strip().lower())
         if found:

@@ -308,7 +308,7 @@ async function drawMotorCondition() {
     ['Recorded', String(recorded), '✓', 'green', ''],
     ['Reports', String(motorVisibleSheets().length), '▤', 'purple', ''],
   ])}${motorHighlights(highlights)}`;
-  const emptyNote = ready.length ? 'No equipment matches this filter.' : 'No equipment is scheduled from preventive maintenance for this day.';
+  const emptyNote = ready.length ? 'No equipment matches this filter.' : 'No equipment is scheduled as Motor condition for this day.';
   const rows = `${matched.length ? matched.map(motorTableRow).join('') : `<tr><td class="live-note" colspan="9">${esc(t(emptyNote))}</td></tr>`}${kept.map((row, index) => motorTableRow(row, index + 1000, 'motor-kept')).join('')}`;
   const openToday = motorUi.date === plantToday();
   const dayNote = openToday

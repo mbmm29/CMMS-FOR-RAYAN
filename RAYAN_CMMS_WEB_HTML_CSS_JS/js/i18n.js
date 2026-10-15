@@ -702,6 +702,7 @@ const CMMS_AR = {
   'This equipment is not in the system': 'هذه المعدة غير موجودة في النظام',
   'The sheet holds 120 equipment rows': 'تتسع الورقة لمئة وعشرين معدة',
   'No equipment is scheduled from preventive maintenance for this day.': 'لا توجد معدات مجدولة من الصيانة الوقائية في هذا اليوم.',
+  'No equipment is scheduled as Motor condition for this day.': 'لا توجد معدات مجدولة بنوع حالة المحرك في هذا اليوم.',
   'Motor temperature': 'حرارة المحرك',
   'Temperature of the selected equipment.': 'حرارة المعدة المحددة.',
   'Average of the recorded readings on each measurement day.': 'متوسط القراءات المسجّلة في كل يوم قياس.',
