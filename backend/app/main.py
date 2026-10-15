@@ -25,6 +25,7 @@ from .push_notices import (
     clear_work_order_push,
     public_key as push_public_key,
     queue_critical_stock_pushes,
+    queue_engineer_pushes,
     queue_work_order_pushes,
     save_subscription,
     send_test_push,
@@ -1008,15 +1009,37 @@ def watch_critical_stock(db, parts):
                 pending.append(part_id)
     return fresh
 
+def schedule_engineer_push(db, *, kind: str, ref: str, title: str, body: str, url: str):
+    """Queue a phone notice for engineers after this request commits."""
+    clean_kind = (kind or '').strip()[:40]
+    clean_ref = str(ref or '').strip()[:120]
+    if not clean_kind or not clean_ref:
+        return
+    pending = db.info.setdefault('engineer_push_events', [])
+    if any(item.get('kind') == clean_kind and item.get('ref') == clean_ref for item in pending):
+        return
+    pending.append({
+        'kind': clean_kind,
+        'ref': clean_ref,
+        'title': (title or 'RAYAN CMMS')[:120],
+        'body': (body or '')[:240],
+        'url': (url or '/index.html')[:200],
+    })
+
+
 @event.listens_for(Session, 'after_commit')
 def _send_critical_stock_pushes(session):
     part_ids = session.info.pop('critical_push_ids', None)
     if part_ids:
         queue_critical_stock_pushes(part_ids)
+    events = session.info.pop('engineer_push_events', None)
+    if events:
+        queue_engineer_pushes(events)
 
 @event.listens_for(Session, 'after_rollback')
 def _drop_critical_stock_pushes(session):
     session.info.pop('critical_push_ids', None)
+    session.info.pop('engineer_push_events', None)
 
 def _clean_part_equipment(db, equipment_ids):
     chosen = []
@@ -1404,6 +1427,14 @@ def register_plan_equipment(db, user, plant_id: str, code: str, name: str, maint
     audit(db, user, 'CREATE', 'Equipment', code, new={'name': name, 'plant_id': plant_id, 'source': 'Preventive plan'})
     for engineer in db.query(User).filter(User.role.in_(tuple(ENGINEER)), User.is_active == True).all():
         notify(db, engineer.id, 'معدات جديدة', f'{code} — {name} أُضيفت إلى النظام من خطة الصيانة الوقائية.', 'equipment', code)
+    schedule_engineer_push(
+        db,
+        kind='new_equipment',
+        ref=code,
+        title='معدة جديدة',
+        body=f'{code} — {name} أُضيفت من خطة الصيانة الوقائية.',
+        url='/index.html#equipment',
+    )
     return code, name, True
 
 def clean_annual_weeks(raw: str) -> str:
@@ -3327,6 +3358,14 @@ def propose_unknown_equipment(db, report, item):
     ))
     for engineer in db.query(User).filter(User.role.in_(list(ENGINEER)), User.is_active == True).all():
         notify(db, engineer.id, 'معدات جديدة', f'{code} — {name} was reported and is waiting for approval.', 'pending_equipment', code)
+    schedule_engineer_push(
+        db,
+        kind='pending_equipment',
+        ref=code,
+        title='معدة جديدة بانتظار الموافقة',
+        body=f'{code} — {name} وصلت من تقرير فني وتحتاج موافقتك.',
+        url='/index.html#equipment',
+    )
 
 def validate_report_item(db: Session, item: ReportItemCreate, technician_id: str | None = None):
     if item.maintenance_type not in MAINT_TYPES:
@@ -3972,6 +4011,14 @@ def submit_report(
             'daily_report',
             r.report_id,
         )
+    schedule_engineer_push(
+        db,
+        kind='daily_report',
+        ref=r.report_id,
+        title='تقرير يومي جديد',
+        body=f'{r.report_id} وصل ويحتاج مراجعة المهندس.',
+        url='/index.html#daily-reports',
+    )
 
     audit(db, u, 'SUBMIT', 'DailyReport', report_id)
     db.commit()
@@ -4505,6 +4552,14 @@ def propose_lubrication_equipment(db, report, technician_id, code, name):
             'pending_equipment',
             code,
         )
+    schedule_engineer_push(
+        db,
+        kind='pending_equipment',
+        ref=code,
+        title='معدة جديدة بانتظار الموافقة',
+        body=f'{code} — {name} وصلت من تقرير الزيوت والشحوم وتحتاج موافقتك.',
+        url='/index.html#equipment',
+    )
     return True
 
 
@@ -4820,6 +4875,14 @@ def save_lubrication_report(data: LubricationSave, db: Session = Depends(get_db)
                 'lubrication_report',
                 row.report_id,
             )
+        schedule_engineer_push(
+            db,
+            kind='lubrication_report',
+            ref=row.report_id,
+            title='تقرير زيوت وشحوم جديد',
+            body=f'{row.report_id} وصل من فني التزييت.',
+            url='/index.html#lubrication',
+        )
     audit(db, u, 'CREATE' if created else 'UPDATE', 'LubricationReport', row.report_id, new={
         'date': str(data.report_date),
         'technician_id': technician_id,

@@ -208,11 +208,54 @@ def _amount(value):
     return f'{round(float(value), 3):.3f}'.rstrip('0').rstrip('.') or '0'
 
 
+def _active_engineers(db: Session):
+    return db.query(User).filter(
+        User.role.in_(('MAINTENANCE_ENGINEER', 'SYSTEM_DEVELOPER')),
+        User.is_active == True,
+    ).all()
+
+
 def queue_critical_stock_pushes(part_ids):
     ids = [item for item in (part_ids or []) if item]
     if not ids:
         return
     threading.Thread(target=_push_critical_stock, args=(ids,), daemon=True).start()
+
+
+def queue_engineer_pushes(events):
+    """Phone alerts for maintenance engineers after the DB commit finishes."""
+    items = [dict(item) for item in (events or []) if item and item.get('title') and item.get('ref')]
+    if not items:
+        return
+    threading.Thread(target=_push_engineers, args=(items,), daemon=True).start()
+
+
+def _push_engineers(events):
+    db = SessionLocal()
+    try:
+        engineers = _active_engineers(db)
+        if not engineers:
+            return
+        private_key, _public = vapid_material(db)
+        for event in events:
+            kind = (event.get('kind') or 'engineer').strip()[:40]
+            ref = str(event.get('ref') or '').strip()[:120]
+            title = str(event.get('title') or 'RAYAN CMMS')[:120]
+            body = str(event.get('body') or '')[:240]
+            url = str(event.get('url') or '/index.html')[:200]
+            if not kind or not ref:
+                continue
+            for engineer in engineers:
+                if not _remember(db, engineer.id, kind, ref):
+                    continue
+                if _send(db, engineer.id, title, body, url, private_key):
+                    db.commit()
+                else:
+                    db.rollback()
+    except Exception:
+        db.rollback()
+    finally:
+        db.close()
 
 
 def _push_critical_stock(part_ids):
@@ -366,6 +409,27 @@ def send_today_pm_notices():
             if not labels or not _remember(db, user_id, 'pm_today', ref):
                 continue
             if _send(db, user_id, 'صيانة وقائية اليوم', _pm_body(labels)[:240], '/index.html#pm-schedule', private_key):
+                db.commit()
+                sent += 1
+            else:
+                db.rollback()
+        # Also alert engineers that preventive tasks are due today.
+        all_labels = []
+        for labels in buckets.values():
+            for label in labels:
+                if label not in all_labels:
+                    all_labels.append(label)
+        for engineer in _active_engineers(db):
+            if not all_labels or not _remember(db, engineer.id, 'pm_today_engineer', ref):
+                continue
+            if _send(
+                db,
+                engineer.id,
+                'صيانة وقائية اليوم',
+                _pm_body(all_labels)[:240],
+                '/index.html#pm-schedule',
+                private_key,
+            ):
                 db.commit()
                 sent += 1
             else:
