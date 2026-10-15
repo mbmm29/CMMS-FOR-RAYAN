@@ -877,9 +877,18 @@ def create_equipment(data:EquipmentCreate,db:Session=Depends(get_db),u=Depends(a
 def update_equipment(equipment_id:str,data:EquipmentCreate,db:Session=Depends(get_db),u=Depends(role(*ENGINEER))):
     o=db.query(Equipment).filter_by(equipment_id=equipment_id).first()
     if not o: raise HTTPException(404,'Equipment not found')
+    if not data.plant_id or not data.line_id:
+        raise HTTPException(400, 'Select a plant and then a line number')
+    active_plant_or_404(db, data.plant_id)
+    if not db.query(PlantLine).filter_by(line_id=data.line_id, plant_id=data.plant_id).first():
+        raise HTTPException(400, 'The line number does not belong to the selected plant')
+    if data.criticality not in EQUIPMENT_CRITICALITY:
+        raise HTTPException(400, 'Choose the equipment importance')
+    if data.status not in EQUIPMENT_STATUSES:
+        raise HTTPException(400, 'Invalid equipment status')
     payload = data.model_dump()
-    line_id = payload.get('line_id') or o.line_id
-    section = section_for_line(db, line_id, payload.get('section_id'))
+    payload['equipment_id'] = equipment_id
+    section = section_for_line(db, data.line_id, payload.get('section_id'))
     payload['section_id'] = section.section_id if section else None
     old={k:getattr(o,k) for k in payload}
     for k,v in payload.items():

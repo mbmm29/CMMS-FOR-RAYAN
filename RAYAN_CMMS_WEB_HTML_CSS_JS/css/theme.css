@@ -771,6 +771,8 @@ body .spare-filter select,body .spare-form input,body .spare-form select{width:1
 .spare-links button,.spare-links .detail-button{width:auto;flex:0 0 auto;height:32px;margin:0;padding:0 10px}
 .stock-out{color:#ffb4b8;font-weight:800}
 .stock-critical{color:#ffd27a;font-weight:800}
+.equipment-actions{display:flex;flex-wrap:wrap;gap:8px;margin:12px 0;align-items:center}
+.equipment-actions .detail-button{min-width:96px}
 .equipment-parts{display:grid;gap:8px;margin:14px 0 4px;padding-top:12px;border-top:1px solid #23406e;min-width:0}
 .equipment-parts h3{margin:0;color:#f4f8ff;font-size:14px}
 .equipment-parts .live-note{margin:0;color:#9eb4d6}

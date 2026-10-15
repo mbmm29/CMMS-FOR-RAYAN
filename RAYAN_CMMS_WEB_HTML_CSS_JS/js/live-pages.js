@@ -1823,23 +1823,39 @@ function drawEquipment() {
     ['Critical Assets', String(all.filter(isCriticalAsset).length), '◈', 'red', ''],
   ]);
   const body = rows.map((item) => `<tr data-row="${esc(item.equipment_id)}" class="${selected && selected.equipment_id === item.equipment_id ? 'selected' : ''}">${cell(esc(item.equipment_id), true)}${cell(esc(item.name))}${cell(esc(item.equipment_type))}${cell(esc(placeOf(item)))}${cell(liveBadge(item.status))}${cell(liveBadge(item.condition || '—'))}${cell(liveBadge(criticalityLabel(item.criticality)))}</tr>`);
-  const detail = ui.mode === 'create' ? equipmentForm() : equipmentDetail(selected);
+  const detail = ui.mode === 'create'
+    ? equipmentForm()
+    : ui.mode === 'edit' && selected
+      ? equipmentForm(selected)
+      : equipmentDetail(selected);
   document.getElementById('workspace').className = 'workspace';
   document.getElementById('workspace').innerHTML = `<section class="panel">${filtersHtml()}${equipmentTabs()}${tableShell(['Equipment Code', 'Equipment Name', 'Category', 'Location (Plant / Line)', 'Status', 'Condition', 'Criticality'], body, shown(rows.length, all.length, 'equipment'))}</section>${detail}`;
-  if (selected && ui.mode !== 'create') {
+  if (selected && ui.mode === 'view') {
     document.querySelector('.detail')?.insertAdjacentHTML('beforeend', '<div id="equipment-motor" class="equipment-motor"></div>');
     loadEquipmentMotor(selected);
   }
-  if (selected && canMaintain() && ui.mode !== 'create') {
+  if (selected && canMaintain() && ui.mode === 'view') {
     document.querySelector('.detail')?.insertAdjacentHTML('beforeend', '<div id="equipment-parts" class="equipment-parts"></div>');
     loadEquipmentParts(selected);
     const sectionForm = lineSections(selected.line_id).length ? `<form id="equipment-section" class="live-form"><label>${esc(t('Section'))}<select name="section_id">${sectionOptions(selected.line_id, selected.section_id || '')}</select></label><button class="detail-button primary" type="submit">${esc(t('Save'))}</button><p id="equipment-section-error" class="form-error"></p></form>` : `<p class="live-note">${esc(t('No sections on this line yet.'))}</p>`;
-    document.querySelector('.detail')?.insertAdjacentHTML('beforeend', `${sectionForm}<button type="button" class="detail-button danger" data-delete="/equipment" data-delete-id="${esc(selected.equipment_id)}" data-delete-note="Delete this equipment? Its maintenance history and KPI charts will be removed.">${esc(t('Delete'))}</button>`);
+    document.querySelector('.detail')?.insertAdjacentHTML(
+      'beforeend',
+      `<div class="equipment-actions"><button type="button" class="detail-button primary" id="equipment-edit">${esc(t('Edit'))}</button><button type="button" class="detail-button danger" data-delete="/equipment" data-delete-id="${esc(selected.equipment_id)}" data-delete-note="Delete this equipment? Its maintenance history and KPI charts will be removed.">${esc(t('Delete'))}</button></div>${sectionForm}`,
+    );
   }
   bindFilters();
   bindRows();
-  bindForm();
+  bindForm(selected);
   bindDeletes();
+  document.getElementById('equipment-edit')?.addEventListener('click', () => {
+    ui.mode = 'edit';
+    ui.rowKey = selected.equipment_id;
+    draw('equipment');
+  });
+  document.getElementById('equipment-cancel')?.addEventListener('click', () => {
+    ui.mode = 'view';
+    draw('equipment');
+  });
   document.getElementById('equipment-section')?.addEventListener('submit', async (event) => {
     event.preventDefault();
     const error = document.getElementById('equipment-section-error');
@@ -2467,50 +2483,66 @@ function equipmentChoice(values, selected = '') {
   return values.map((type) => `<option value="${esc(type)}"${type === selected ? ' selected' : ''}>${esc(t(type))}</option>`).join('');
 }
 
-function equipmentForm() {
-  const plants = openPlants().map((plant) => `<option value="${esc(plant.plant_id)}">${esc(plant.name)}</option>`).join('');
-  return formPanel('Add Equipment', [
-    field('Equipment code', '<input name="equipment_id" required>'),
-    field('Name', '<input name="name" required>'),
-    field('Category', '<input name="equipment_type" required>'),
+function equipmentForm(item) {
+  const editing = Boolean(item?.equipment_id);
+  const val = (name, fallback = '') => {
+    const raw = item?.[name];
+    return raw == null || raw === '' ? fallback : String(raw);
+  };
+  const statuses = ['Running', 'Under Maintenance', 'Out of Service'];
+  if (item?.status && !statuses.includes(item.status)) statuses.unshift(item.status);
+  const plants = openPlants().map((plant) => `<option value="${esc(plant.plant_id)}"${plant.plant_id === item?.plant_id ? ' selected' : ''}>${esc(plant.name)}</option>`).join('');
+  const codeField = editing
+    ? `<input name="equipment_id" value="${esc(item.equipment_id)}" readonly>`
+    : '<input name="equipment_id" required>';
+  const panel = formPanel(editing ? 'Edit equipment' : 'Add Equipment', [
+    field('Equipment code', codeField),
+    field('Name', `<input name="name" value="${esc(val('name'))}" required>`),
+    field('Category', `<input name="equipment_type" value="${esc(val('equipment_type'))}" required>`),
     field('Plant', selectField('plant_id', plants, true)),
     field('Line number', '<select name="line_id" required><option value=""></option></select>'),
     field('Section', '<select name="section_id"><option value=""></option></select>'),
-    field('Criticality', selectField('criticality', equipmentChoice(CRITICALITY_LEVELS))),
-    field('Area', '<input name="area">'),
-    field('Manufacturer', '<input name="manufacturer">'),
-    field('Model', '<input name="model">'),
-    field('Serial number', '<input name="serial_number">'),
-    field('Status', selectField('status', equipmentChoice(['Running', 'Under Maintenance', 'Out of Service'], 'Running'))),
-    field('Condition', selectField('condition', equipmentChoice(['Good', 'Fair', 'Poor']), false)),
-    field('Capacity', '<input name="capacity" type="number" min="0" step="any">'),
-    field('Capacity unit', '<input name="capacity_unit">'),
-    field('Motor power (kW)', '<input name="motor_power_kw" type="number" min="0" step="any">'),
-    field('Notes', '<textarea name="notes" rows="3"></textarea>'),
+    field('Criticality', selectField('criticality', equipmentChoice(CRITICALITY_LEVELS, item?.criticality || 'Important'))),
+    field('Area', `<input name="area" value="${esc(val('area'))}">`),
+    field('Manufacturer', `<input name="manufacturer" value="${esc(val('manufacturer'))}">`),
+    field('Model', `<input name="model" value="${esc(val('model'))}">`),
+    field('Serial number', `<input name="serial_number" value="${esc(val('serial_number'))}">`),
+    field('Status', selectField('status', equipmentChoice(statuses, item?.status || 'Running'))),
+    field('Condition', selectField('condition', equipmentChoice(['Good', 'Fair', 'Poor'], item?.condition || ''), false)),
+    field('Capacity', `<input name="capacity" type="number" min="0" step="any" value="${esc(val('capacity'))}">`),
+    field('Capacity unit', `<input name="capacity_unit" value="${esc(val('capacity_unit'))}">`),
+    field('Motor power (kW)', `<input name="motor_power_kw" type="number" min="0" step="any" value="${esc(val('motor_power_kw'))}">`),
+    field('Notes', `<textarea name="notes" rows="3">${esc(val('notes'))}</textarea>`),
   ].join(''));
+  if (!editing) return panel;
+  return panel.replace(
+    '</form>',
+    `<button type="button" class="detail-button" id="equipment-cancel">${esc(t('Cancel'))}</button></form>`,
+  );
 }
 
-function bindEquipmentLines(form) {
+function bindEquipmentLines(form, selected = null) {
   const plantSelect = form.querySelector('[name="plant_id"]');
   const lineSelect = form.querySelector('[name="line_id"]');
   const sectionSelect = form.querySelector('[name="section_id"]');
   if (!plantSelect || !lineSelect) return;
-  const fillSections = () => {
+  const fillSections = (sectionId = '') => {
     if (!sectionSelect) return;
-    sectionSelect.innerHTML = sectionOptions(lineSelect.value, '', lineSelect.value ? 'No section' : 'Select a line first');
+    sectionSelect.innerHTML = sectionOptions(lineSelect.value, sectionId, lineSelect.value ? 'No section' : 'Select a line first');
   };
-  const fill = () => {
+  const fill = (lineId = '', sectionId = '') => {
     const lines = store.lines.filter((line) => line.plant_id === plantSelect.value).sort((a, b) => Number(a.line_number) - Number(b.line_number));
     lineSelect.innerHTML = `<option value="">${esc(t(plantSelect.value ? 'Select line number' : 'Select a plant first'))}</option>${lines.map((line) => {
       const label = lineText(line);
       const extra = line.name && line.name !== label ? ` — ${line.name}` : '';
-      return `<option value="${esc(line.line_id)}">${esc(label + extra)}</option>`;
+      return `<option value="${esc(line.line_id)}"${line.line_id === lineId ? ' selected' : ''}>${esc(label + extra)}</option>`;
     }).join('')}`;
-    fillSections();
+    fillSections(sectionId);
   };
-  plantSelect.addEventListener('change', fill);
-  lineSelect.addEventListener('change', fillSections);
-  fill();
+  plantSelect.addEventListener('change', () => fill());
+  lineSelect.addEventListener('change', () => fillSections());
+  if (selected?.plant_id) plantSelect.value = selected.plant_id;
+  fill(selected?.line_id || '', selected?.section_id || '');
 }
 
 function sopForm() {
@@ -2663,10 +2695,10 @@ function bindAssets() {
   });
 }
 
-function bindForm() {
+function bindForm(selectedEquipment = null) {
   const form = document.getElementById('live-form');
   if (!form) return;
-  if (ui.page === 'equipment') bindEquipmentLines(form);
+  if (ui.page === 'equipment') bindEquipmentLines(form, ui.mode === 'edit' ? selectedEquipment : null);
   form.addEventListener('submit', async (event) => {
     event.preventDefault();
     const error = document.getElementById('live-form-error');
@@ -2719,7 +2751,12 @@ function bindForm() {
         ['capacity', 'motor_power_kw'].forEach((key) => {
           if (data[key] != null) data[key] = Number(data[key]);
         });
-        await apiRequest('/equipment', { method: 'POST', body: JSON.stringify(data) });
+        if (ui.mode === 'edit' && ui.rowKey) {
+          data.equipment_id = ui.rowKey;
+          await apiRequest(`/equipment/${encodeURIComponent(ui.rowKey)}`, { method: 'PUT', body: JSON.stringify(data) });
+        } else {
+          await apiRequest('/equipment', { method: 'POST', body: JSON.stringify(data) });
+        }
       } else if (ui.page === 'plants') {
         data.active = data.active !== 'false';
         await apiRequest('/plants', { method: 'POST', body: JSON.stringify(data) });
