@@ -382,15 +382,15 @@ def compute_kpi(db: Session, plant_id=None, line_id=None, equipment_id=None, tec
         # Pareto: categories sorted by downtime frequency, with cumulative share.
         pareto = []
         for key, label in catalog:
-            hours = round(sum(grouped.get(key, {}).values()), 2)
+            category_hours = round(sum(grouped.get(key, {}).values()), 2)
             count = int(grouped_count.get(key, 0))
-            if count <= 0 and hours <= 0:
+            if count <= 0 and category_hours <= 0:
                 continue
             pareto.append({
                 'id': key,
                 'name': label,
                 'count': count,
-                'hours': hours,
+                'hours': category_hours,
             })
         pareto.sort(key=lambda row: (-row['count'], -row['hours'], str(row['name']).lower()))
         pareto = pareto[:12]
