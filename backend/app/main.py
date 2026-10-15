@@ -79,6 +79,9 @@ def ensure_additive_columns():
     inspector = inspect(engine)
     try:
         tables = set(inspector.get_table_names())
+        if 'technician_plants' not in tables:
+            TechnicianPlant.__table__.create(bind=engine, checkfirst=True)
+            tables = set(inspect(engine).get_table_names())
         if 'daily_report_items' in tables:
             existing = {c['name'] for c in inspector.get_columns('daily_report_items')}
             additions = {
@@ -470,13 +473,31 @@ def health(): return {'status':'ok','version':'2.0.0'}
 def technician_plant_ids(db: Session, technician_id: str | None) -> list[str]:
     if not technician_id:
         return []
-    return [
-        row.plant_id
-        for row in db.query(TechnicianPlant)
-        .filter(TechnicianPlant.technician_id == technician_id)
-        .order_by(TechnicianPlant.plant_id)
-        .all()
-    ]
+    try:
+        return [
+            row.plant_id
+            for row in db.query(TechnicianPlant)
+            .filter(TechnicianPlant.technician_id == technician_id)
+            .order_by(TechnicianPlant.plant_id)
+            .all()
+        ]
+    except Exception:
+        db.rollback()
+        try:
+            TechnicianPlant.__table__.create(bind=engine, checkfirst=True)
+        except Exception:
+            return []
+        try:
+            return [
+                row.plant_id
+                for row in db.query(TechnicianPlant)
+                .filter(TechnicianPlant.technician_id == technician_id)
+                .order_by(TechnicianPlant.plant_id)
+                .all()
+            ]
+        except Exception:
+            db.rollback()
+            return []
 
 
 def technician_allowed_plants(db: Session, technician_id: str | None):
@@ -1234,9 +1255,16 @@ def create_component(data:ComponentCreate,db:Session=Depends(get_db),u=Depends(r
     o=Component(component_id=cid,**data.model_dump()); db.add(o); audit(db,u,'CREATE','Component',cid,new=data.model_dump()); db.commit(); db.refresh(o); return o
 
 def technician_out(db: Session, row: Technician) -> dict:
-    payload = TechnicianOut.model_validate(row).model_dump()
-    payload['plant_ids'] = technician_plant_ids(db, row.technician_id)
-    return payload
+    return {
+        'id': row.id,
+        'technician_id': row.technician_id,
+        'name': row.name,
+        'department': row.department,
+        'skill_level': row.skill_level,
+        'shift': row.shift,
+        'status': row.status,
+        'plant_ids': technician_plant_ids(db, row.technician_id),
+    }
 
 
 @app.get('/technicians',response_model=list[TechnicianOut])
