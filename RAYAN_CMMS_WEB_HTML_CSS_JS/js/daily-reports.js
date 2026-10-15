@@ -287,7 +287,6 @@ document.addEventListener('DOMContentLoaded', async () => {
         <div class="lube-meta">
           <label><span>${escapeHtml(t('Shift'))}</span><input value="${escapeHtml(t(report.shift || ''))}" readonly></label>
           <label><span>${escapeHtml(t("Technician's name"))}</span><input value="${escapeHtml(report.technician)}" readonly></label>
-          <label><span>${escapeHtml(t('Plants'))}</span><input value="${escapeHtml(report.plantLine && report.plantLine !== '-' ? report.plantLine : (report.plantId || ''))}" readonly></label>
           <label><span>${escapeHtml(t('Date'))}</span><input value="${escapeHtml(formatDate(report.date))}" readonly></label>
         </div>
         <table class="lube-table"><thead><tr><th>${escapeHtml(t('Seq.'))}</th><th>${escapeHtml(t('Machine'))}</th><th>${escapeHtml(t('Maintenance Type'))}</th><th>${escapeHtml(t('Repair Actions'))}</th><th>${escapeHtml(t('Start Time'))}</th><th>${escapeHtml(t('End Time'))}</th><th>${escapeHtml(t('Downtime (hrs)'))}</th></tr></thead><tbody>${activityRows}</tbody></table>
