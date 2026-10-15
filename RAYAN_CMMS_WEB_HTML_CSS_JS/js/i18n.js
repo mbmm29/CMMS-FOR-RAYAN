@@ -56,6 +56,7 @@ const CMMS_AR = {
   'Choose a plant, then set the plan.': 'اختر المصنع ثم ضع الخطة.',
   'Choose a plant': 'اختر المصنع',
   'Save plan': 'حفظ الخطة',
+  'Saves every task entered on the days of this week.': 'يحفظ كل المهام المدخلة في أيام هذا الأسبوع.',
   'Add task': 'إضافة مهمة',
   'No line': 'بدون خط',
   'Copy plan': 'نسخ الخطة',

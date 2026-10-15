@@ -1211,7 +1211,7 @@ function dayTaskHtml(task = {}, locked = false) {
     <label>${esc(t('Maintenance type'))}<select data-field="maintenance_type"${sentLock}>${typeOptions}</select></label>
     <label class="day-work">${esc(t('Work to be done'))}<textarea data-field="task" rows="2" placeholder="${esc(t('Work to be done'))}"${lock}>${esc(task.task || '')}</textarea></label>
     <p class="day-release" hidden></p>
-    ${locked ? '' : `<div class="day-task-actions"><button type="button" class="detail-button primary day-save">${esc(t('Save'))}</button><button type="button" class="annual-remove day-remove">${esc(t('Remove'))}</button></div>`}
+    ${locked ? '' : `<button type="button" class="annual-remove day-remove">${esc(t('Remove'))}</button>`}
   </div>`;
 }
 
@@ -1227,7 +1227,6 @@ function bindDayTask(row) {
   });
   row.querySelector('[data-field="maintenance_type"]')?.addEventListener('change', () => refreshDayNote(row));
   refreshDayNote(row);
-  row.querySelector('.day-save')?.addEventListener('click', () => { saveWeekTasks(); });
   row.querySelector('.day-remove')?.addEventListener('click', () => {
     const list = row.parentElement;
     row.remove();
@@ -1302,8 +1301,7 @@ function drawWeekForm() {
   const taskCount = ui.weekTasks.filter((item) => item.task).length;
   document.getElementById('page-subtitle').textContent = t('Add one or more tasks for each day: equipment number, equipment name, maintenance type, and the work to be done.');
   const action = document.getElementById('primary-action');
-  action.hidden = locked;
-  action.textContent = t('Save plan');
+  action.hidden = true;
   document.getElementById('metric-grid').innerHTML = metrics([
     ['Week', String(week), '◷', 'blue', ''],
     [ANNUAL_MONTHS[month - 1], String(dates.length), '▧', 'orange', ''],
@@ -1317,7 +1315,7 @@ function drawWeekForm() {
     const tasks = ui.weekTasks.filter((item) => String(item.work_date).slice(0, 10) === key);
     const rows = (tasks.length ? tasks : [{}]).map((task) => dayTaskHtml(task, locked)).join('');
     return `<section class="week-day" data-date="${key}">
-      <header><div><b>${esc(t(WEEKDAYS[value.getDay()]))}</b><small>${esc(fmtDate(key))}</small></div>${locked ? '' : `<div class="day-actions"><button type="button" class="detail-button day-add">${esc(t('Add another task'))}</button><button type="button" class="detail-button primary day-save">${esc(t('Save'))}</button></div>`}</header>
+      <header><div><b>${esc(t(WEEKDAYS[value.getDay()]))}</b><small>${esc(fmtDate(key))}</small></div>${locked ? '' : `<button type="button" class="detail-button day-add">${esc(t('Add another task'))}</button>`}</header>
       <div class="day-tasks">${rows}</div>
     </section>`;
   }).join('');
@@ -1326,11 +1324,10 @@ function drawWeekForm() {
     <div class="annual-bar">
       <button type="button" id="week-back" class="detail-button">${esc(t('Back to annual plan'))}</button>
       <b class="annual-title">${esc(t('Week'))} ${week} · ${esc(t(ANNUAL_MONTHS[month - 1]))} ${esc(ui.annualYear)}${formNo('annual_plan') ? ` · ${esc(formNo('annual_plan'))}` : ''}</b>
-      ${locked ? '' : `<button type="button" class="detail-button primary" id="week-save">${esc(t('Save'))}</button>`}
     </div>
     <p class="kpi-note">${esc(fmtDate(isoDate(first)))} – ${esc(fmtDate(isoDate(last)))} · ${dates.length} ${esc(t('days'))}</p>
     <div class="week-days">${days}</div>
-    ${locked ? '' : `<div class="week-save-bar"><button type="button" class="detail-button primary" id="week-save-bottom">${esc(t('Save'))}</button></div>`}
+    ${locked ? '' : `<div class="week-save-bar"><button type="button" class="detail-button primary" id="week-save-bottom">${esc(t('Save'))}</button><p class="live-note">${esc(t('Saves every task entered on the days of this week.'))}</p></div>`}
     <p id="annual-error" class="form-error"></p>
   </section>`;
   document.querySelectorAll('.day-task').forEach(bindDayTask);
@@ -1339,9 +1336,7 @@ function drawWeekForm() {
     list.insertAdjacentHTML('beforeend', dayTaskHtml());
     bindDayTask(list.lastElementChild);
   }));
-  document.querySelectorAll('.day-save, #week-save, #week-save-bottom').forEach((button) => {
-    button.addEventListener('click', () => { saveWeekTasks(); });
-  });
+  document.getElementById('week-save-bottom')?.addEventListener('click', () => { saveWeekTasks(); });
   document.getElementById('week-back')?.addEventListener('click', () => {
     ui.annualWeek = '';
     ui.weekTasks = [];
