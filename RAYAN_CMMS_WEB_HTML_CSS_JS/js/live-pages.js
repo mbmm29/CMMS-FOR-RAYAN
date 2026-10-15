@@ -583,205 +583,200 @@ function equipmentOptions() {
   return store.equipment.map((item) => `<option value="${esc(item.equipment_id)}">${esc(item.equipment_id)} — ${esc(item.name)}</option>`).join('');
 }
 
-function kdeCurve(samples, points = 96) {
-  const values = (samples || []).map(Number).filter((value) => Number.isFinite(value));
-  if (!values.length) return null;
-  const n = values.length;
-  const mean = values.reduce((sum, value) => sum + value, 0) / n;
-  const variance = values.reduce((sum, value) => sum + ((value - mean) ** 2), 0) / Math.max(n - 1, 1);
-  const std = Math.sqrt(variance) || 1;
-  const bandwidth = Math.max(0.35, 1.06 * std * (n ** -0.2));
-  const min = Math.min(...values) - bandwidth * 3;
-  const max = Math.max(...values) + bandwidth * 3;
-  const step = (max - min) / Math.max(points - 1, 1);
-  const inv = 1 / (n * bandwidth * Math.sqrt(2 * Math.PI));
-  const curve = [];
-  for (let index = 0; index < points; index += 1) {
-    const x = min + (index * step);
-    let density = 0;
-    values.forEach((value) => {
-      const u = (x - value) / bandwidth;
-      density += Math.exp(-0.5 * u * u);
-    });
-    curve.push({ x, y: density * inv });
-  }
-  return { curve, min, max, values, mean, bandwidth };
-}
-
-function densityAt(curve, x) {
-  if (!curve?.length) return 0;
-  if (x <= curve[0].x) return curve[0].y;
-  if (x >= curve[curve.length - 1].x) return curve[curve.length - 1].y;
-  for (let index = 1; index < curve.length; index += 1) {
-    const left = curve[index - 1];
-    const right = curve[index];
-    if (x <= right.x) {
-      const span = right.x - left.x || 1;
-      const t = (x - left.x) / span;
-      return left.y + ((right.y - left.y) * t);
-    }
-  }
-  return curve[curve.length - 1].y;
-}
-
-function densityChart(seriesList, options = {}) {
+function tempTrendChart(seriesList, options = {}) {
   const settings = options && typeof options === 'object' ? options : {};
-  const palette = ['#60a5fa', '#a78bfa', '#f472b6', '#34d399', '#fb923c', '#38bdf8', '#c084fc', '#f87171'];
-  const prepared = (seriesList || []).map((row, index) => {
-    const kde = kdeCurve(row.samples || row.values || []);
-    if (!kde) return null;
-    return {
-      id: row.id || `d${index}`,
-      name: row.name || t(`Temperature ${row.sensor || index + 1}`),
+  const palette = ['#60a5fa', '#34d399'];
+  const rows = (seriesList || [])
+    .filter((row) => (row.points || []).some((point) => point.hours != null && point.hours !== ''))
+    .slice(0, 2)
+    .map((row, index) => ({
+      id: row.id || `t${index + 1}`,
+      name: row.name || t(`Temperature ${index + 1}`),
       color: palette[index % palette.length],
-      ...kde,
-    };
-  }).filter(Boolean);
-  if (!prepared.length) return '';
-  const fullMin = Math.min(...prepared.map((row) => row.min));
-  const fullMax = Math.max(...prepared.map((row) => row.max));
-  const chartId = `dens${Math.random().toString(36).slice(2, 9)}`;
+      points: (row.points || []).map((point) => ({
+        date: point.date,
+        hours: point.hours == null || point.hours === '' ? null : Number(point.hours),
+        equipment: point.equipment || '',
+        high: point.high === true,
+      })),
+    }));
+  if (!rows.length) return '';
+  const dates = rows[0].points.map((point) => point.date);
+  const temps = rows.flatMap((row) => row.points.map((point) => point.hours).filter((value) => value != null));
+  const yMin = Math.min(...temps, 0);
+  const yMax = Math.max(...temps, Number(settings.limit) || 0, 1);
+  const chartId = `temp${Math.random().toString(36).slice(2, 9)}`;
+  const names = (settings.equipmentNames || []).filter(Boolean);
   const payload = encodeURIComponent(JSON.stringify({
     id: chartId,
-    fullMin,
-    fullMax,
     unit: settings.unit || '°C',
-    series: prepared.map((row) => ({
-      id: row.id,
-      name: row.name,
-      color: row.color,
-      curve: row.curve,
-      values: row.values,
-      mean: row.mean,
-    })),
+    limit: Number(settings.limit),
+    yMin,
+    yMax,
+    dates,
+    series: rows,
+    equipmentNames: names,
   }));
-  return `<div class="density-wrap" data-density-chart="${chartId}" data-density="${payload}">
-    <div class="density-toolbar">
-      <button type="button" class="detail-button density-zoom-in" data-density-zoom="in">${esc(t('Zoom in'))}</button>
-      <button type="button" class="detail-button density-zoom-out" data-density-zoom="out">${esc(t('Zoom out'))}</button>
-      <button type="button" class="detail-button density-zoom-reset" data-density-zoom="reset">${esc(t('Reset zoom'))}</button>
-      <span class="density-hint">${esc(t('Click the chart to read the temperature at that point.'))}</span>
+  const nameNote = names.length
+    ? `<p class="temp-trend-equip">${esc(t('Equipment on the chart'))}: ${esc(names.join(' · '))}</p>`
+    : '';
+  return `<div class="temp-trend-wrap" data-temp-trend="${chartId}" data-trend="${payload}">
+    <div class="temp-trend-toolbar">
+      <button type="button" class="detail-button" data-trend-zoom="in">${esc(t('Zoom in'))}</button>
+      <button type="button" class="detail-button" data-trend-zoom="out">${esc(t('Zoom out'))}</button>
+      <button type="button" class="detail-button" data-trend-zoom="reset">${esc(t('Reset zoom'))}</button>
+      <span class="temp-trend-hint">${esc(t('Click the chart to read the temperature at that point.'))}</span>
     </div>
-    <div class="density-stage" id="${chartId}-stage"></div>
-    <p class="density-readout" id="${chartId}-readout">${esc(t('Click a point on the curve to show its temperature.'))}</p>
-    <ul class="area-legend density-legend">${prepared.map((row) => `<li><i style="background:${row.color}"></i><span>${esc(row.name)}</span></li>`).join('')}</ul>
+    ${nameNote}
+    <div class="temp-trend-stage" id="${chartId}-stage"></div>
+    <p class="temp-trend-readout" id="${chartId}-readout">${esc(t('Click a point on the curve to show its temperature.'))}</p>
+    <ul class="area-legend">${rows.map((row) => `<li><i style="background:${row.color}"></i><span>${esc(t(row.name))}</span></li>`).join('')}</ul>
   </div>`;
 }
 
-function renderDensityStage(host, state) {
+function renderTempTrendStage(host, state) {
   if (!host || !state) return;
   const width = 760;
   const height = 360;
-  const pad = { left: 48, right: 150, top: 18, bottom: 42 };
+  const pad = { left: 52, right: 128, top: 20, bottom: 46 };
   const innerW = width - pad.left - pad.right;
   const innerH = height - pad.top - pad.bottom;
-  const xMin = state.viewMin;
-  const xMax = state.viewMax;
-  const span = Math.max(xMax - xMin, 0.1);
-  const visible = state.series.map((row) => ({
+  const start = Math.max(0, state.startIndex || 0);
+  const end = Math.min(state.dates.length - 1, state.endIndex == null ? state.dates.length - 1 : state.endIndex);
+  const sliceDates = state.dates.slice(start, end + 1);
+  const count = sliceDates.length;
+  if (!count) {
+    host.innerHTML = `<p class="chart-empty">${esc(t('No motor readings in this period.'))}</p>`;
+    return;
+  }
+  const series = state.series.map((row) => ({
     ...row,
-    curve: row.curve.filter((point) => point.x >= xMin - span * 0.02 && point.x <= xMax + span * 0.02),
-  })).filter((row) => row.curve.length > 1);
-  const yMax = Math.max(0.01, ...visible.flatMap((row) => row.curve.map((point) => point.y)));
-  const xAt = (value) => pad.left + ((value - xMin) / span) * innerW;
-  const yAt = (value) => pad.top + innerH - (value / yMax) * innerH;
-  const base = pad.top + innerH;
-  const gridX = 6;
-  const xTicks = Array.from({ length: gridX + 1 }, (_, index) => xMin + (span * index) / gridX);
-  const yTicks = [0, 0.25, 0.5, 0.75, 1].map((step) => yMax * step);
-  const axes = `
-    <g class="density-grid">
-      ${yTicks.map((value) => `<line x1="${pad.left}" y1="${yAt(value).toFixed(1)}" x2="${(width - pad.right).toFixed(1)}" y2="${yAt(value).toFixed(1)}"></line><text x="${pad.left - 8}" y="${(yAt(value) + 4).toFixed(1)}" text-anchor="end">${numberText(value, 2)}</text>`).join('')}
-      ${xTicks.map((value) => `<text x="${xAt(value).toFixed(1)}" y="${height - 12}" text-anchor="middle">${numberText(value, Math.abs(span) > 20 ? 0 : 1)}</text>`).join('')}
-    </g>
-    <text class="density-axis-label" x="${(pad.left + innerW / 2).toFixed(1)}" y="${height - 2}" text-anchor="middle">${esc(t('Temperature'))} (${esc(state.unit)})</text>
-    <text class="density-axis-label" transform="translate(14 ${(pad.top + innerH / 2).toFixed(1)}) rotate(-90)" text-anchor="middle">${esc(t('Density'))}</text>`;
-  const shapes = visible.map((row) => {
-    const path = row.curve.map((point, index) => `${index ? 'L' : 'M'}${xAt(point.x).toFixed(1)},${yAt(point.y).toFixed(1)}`).join('');
-    const area = `${path} L${xAt(row.curve[row.curve.length - 1].x).toFixed(1)},${base.toFixed(1)} L${xAt(row.curve[0].x).toFixed(1)},${base.toFixed(1)} Z`;
-    let peak = row.curve[0];
-    row.curve.forEach((point) => { if (point.y > peak.y) peak = point; });
-    const label = `<text class="density-name" x="${(xAt(peak.x) + 6).toFixed(1)}" y="${(yAt(peak.y) - 6).toFixed(1)}" fill="${row.color}">${esc(row.name)}</text>`;
-    return `<path class="density-fill" d="${area}" fill="${row.color}"></path><path class="density-line" d="${path}" stroke="${row.color}"></path>${label}`;
+    points: row.points.slice(start, end + 1),
+  }));
+  const visibleTemps = series.flatMap((row) => row.points.map((point) => point.hours).filter((value) => value != null));
+  const yMin = Math.min(...visibleTemps, 0);
+  let yMax = Math.max(...visibleTemps, Number.isFinite(state.limit) && state.limit > 0 ? state.limit : 0, 1);
+  if (yMax <= yMin) yMax = yMin + 1;
+  const xAt = (index) => pad.left + (count === 1 ? innerW / 2 : (index / (count - 1)) * innerW);
+  const yAt = (value) => pad.top + innerH - ((Number(value) - yMin) / (yMax - yMin)) * innerH;
+  const yTicks = [0, 0.25, 0.5, 0.75, 1].map((step) => yMin + ((yMax - yMin) * step));
+  const grid = yTicks.map((value) => `<line x1="${pad.left}" y1="${yAt(value).toFixed(1)}" x2="${(width - pad.right).toFixed(1)}" y2="${yAt(value).toFixed(1)}"></line><text x="${pad.left - 8}" y="${(yAt(value) + 4).toFixed(1)}" text-anchor="end">${numberText(value, value >= 100 ? 0 : 1)}</text>`).join('');
+  const xLabels = sliceDates.map((day, index) => {
+    if (count > 8 && index !== 0 && index !== count - 1 && index !== Math.floor((count - 1) / 2)) return '';
+    return `<text x="${xAt(index).toFixed(1)}" y="${height - 14}" text-anchor="middle">${esc(fmtDate(day).slice(0, 5))}</text>`;
   }).join('');
-  const marker = state.cursor == null ? '' : (() => {
-    const x = xAt(state.cursor);
-    return `<line class="density-cursor" x1="${x.toFixed(1)}" y1="${pad.top}" x2="${x.toFixed(1)}" y2="${base.toFixed(1)}"></line>
-      <circle class="density-cursor-dot" cx="${x.toFixed(1)}" cy="${base.toFixed(1)}" r="4"></circle>`;
+  const shapes = series.map((row) => {
+    let path = '';
+    let drawing = false;
+    row.points.forEach((point, index) => {
+      if (point.hours == null) {
+        drawing = false;
+        return;
+      }
+      path += `${drawing ? 'L' : 'M'}${xAt(index).toFixed(1)},${yAt(point.hours).toFixed(1)}`;
+      drawing = true;
+    });
+    const dots = row.points.map((point, index) => {
+      if (point.hours == null) return '';
+      const label = point.equipment
+        ? `<text class="temp-trend-equip-label" x="${xAt(index).toFixed(1)}" y="${(yAt(point.hours) - 10).toFixed(1)}" text-anchor="middle" fill="${row.color}">${esc(point.equipment)}</text>`
+        : '';
+      return `<circle cx="${xAt(index).toFixed(1)}" cy="${yAt(point.hours).toFixed(1)}" r="4.2" fill="${point.high ? '#fa3038' : '#fff'}" stroke="${point.high ? '#fa3038' : row.color}"></circle>${label}`;
+    }).join('');
+    let endLabel = '';
+    for (let index = row.points.length - 1; index >= 0; index -= 1) {
+      if (row.points[index].hours == null) continue;
+      endLabel = `<text class="temp-trend-name" x="${(xAt(index) + 8).toFixed(1)}" y="${(yAt(row.points[index].hours) + 4).toFixed(1)}" fill="${row.color}">${esc(t(row.name))}</text>`;
+      break;
+    }
+    return `<path class="temp-trend-line" d="${path}" stroke="${row.color}"></path>${dots}${endLabel}`;
+  }).join('');
+  const limitLine = Number.isFinite(state.limit) && state.limit > 0
+    ? `<line class="temp-trend-limit" x1="${pad.left}" y1="${yAt(state.limit).toFixed(1)}" x2="${(width - pad.right).toFixed(1)}" y2="${yAt(state.limit).toFixed(1)}"></line>`
+    : '';
+  const cursor = state.cursorIndex == null || state.cursorIndex < 0 || state.cursorIndex >= count ? '' : (() => {
+    const x = xAt(state.cursorIndex);
+    return `<line class="temp-trend-cursor" x1="${x.toFixed(1)}" y1="${pad.top}" x2="${x.toFixed(1)}" y2="${(pad.top + innerH).toFixed(1)}"></line>`;
   })();
-  host.innerHTML = `<svg class="density-chart" viewBox="0 0 ${width} ${height}" role="img" aria-label="${esc(t('Motor temperature density'))}">${axes}${shapes}${marker}</svg>`;
+  host.innerHTML = `<svg class="temp-trend-chart" viewBox="0 0 ${width} ${height}" role="img" aria-label="${esc(t('Motor temperature'))}">
+    <g class="temp-trend-grid">${grid}</g>
+    ${limitLine}${shapes}${xLabels}${cursor}
+    <text class="temp-trend-axis" x="${(pad.left + innerW / 2).toFixed(1)}" y="${height - 2}" text-anchor="middle">${esc(t('Date'))}</text>
+    <text class="temp-trend-axis" transform="translate(14 ${(pad.top + innerH / 2).toFixed(1)}) rotate(-90)" text-anchor="middle">${esc(t('Temperature'))} (${esc(state.unit)})</text>
+  </svg>`;
 }
 
-function bindDensityCharts(root = document) {
-  root.querySelectorAll('[data-density-chart]').forEach((wrap) => {
+function bindTempTrendCharts(root = document) {
+  root.querySelectorAll('[data-temp-trend]').forEach((wrap) => {
     if (wrap.dataset.bound === '1') return;
     wrap.dataset.bound = '1';
     let payload;
     try {
-      payload = JSON.parse(decodeURIComponent(wrap.dataset.density || ''));
+      payload = JSON.parse(decodeURIComponent(wrap.dataset.trend || ''));
     } catch (_) {
       return;
     }
-    const stage = wrap.querySelector(`#${payload.id}-stage`) || wrap.querySelector('.density-stage');
-    const readout = wrap.querySelector(`#${payload.id}-readout`) || wrap.querySelector('.density-readout');
+    const stage = wrap.querySelector(`#${payload.id}-stage`) || wrap.querySelector('.temp-trend-stage');
+    const readout = wrap.querySelector(`#${payload.id}-readout`) || wrap.querySelector('.temp-trend-readout');
     const state = {
       ...payload,
-      viewMin: payload.fullMin,
-      viewMax: payload.fullMax,
-      cursor: null,
+      startIndex: 0,
+      endIndex: Math.max(0, (payload.dates || []).length - 1),
+      cursorIndex: null,
     };
-    const tempFromEvent = (svg, event) => {
-      const point = svg.createSVGPoint();
-      point.x = event.clientX;
-      point.y = event.clientY;
-      const local = point.matrixTransform(svg.getScreenCTM().inverse());
-      const innerW = 760 - 48 - 150;
-      const ratio = Math.min(1, Math.max(0, (local.x - 48) / innerW));
-      return state.viewMin + (ratio * (state.viewMax - state.viewMin));
-    };
-    const redraw = () => { renderDensityStage(stage, state); };
+    const redraw = () => { renderTempTrendStage(stage, state); };
     const zoomBy = (factor) => {
-      const center = state.cursor != null ? state.cursor : (state.viewMin + state.viewMax) / 2;
-      const span = Math.max(0.8, (state.viewMax - state.viewMin) * factor);
-      let nextMin = center - (span / 2);
-      let nextMax = center + (span / 2);
-      if (nextMin < payload.fullMin) {
-        nextMax += payload.fullMin - nextMin;
-        nextMin = payload.fullMin;
-      }
-      if (nextMax > payload.fullMax) {
-        nextMin -= nextMax - payload.fullMax;
-        nextMax = payload.fullMax;
-      }
-      state.viewMin = Math.max(payload.fullMin, nextMin);
-      state.viewMax = Math.min(payload.fullMax, nextMax);
-      if (state.viewMax - state.viewMin < 0.8) {
-        state.viewMin = payload.fullMin;
-        state.viewMax = payload.fullMax;
-      }
+      const total = state.dates.length;
+      if (total < 2) return;
+      const span = Math.max(1, Math.round((state.endIndex - state.startIndex + 1) * factor));
+      const center = state.cursorIndex != null
+        ? state.startIndex + state.cursorIndex
+        : Math.round((state.startIndex + state.endIndex) / 2);
+      let nextStart = Math.max(0, center - Math.floor(span / 2));
+      let nextEnd = Math.min(total - 1, nextStart + span - 1);
+      nextStart = Math.max(0, nextEnd - span + 1);
+      state.startIndex = nextStart;
+      state.endIndex = nextEnd;
+      state.cursorIndex = null;
       redraw();
     };
     stage?.addEventListener('click', (event) => {
       const svg = stage.querySelector('svg');
       if (!svg) return;
-      const temp = tempFromEvent(svg, event);
-      state.cursor = temp;
+      const point = svg.createSVGPoint();
+      point.x = event.clientX;
+      point.y = event.clientY;
+      const local = point.matrixTransform(svg.getScreenCTM().inverse());
+      const padLeft = 52;
+      const padRight = 128;
+      const innerW = 760 - padLeft - padRight;
+      const count = state.endIndex - state.startIndex + 1;
+      const ratio = Math.min(1, Math.max(0, (local.x - padLeft) / innerW));
+      const index = count <= 1 ? 0 : Math.round(ratio * (count - 1));
+      state.cursorIndex = index;
       redraw();
-      const lines = state.series.map((row) => `${row.name}: ${numberText(densityAt(row.curve, temp), 3)}`);
+      const absolute = state.startIndex + index;
+      const day = state.dates[absolute];
+      const lines = state.series.map((row) => {
+        const sample = row.points[absolute];
+        if (!sample || sample.hours == null) return `${t(row.name)}: —`;
+        const who = sample.equipment ? ` · ${sample.equipment}` : '';
+        return `${t(row.name)}: ${numberText(sample.hours, 1)} ${state.unit}${who}`;
+      });
       if (readout) {
-        readout.textContent = `${t('Temperature at point')}: ${numberText(temp, 1)} ${state.unit} · ${lines.join(' · ')}`;
+        readout.textContent = `${t('Date')}: ${fmtDate(day)} — ${lines.join(' | ')}`;
       }
     });
     stage?.addEventListener('wheel', (event) => {
       event.preventDefault();
-      zoomBy(event.deltaY < 0 ? 0.8 : 1.25);
+      zoomBy(event.deltaY < 0 ? 0.7 : 1.4);
     }, { passive: false });
-    wrap.querySelector('[data-density-zoom="in"]')?.addEventListener('click', () => zoomBy(0.7));
-    wrap.querySelector('[data-density-zoom="out"]')?.addEventListener('click', () => zoomBy(1.35));
-    wrap.querySelector('[data-density-zoom="reset"]')?.addEventListener('click', () => {
-      state.viewMin = payload.fullMin;
-      state.viewMax = payload.fullMax;
-      state.cursor = null;
+    wrap.querySelector('[data-trend-zoom="in"]')?.addEventListener('click', () => zoomBy(0.65));
+    wrap.querySelector('[data-trend-zoom="out"]')?.addEventListener('click', () => zoomBy(1.45));
+    wrap.querySelector('[data-trend-zoom="reset"]')?.addEventListener('click', () => {
+      state.startIndex = 0;
+      state.endIndex = Math.max(0, state.dates.length - 1);
+      state.cursorIndex = null;
       if (readout) readout.textContent = t('Click a point on the curve to show its temperature.');
       redraw();
     });
@@ -1063,14 +1058,14 @@ async function drawDashboard() {
     <section class="panel chart-panel"><h2>${esc(t('Work orders by type'))}</h2><p class="kpi-note">${esc(t('Total'))} ${numberText(orderTotal, 0)} ${esc(t('work orders in this period.'))}</p>${orderTotal ? donut(orderParts, orderTotal, 0) : `<p class="chart-empty">${esc(t('No work orders in this period'))}</p>`}</section>
     </div>
     <section class="panel chart-panel chart-wide"><h2>${esc(t('Downtime trend'))}</h2><p class="kpi-note">${esc(t(kpi.trend_by === 'line' ? 'Each line' : kpi.trend_by === 'equipment' ? 'Selected equipment' : 'Each plant'))} · ${esc(t('scheduled'))} ${kpiText(kpi.scheduled_downtime_h, 1)} · ${esc(t('unscheduled'))} ${kpiText(kpi.unscheduled_downtime_h, 1)}</p>${kpi.trend_series?.length ? areaChart(kpi.trend_series) : `<p class="chart-empty">${esc(t('No downtime in this period'))}</p>`}</section>
-    <section class="panel chart-panel chart-wide chart-tall"><h2>${esc(t('Motor temperature'))}</h2><p class="kpi-note">${esc(t('Density of Temperature 1 and Temperature 2 for each equipment. Zoom and click a point to read the temperature.'))}</p>${(kpi.motor?.temperature_density || []).some((row) => (row.samples || []).length) ? densityChart(kpi.motor.temperature_density, { unit: '°C' }) : ((kpi.motor?.temperature || []).some((row) => (row.points || []).some((point) => point.hours != null)) ? areaChart(kpi.motor.temperature, '°C', { large: true, namesOnChart: true, label: t('Motor temperature') }) : `<p class="chart-empty">${esc(t('No motor readings in this period.'))}</p>`)}</section>
+    <section class="panel chart-panel chart-wide chart-tall"><h2>${esc(t('Motor temperature'))}</h2><p class="kpi-note">${esc(t('Two lines only: Temperature 1 and Temperature 2. Date is horizontal, temperature is vertical, and equipment names appear on the points.'))}</p>${(kpi.motor?.temperature || []).some((row) => (row.points || []).some((point) => point.hours != null)) ? tempTrendChart(kpi.motor.temperature, { unit: '°C', equipmentNames: kpi.motor?.equipment_names || [] }) : `<p class="chart-empty">${esc(t('No motor readings in this period.'))}</p>`}</section>
     <section class="panel chart-panel chart-wide"><h2>${esc(t('Oil level'))}</h2><p class="kpi-note">${esc(t(motorScopeNote()))} · ${esc(t('Rank 1 is the best reading on that day.'))}</p>${bumpChart(kpi.motor?.oil_level, 'Oil level') || `<p class="chart-empty">${esc(t('No motor readings in this period.'))}</p>`}</section>
     <section class="panel chart-panel chart-wide"><h2>${esc(t('Oil condition'))}</h2><p class="kpi-note">${esc(t(motorScopeNote()))} · ${esc(t('Rank 1 is the best reading on that day.'))}</p>${bumpChart(kpi.motor?.oil_condition, 'Oil condition') || `<p class="chart-empty">${esc(t('No motor readings in this period.'))}</p>`}</section>
     <section class="panel chart-panel"><h2>${esc(t('Availability basis'))}</h2><div class="summary-row"><span>${esc(t('Uptime'))}</span><b>${kpiText(kpi.uptime_h, 1)} ${esc(t('h'))}</b></div><div class="summary-row"><span>${esc(t('Available time'))}</span><b>${kpiText(kpi.available_h, 1)} ${esc(t('h'))}</b></div><div class="summary-row"><span>${esc(t('Idle time'))}</span><b>${kpiText(kpi.idle_h, 1)} ${esc(t('h'))}</b></div><div class="summary-row"><span>${esc(t('Operating time'))}</span><b>${kpiText(kpi.operating_h, 1)} ${esc(t('h'))}</b></div><small class="kpi-note">${esc(t('Availability = uptime ÷ (available − idle). MTBF = operating time ÷ failures. MTTR = corrective hours ÷ corrective events.'))}</small></section>
     <section class="panel chart-panel"><h2>${esc(t('Work orders and PM'))}</h2><div class="summary-row"><span>${esc(t('Issued / completed'))}</span><b>${kpi.wo_issued || 0} / ${kpi.wo_completed || 0}</b></div><div class="summary-row"><span>${esc(t('PM due / on time'))}</span><b>${kpi.pm_due || 0} / ${kpi.pm_on_time || 0}</b></div><div class="summary-row"><span>${esc(t('Corrective events'))}</span><b>${kpi.corrective_events || 0}</b></div><div class="summary-row"><span>${esc(kpiTargetText(kpi.availability, targets.availability, true))}</span><b>${esc(t('Availability'))}</b></div><div class="summary-row"><span>${esc(kpiTargetText(kpi.mtbf, targets.mtbf, true))}</span><b>${esc(t('MTBF'))}</b></div><div class="summary-row"><span>${esc(kpiTargetText(kpi.mttr, targets.mttr, false))}</span><b>${esc(t('MTTR'))}</b></div>${targetForm}</section>
     <section class="panel chart-panel"><h2>${esc(t('Component life'))}</h2><p class="kpi-note">${esc(t('Removal date − installation date. In-service components use today.'))}</p>${components}<div class="summary-row"><span>${esc(t('Average life'))}</span><b>${kpi.component_life_avg == null ? '—' : `${kpi.component_life_avg} ${t('days')}`}</b></div></section>`;
   bindFilters();
-  bindDensityCharts(workspace);
+  bindTempTrendCharts(workspace);
   document.getElementById('kpi-target')?.addEventListener('submit', async (event) => {
     event.preventDefault();
     const error = document.getElementById('kpi-target-error');
@@ -1956,9 +1951,11 @@ function equipmentMotorHtml(data) {
   const form = canMaintain()
     ? `<form id="motor-limit" class="live-form"><label>${esc(t('Allowed temperature (°C)'))}<input name="temp_limit_c" type="number" min="1" max="400" step="0.1" value="${limit == null ? '' : esc(String(limit))}"></label><button class="detail-button primary" type="submit">${esc(t('Save'))}</button><p class="live-note">${esc(t('A reading above this value is high. Leave it empty to clear the limit.'))}</p><p id="motor-limit-error" class="form-error"></p></form>`
     : (limit == null ? '' : `<p class="motor-status">${esc(t('Allowed temperature (°C)'))}: ${esc(String(limit))}</p>`);
-  const temperature = (data.temperature_density || []).some((row) => (row.samples || []).length)
-    ? densityChart(data.temperature_density, { unit: '°C' })
-    : areaChart(data.temperature || [], '°C', { limit, large: true, namesOnChart: true, label: t('Temperature') });
+  const temperature = tempTrendChart(data.temperature || [], {
+    unit: '°C',
+    limit,
+    equipmentNames: data.equipment_names || [],
+  }) || areaChart(data.temperature || [], '°C', { limit, large: true, namesOnChart: true, label: t('Temperature') });
   const level = areaChart(data.oil_level || [], '', { label: t('Oil level'), namesOnChart: true });
   const condition = areaChart(data.oil_condition || [], '', { label: t('Oil condition'), namesOnChart: true });
   const charts = [
@@ -1982,7 +1979,7 @@ async function loadEquipmentMotor(selected) {
       return;
     }
     box.innerHTML = equipmentMotorHtml(data);
-    bindDensityCharts(box);
+    bindTempTrendCharts(box);
     document.getElementById('motor-limit')?.addEventListener('submit', (event) => saveEquipmentTempLimit(event, selected.equipment_id));
   } catch (exception) {
     if (token === equipmentMotorToken && box.isConnected) box.innerHTML = `<p class="form-error">${esc(t(exception.message || 'Could not load the chart'))}</p>`;

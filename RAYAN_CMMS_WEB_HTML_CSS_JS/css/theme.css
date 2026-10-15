@@ -755,9 +755,10 @@ body .workspace .iso-form input{width:100%;max-width:none;height:40px;margin:0;p
 .equipment-motor .temp-state.ok{color:#8ee0c2}
 .equipment-motor .live-note{margin:0;color:#9eb4d6;font-size:12px;line-height:1.4}
 .equipment-motor .area-chart{width:100%;max-width:100%;height:auto}
-.equipment-motor .density-wrap{margin-top:4px}
-.equipment-motor .density-chart{height:300px}
-.equipment-motor .density-stage{border-color:#23406e;background:#071428}
+.equipment-motor .temp-trend-wrap{margin-top:4px}
+.equipment-motor .temp-trend-chart{height:300px}
+.equipment-motor .temp-trend-stage{border-color:#23406e;background:#071428}
+.equipment-motor .temp-trend-toolbar .detail-button{width:auto}
 .equipment-motor .live-form{display:grid;gap:8px}
 body .equipment-motor .live-form input{width:100%;max-width:none;height:38px;margin:0;padding:0 10px;border:1px solid #8eabda;border-radius:8px;background:#fff;color:#102d60;color-scheme:light;font:14px Arial,sans-serif}
 @media(min-width:1100px){

@@ -102,21 +102,22 @@ body .area-chart.area-chart-large{height:360px;min-height:320px}
 body .area-chart .area-grid line{stroke:#23406e}
 body .area-chart text{fill:#9eb4d6;font-size:11px}
 body .area-chart .area-name{font-size:12px;font-weight:700;font-family:Tahoma,Arial,sans-serif}
-body .density-wrap{display:grid;gap:10px;min-width:0}
-body .density-toolbar{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
-body .density-toolbar .detail-button{min-height:34px;padding:0 12px}
-body .density-hint{color:#9eb4d6;font-size:12px;line-height:1.35}
-body .density-stage{min-width:0;overflow:hidden;border:1px solid #23406e;border-radius:12px;background:#071428}
-body .density-chart{width:100%;height:360px;display:block;direction:ltr;cursor:crosshair}
-body .density-chart .density-grid line{stroke:#1e3a5f;stroke-width:1}
-body .density-chart text{fill:#9eb4d6;font-size:11px;font-family:Tahoma,Arial,sans-serif}
-body .density-chart .density-axis-label{fill:#7f9bc4;font-size:11px}
-body .density-chart .density-fill{fill-opacity:.28;stroke:none}
-body .density-chart .density-line{fill:none;stroke-width:2.4;stroke-linejoin:round;stroke-linecap:round}
-body .density-chart .density-name{font-size:12px;font-weight:700}
-body .density-chart .density-cursor{stroke:#f8fafc;stroke-width:1.2;stroke-dasharray:4 3;opacity:.85}
-body .density-chart .density-cursor-dot{fill:#f8fafc;stroke:#3b82f6;stroke-width:2}
-body .density-readout{margin:0;color:#dbe7fb;font-size:13px;line-height:1.45;min-height:1.4em}
+body .temp-trend-wrap{display:grid;gap:10px;min-width:0}
+body .temp-trend-toolbar{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+body .temp-trend-toolbar .detail-button{width:auto;min-width:0;min-height:34px;padding:0 14px}
+body .temp-trend-hint{color:#9eb4d6;font-size:12px;line-height:1.35}
+body .temp-trend-equip{margin:0;color:#c5d6f4;font-size:12px;line-height:1.4}
+body .temp-trend-stage{min-width:0;overflow:hidden;border:1px solid #23406e;border-radius:12px;background:#071428}
+body .temp-trend-chart{width:100%;height:360px;display:block;direction:ltr;cursor:crosshair}
+body .temp-trend-chart .temp-trend-grid line{stroke:#1e3a5f;stroke-width:1}
+body .temp-trend-chart text{fill:#9eb4d6;font-size:11px;font-family:Tahoma,Arial,sans-serif}
+body .temp-trend-chart .temp-trend-axis{fill:#7f9bc4;font-size:11px}
+body .temp-trend-chart .temp-trend-line{fill:none;stroke-width:2.6;stroke-linejoin:round;stroke-linecap:round}
+body .temp-trend-chart .temp-trend-name{font-size:12px;font-weight:700}
+body .temp-trend-chart .temp-trend-equip-label{font-size:10px;font-weight:700}
+body .temp-trend-chart .temp-trend-limit{stroke:#fa3038;stroke-width:1.4;stroke-dasharray:4 3}
+body .temp-trend-chart .temp-trend-cursor{stroke:#f8fafc;stroke-width:1.2;stroke-dasharray:4 3;opacity:.85}
+body .temp-trend-readout{margin:0;color:#dbe7fb;font-size:13px;line-height:1.45;min-height:1.4em}
 body .bump-chart{width:100%;height:auto;display:block;direction:ltr}
 body .bump-chart .bump-grid line{stroke:#23406e}
 body .bump-chart .bump-grid circle{fill:none;stroke:#9eb4d6}
