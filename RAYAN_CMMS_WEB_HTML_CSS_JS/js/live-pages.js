@@ -508,9 +508,22 @@ function syncPlantSelection(ids) {
 
 function equipmentIdsWithSopFile() {
   return new Set(
-    oneSopPerEquipment(store.sops || [])
+    oneSopPerEquipment(store?.sops || [])
       .filter((sop) => sop.equipment_id && (/Published|Approved/i.test(sop.status || '') || sop.document_path))
       .map((sop) => sop.equipment_id),
+  );
+}
+
+function sopHasManual(manual) {
+  const doc = manual?.document;
+  if (!doc || typeof doc !== 'object') return false;
+  return Boolean(
+    manual.filename
+    || doc.title
+    || (doc.steps || []).length
+    || (doc.safety || []).length
+    || doc.document_no
+    || doc.equipment_name,
   );
 }
 
@@ -1245,13 +1258,14 @@ function assetList(selectedCode, options = {}) {
   const markMissingSop = Boolean(options.markMissingSop);
   const withSop = (requireSop || markMissingSop) ? equipmentIdsWithSopFile() : null;
   const plants = selectedPlantIds();
-  const items = (store.equipment || []).filter((item) => {
+  const items = (store?.equipment || []).filter((item) => {
     if (plants.length && !plants.includes(item.plant_id)) return false;
     if (!plants.length && ui.plantId && item.plant_id !== ui.plantId) return false;
     if (ui.lineId && item.line_id !== ui.lineId) return false;
     if (ui.sectionId && item.section_id !== ui.sectionId) return false;
     if (ui.equipmentId && item.equipment_id !== ui.equipmentId && options.narrowToEquipment) return false;
     if (requireSop && withSop && !withSop.has(item.equipment_id)) return false;
+    if (!equipmentMatchesQuery(item)) return false;
     return true;
   });
   return `<aside class="equipment-list"><h3>${esc(t('Select Equipment'))}</h3><label class="mini-search">⌕ <input id="asset-search" placeholder="${esc(t('Search equipment...'))}"></label>${items.map((item) => {
@@ -2343,7 +2357,7 @@ function sopManualHtml(manual) {
 
 function sopParagraphEditor(equipment, manual) {
   const locked = !canMaintain();
-  const hasManual = Boolean(manual?.document);
+  const hasManual = sopHasManual(manual);
   const write = locked
     ? ''
     : `<button type="button" id="sop-import" class="detail-button primary">${esc(t(hasManual ? 'Replace SOP file' : 'Publish SOP file'))}</button><input id="sop-import-file" type="file" accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" hidden>${hasManual ? `<button type="button" class="detail-button danger" data-delete="/equipment" data-delete-id="${esc(equipment.equipment_id)}" data-delete-suffix="/sop" data-delete-note="Delete this equipment SOP? The published file will be removed.">${esc(t('Delete SOP'))}</button>` : ''}`;
@@ -2387,8 +2401,9 @@ async function importSopParagraphs(file) {
   try {
     await apiRequest(`/equipment/${encodeURIComponent(equipmentId)}/sop-paragraphs/import`, { method: 'POST', body });
     store = null;
+    ui.rowKey = '';
     toast(t('SOP file imported.'));
-    await drawSops();
+    await paint('sop');
   } catch (exception) {
     if (error) error.textContent = t(exception.message);
   }
@@ -2405,6 +2420,7 @@ function oneSopPerEquipment(list) {
 }
 
 async function drawSops() {
+  if (!store) await loadStore();
   const techView = isTechnician();
   const withSop = equipmentIdsWithSopFile();
   if (techView && ui.equipmentId && !withSop.has(ui.equipmentId)) {
@@ -2428,6 +2444,7 @@ async function drawSops() {
     if (!selectedPlantIds().length && ui.plantId && item.plant_id !== ui.plantId) return false;
     if (ui.lineId && item.line_id !== ui.lineId) return false;
     if (ui.sectionId && item.section_id !== ui.sectionId) return false;
+    if (!equipmentMatchesQuery(item)) return false;
     return true;
   });
   const published = all.filter((sop) => /Published|Approved/i.test(sop.status || '') || sop.document_path);
@@ -2459,7 +2476,7 @@ async function drawSops() {
   const pickNote = techView
     ? t('Select a machine that has a published SOP file.')
     : t('Select a machine, then publish one SOP Excel file for it. Machines without an SOP are marked in red.');
-  const hasManual = Boolean(manual?.document);
+  const hasManual = sopHasManual(manual);
   const filterBar = filtersHtml({ sopOnly: techView });
   const list = assetList(chosen, {
     requireSop: techView,
@@ -2471,35 +2488,41 @@ async function drawSops() {
       ? sopParagraphEditor(equipment, manual)
       : `<p class="live-note">${esc(pickNote)}</p>`;
     markup = `<section class="panel sop-tech-panel">${filterBar}<div class="sop-tech-layout">${list}<div class="sop-tech-view">${sheet}</div></div></section>`;
+  } else if (equipment && hasManual) {
+    const detail = selected
+      ? detailPanel('SOP Details', selected.status || '—', selected.sop_id || '—', selected.title || '', [
+        ['Equipment', selected.equipment_id], ['Category', selected.sop_type], ['Revision', selected.revision],
+        ['Effective', fmtDate(selected.effective_date)], ['Imported file', selected.document_path || manual?.filename || '—'],
+      ])
+      : `<aside class="panel detail"><h2>${esc(t('SOP Details'))}</h2><p class="live-note">${esc(`${equipment.equipment_id} · ${equipment.name || ''}`)}</p><p class="live-note">${esc(t('Imported file'))}: ${esc(manual?.filename || '—')}</p></aside>`;
+    markup = `<section class="panel">${filterBar}<div class="split">${list}<div class="asset-view sop-manual-view">${sopParagraphEditor(equipment, manual)}</div></div></section>${detail}`;
+  } else if (equipment && !hasManual && canMaintain()) {
+    const detail = `<aside class="panel detail sop-publish-detail">${sopParagraphEditor(equipment, manual)}</aside>`;
+    const body = rows.map((sop) => `<tr data-row="${esc(sop.sop_id)}" class="${selected && selected.sop_id === sop.sop_id ? 'selected' : ''}">${cell(esc(sop.sop_id), true)}${cell(esc(sop.title))}${cell(esc(sop.equipment_id || '—'))}${cell(esc(sop.revision || '—'))}${cell(liveBadge(sop.status))}${cell(esc(sop.document_path || '—'))}</tr>`);
+    markup = `<section class="panel">${filterBar}<div class="split">${list}<div class="asset-view">${tabsHtml(['All SOPs', 'Published'])}${tableShell(['SOP Code', 'SOP Title', 'Equipment', 'Version', 'Status', 'Imported file'], body, shown(rows.length, all.length, 'SOPs'))}</div></div></section>${detail}`;
   } else {
     const body = rows.map((sop) => `<tr data-row="${esc(sop.sop_id)}" class="${selected && selected.sop_id === sop.sop_id ? 'selected' : ''}">${cell(esc(sop.sop_id), true)}${cell(esc(sop.title))}${cell(esc(sop.equipment_id || '—'))}${cell(esc(sop.revision || '—'))}${cell(liveBadge(sop.status))}${cell(esc(sop.document_path || '—'))}</tr>`);
-    let detail;
-    let sheet = '';
-    if (equipment && !hasManual && canMaintain()) {
-      detail = `<aside class="panel detail sop-publish-detail">${sopParagraphEditor(equipment, manual)}</aside>`;
-    } else if (selected) {
-      detail = detailPanel('SOP Details', selected.status || '—', selected.sop_id || '—', selected.title || '', [
+    const detail = selected
+      ? detailPanel('SOP Details', selected.status || '—', selected.sop_id || '—', selected.title || '', [
         ['Equipment', selected.equipment_id], ['Category', selected.sop_type], ['Revision', selected.revision],
         ['Effective', fmtDate(selected.effective_date)], ['Imported file', selected.document_path || '—'],
-      ]);
-      sheet = equipment ? sopParagraphEditor(equipment, manual) : '';
-    } else if (equipment) {
-      detail = `<aside class="panel detail"><h2>${esc(t('SOP Details'))}</h2><p class="live-note">${esc(`${equipment.equipment_id} · ${equipment.name || ''}`)}</p><p class="live-note">${esc(pickNote)}</p></aside>`;
-      sheet = canMaintain() ? sopParagraphEditor(equipment, manual) : '';
-    } else {
-      detail = `<aside class="panel detail"><h2>${esc(t('SOP Details'))}</h2><p class="live-note">${esc(pickNote)}</p></aside>`;
-    }
-    markup = `<section class="panel">${filterBar}<div class="split">${list}<div class="asset-view">${tabsHtml(['All SOPs', 'Published'])}${tableShell(['SOP Code', 'SOP Title', 'Equipment', 'Version', 'Status', 'Imported file'], body, shown(rows.length, all.length, 'SOPs'))}</div></div>${sheet}</section>${detail}`;
+      ])
+      : `<aside class="panel detail"><h2>${esc(t('SOP Details'))}</h2><p class="live-note">${esc(pickNote)}</p></aside>`;
+    markup = `<section class="panel">${filterBar}<div class="split">${list}<div class="asset-view">${tabsHtml(['All SOPs', 'Published'])}${tableShell(['SOP Code', 'SOP Title', 'Equipment', 'Version', 'Status', 'Imported file'], body, shown(rows.length, all.length, 'SOPs'))}</div></div></section>${detail}`;
   }
   document.getElementById('workspace').className = 'workspace sop-board';
   document.getElementById('workspace').innerHTML = markup;
-  if (!techView && canMaintain() && selected?.equipment_id) {
-    document.querySelector('.detail')?.insertAdjacentHTML('beforeend', `<button type="button" class="detail-button danger" data-delete="/equipment" data-delete-id="${esc(selected.equipment_id)}" data-delete-suffix="/sop" data-delete-note="Delete this equipment SOP? The published file will be removed.">${esc(t('Delete SOP'))}</button>`);
+  if (!techView && canMaintain() && selected?.equipment_id && hasManual) {
+    const detail = document.querySelector('.detail');
+    if (detail && !detail.querySelector('[data-delete-suffix="/sop"]') && !document.getElementById('sop-import')) {
+      detail.insertAdjacentHTML('beforeend', `<button type="button" class="detail-button danger" data-delete="/equipment" data-delete-id="${esc(selected.equipment_id)}" data-delete-suffix="/sop" data-delete-note="Delete this equipment SOP? The published file will be removed.">${esc(t('Delete SOP'))}</button>`);
+    }
   }
   bindFilters();
   bindAssets();
   if (!techView) bindRows();
   bindDeletes();
+  document.querySelector('.asset.selected')?.scrollIntoView({ block: 'nearest' });
   const importButton = document.getElementById('sop-import');
   const importFile = document.getElementById('sop-import-file');
   importButton?.addEventListener('click', () => importFile?.click());

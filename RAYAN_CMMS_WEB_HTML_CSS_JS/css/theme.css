@@ -856,6 +856,8 @@ body .detail.sop-publish-detail .sop-sheet{margin:0;padding:0;border:0;border-ra
 body .detail.sop-publish-detail .sop-sheet-bar{flex-direction:column;align-items:stretch;margin-bottom:12px}
 body .detail.sop-publish-detail .sop-sheet-bar h3{flex:none;font-size:14px;line-height:1.35}
 body .detail.sop-publish-detail .sop-sheet-bar .detail-button{width:100%;height:42px;padding:0 14px}
+.workspace.sop-board .asset-view.sop-manual-view{min-width:0;overflow:auto;-webkit-overflow-scrolling:touch}
+.workspace.sop-board .asset-view.sop-manual-view .sop-sheet{margin-top:0}
 .sop-paragraphs{display:flex;flex-direction:column;gap:8px;margin:0;padding:0;list-style:none}
 .sop-paragraphs li{display:flex;gap:8px;align-items:flex-start}
 .sop-paragraphs b{flex:0 0 36px;height:36px;display:grid;place-items:center;border:1px solid #2a5287;border-radius:8px;background:#10284f;color:#f4f8ff;font-size:14px}
