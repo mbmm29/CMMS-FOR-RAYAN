@@ -344,9 +344,14 @@ function equipmentText(row) {
 function equipmentMatchesQuery(item, query = ui.equipmentQuery) {
   const needle = String(query || '').trim().toLowerCase();
   if (!needle) return true;
-  const code = String(item?.equipment_id || '').toLowerCase();
-  const name = String(item?.name || '').toLowerCase();
-  return code.includes(needle) || name.includes(needle);
+  const fields = [
+    item?.equipment_id,
+    item?.name,
+    item?.equipment_type,
+    item?.model,
+    item?.serial_number,
+  ];
+  return fields.some((value) => String(value || '').toLowerCase().includes(needle));
 }
 
 function visibleEquipment() {
@@ -553,7 +558,7 @@ function filtersHtml(options = {}) {
     : `<label>${t('Plant')}<select data-filter="plant">${option('', t('All plants'), ui.plantId)}${openPlants().map((plant) => option(plant.plant_id, plant.name, ui.plantId)).join('')}</select></label>`;
   const searchFilter = options.equipmentSearch === false
     ? ''
-    : `<label class="equipment-query">${esc(t('Search'))}<span class="equipment-query-row"><input id="equipment-query" type="search" value="${esc(ui.equipmentQuery || '')}" placeholder="${esc(t('Number or name'))}" autocomplete="off"><button type="button" class="detail-button" id="equipment-query-go">${esc(t('Search'))}</button></span></label>`;
+    : `<label class="equipment-query">${esc(t('Search'))}<span class="equipment-query-row"><input id="equipment-query" type="search" value="${esc(ui.equipmentQuery || '')}" placeholder="${esc(t('Number, name, or category'))}" autocomplete="off"><button type="button" class="detail-button" id="equipment-query-go">${esc(t('Search'))}</button></span></label>`;
   return `<div class="live-filters">
     ${plantFilter}
     <label>${t('Line')}<select data-filter="line">${option('', t('All lines'), ui.lineId)}${scopedLines.map((line) => option(line.line_id, line.name, ui.lineId)).join('')}</select></label>
@@ -574,14 +579,18 @@ function applyEquipmentQuery(raw) {
   }
   const openIds = new Set((store.plants || []).filter((plant) => plant.active !== false).map((plant) => plant.plant_id));
   const plants = selectedPlantIds();
-  const plantScope = plants.length ? new Set(plants) : openIds;
-  const matches = (store.equipment || []).filter((item) => (
-    (!item.plant_id || openIds.has(item.plant_id))
-    && (!plants.length || plantScope.has(item.plant_id))
-    && (!ui.lineId || item.line_id === ui.lineId)
-    && (!ui.sectionId || item.section_id === ui.sectionId)
-    && equipmentMatchesQuery(item, query)
-  ));
+  const plantFilterOn = plants.length > 0 || Boolean(ui.plantId);
+  // With no plant filter, search every active plant by number, name, or category.
+  const matches = (store.equipment || []).filter((item) => {
+    if (!item.plant_id || !openIds.has(item.plant_id)) return false;
+    if (plants.length && !plants.includes(item.plant_id)) return false;
+    if (!plants.length && ui.plantId && item.plant_id !== ui.plantId) return false;
+    if (plantFilterOn) {
+      if (ui.lineId && item.line_id !== ui.lineId) return false;
+      if (ui.sectionId && item.section_id !== ui.sectionId) return false;
+    }
+    return equipmentMatchesQuery(item, query);
+  });
   if (!matches.length) {
     ui.equipmentId = '';
     ui.rowKey = '';
@@ -590,9 +599,14 @@ function applyEquipmentQuery(raw) {
     return;
   }
   const needle = query.toLowerCase();
-  const pick = matches.find((item) => String(item.equipment_id || '').toLowerCase() === needle)
-    || matches.find((item) => String(item.name || '').toLowerCase() === needle)
-    || (matches.length === 1 ? matches[0] : null);
+  const exactCode = matches.find((item) => String(item.equipment_id || '').toLowerCase() === needle);
+  const exactName = matches.find((item) => String(item.name || '').toLowerCase() === needle);
+  const exactCategory = matches.find((item) => {
+    const type = String(item.equipment_type || '').toLowerCase();
+    const model = String(item.model || '').toLowerCase();
+    return type === needle || model === needle;
+  });
+  const pick = exactCode || (matches.length === 1 ? matches[0] : null);
   if (pick) {
     ui.equipmentId = pick.equipment_id;
     ui.rowKey = pick.equipment_id;
@@ -603,8 +617,16 @@ function applyEquipmentQuery(raw) {
     if (pick.line_id) ui.lineId = pick.line_id;
     if (pick.section_id) ui.sectionId = pick.section_id || '';
   } else {
+    // Multiple hits (name/category): keep the list open across plants; do not lock one plant.
     ui.equipmentId = '';
     ui.rowKey = '';
+    if (!plantFilterOn) {
+      ui.lineId = '';
+      ui.sectionId = '';
+    }
+    if (exactName || exactCategory) {
+      toast(`${matches.length} ${t('matches')}`);
+    }
   }
   draw(ui.page);
 }

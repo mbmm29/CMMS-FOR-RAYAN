@@ -304,6 +304,8 @@ const CMMS_AR = {
   'Search equipment...': 'بحث عن معدة...',
   'Search': 'بحث',
   'Number or name': 'رقم المعدة أو اسمها',
+  'Number, name, or category': 'رقم أو اسم أو تصنيف',
+  'matches': 'نتيجة',
   'No equipment found': 'لا توجد معدة مطابقة',
   'Filters': 'تصفية',
   'Filter': 'تصفية',
