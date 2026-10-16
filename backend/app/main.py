@@ -412,6 +412,22 @@ def new_id(db, model, column, prefix):
     while db.query(model).filter(column==f'{prefix}-{n:05d}').first(): n+=1
     return f'{prefix}-{n:05d}'
 
+
+def next_year_report_id(db, model, column, prefix, year):
+    """Next DR/LR-style id for a year, skipping gaps and already-used numbers."""
+    stem = f'{prefix}-{int(year)}-'
+    highest = 0
+    for (value,) in db.query(column).filter(column.like(f'{stem}%')).all():
+        tail = str(value or '')[len(stem):]
+        if tail.isdigit():
+            highest = max(highest, int(tail))
+    number = highest + 1
+    report_id = f'{stem}{number:05d}'
+    while db.query(model).filter(column == report_id).first():
+        number += 1
+        report_id = f'{stem}{number:05d}'
+    return report_id
+
 def bootstrap_system(db: Session) -> bool:
     """Provision the local system-developer account and baseline reference data.
 
@@ -2665,11 +2681,7 @@ def deliver_to_technician(db, actor, work_order, technician_id):
         DailyReport.status.in_(('Draft', 'Returned')),
     ).order_by(DailyReport.id.desc()).first()
     if report is None:
-        sequence = db.query(DailyReport).count() + 1
-        report_id = f'DR-{today.year}-{sequence:05d}'
-        while db.query(DailyReport).filter_by(report_id=report_id).first():
-            sequence += 1
-            report_id = f'DR-{today.year}-{sequence:05d}'
+        report_id = next_year_report_id(db, DailyReport, DailyReport.report_id, 'DR', today.year)
         report = DailyReport(report_id=report_id, report_date=today, technician_id=technician_id, status='Draft', work_order_id=work_order.work_order_id)
         db.add(report)
         db.flush()
@@ -3625,7 +3637,7 @@ def create_report(
                 f'Daily Report already exists for this technician/date: {existing.report_id}'
             )
 
-    rid = f'DR-{data.report_date.year}-{db.query(DailyReport).count()+1:05d}'
+    rid = next_year_report_id(db, DailyReport, DailyReport.report_id, 'DR', data.report_date.year)
 
     try:
         r = DailyReport(
@@ -4776,7 +4788,7 @@ def save_lubrication_report(data: LubricationSave, db: Session = Depends(get_db)
     ).first()
     created = row is None
     if created:
-        report_id = f'LR-{data.report_date.year}-{db.query(LubricationReport).count() + 1:05d}'
+        report_id = next_year_report_id(db, LubricationReport, LubricationReport.report_id, 'LR', data.report_date.year)
         row = LubricationReport(
             report_id=report_id,
             report_date=data.report_date,
