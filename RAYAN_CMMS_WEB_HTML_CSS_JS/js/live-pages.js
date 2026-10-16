@@ -2092,13 +2092,16 @@ function equipmentTabs() {
 
 function equipmentDetail(selected) {
   const capacity = selected?.capacity == null ? '—' : `${selected.capacity}${selected.capacity_unit ? ` ${selected.capacity_unit}` : ''}`;
-  return detailPanel('Equipment Details', selected?.status || '—', selected?.equipment_id || '—', selected?.name || '', [
+  const actions = selected?.equipment_id && canMaintain()
+    ? `<div class="equipment-actions"><button type="button" class="detail-button primary" id="equipment-edit">${esc(t('Edit'))}</button><button type="button" class="detail-button danger" data-delete="/equipment" data-delete-id="${esc(selected.equipment_id)}" data-delete-note="Delete this equipment? Its maintenance history and KPI charts will be removed.">${esc(t('Delete'))}</button></div>`
+    : '';
+  return `<aside class="panel detail"><h2>${esc(t('Equipment Details'))}</h2><div class="detail-top"><div class="machine">⚙</div>${liveBadge(selected?.status || '—')}<h3>${esc(selected?.equipment_id || '—')}</h3><p>${esc(selected?.name || '')}</p></div>${actions}<div class="detail-list">${detailRows([
     ['Category', selected?.equipment_type], ['Location', placeOf(selected)], ['Section', sectionName(selected?.section_id) || '—'], ['Area', selected?.area],
     ['Manufacturer', selected?.manufacturer], ['Model', selected?.model], ['Serial number', selected?.serial_number],
     ['Criticality', criticalityLabel(selected?.criticality)], ['Condition', selected?.condition], ['Capacity', capacity],
     ['Motor power (kW)', selected?.motor_power_kw ?? '—'],
     ['Notes', selected?.notes],
-  ]);
+  ])}</div></aside>`;
 }
 
 let equipmentMotorToken = 0;
@@ -2235,18 +2238,14 @@ function drawEquipment() {
       : equipmentDetail(selected);
   document.getElementById('workspace').className = 'workspace';
   document.getElementById('workspace').innerHTML = `<section class="panel">${filtersHtml()}${equipmentTabs()}${tableShell(['Equipment Code', 'Equipment Name', 'Category', 'Location (Plant / Line)', 'Status', 'Condition', 'Criticality'], body, shown(rows.length, all.length, 'equipment'))}</section>${detail}`;
-  if (selected && canMaintain() && ui.mode === 'view') {
-    const sectionForm = lineSections(selected.line_id).length
-      ? `<form id="equipment-section" class="live-form"><label>${esc(t('Section'))}<select name="section_id">${sectionOptions(selected.line_id, selected.section_id || '')}</select></label><button class="detail-button primary" type="submit">${esc(t('Save'))}</button><p id="equipment-section-error" class="form-error"></p></form>`
-      : `<p class="live-note">${esc(t('No sections on this line yet.'))}</p>`;
-    const afterList = document.querySelector('.detail .detail-list') || document.querySelector('.detail');
-    afterList?.insertAdjacentHTML(
-      afterList.classList?.contains('detail-list') ? 'afterend' : 'beforeend',
-      `<div class="equipment-actions"><button type="button" class="detail-button primary" id="equipment-edit">${esc(t('Edit'))}</button><button type="button" class="detail-button danger" data-delete="/equipment" data-delete-id="${esc(selected.equipment_id)}" data-delete-note="Delete this equipment? Its maintenance history and KPI charts will be removed.">${esc(t('Delete'))}</button></div>${sectionForm}<div id="equipment-parts" class="equipment-parts"></div>`,
-    );
-    loadEquipmentParts(selected);
-  }
   if (selected && ui.mode === 'view') {
+    if (canMaintain()) {
+      const sectionForm = lineSections(selected.line_id).length
+        ? `<form id="equipment-section" class="live-form"><label>${esc(t('Section'))}<select name="section_id">${sectionOptions(selected.line_id, selected.section_id || '')}</select></label><button class="detail-button primary" type="submit">${esc(t('Save'))}</button><p id="equipment-section-error" class="form-error"></p></form>`
+        : `<p class="live-note">${esc(t('No sections on this line yet.'))}</p>`;
+      document.querySelector('.detail')?.insertAdjacentHTML('beforeend', `${sectionForm}<div id="equipment-parts" class="equipment-parts"></div>`);
+      loadEquipmentParts(selected);
+    }
     document.querySelector('.detail')?.insertAdjacentHTML('beforeend', '<div id="equipment-motor" class="equipment-motor"></div>');
     loadEquipmentMotor(selected);
   }
@@ -2255,6 +2254,7 @@ function drawEquipment() {
   bindForm(selected);
   bindDeletes();
   document.getElementById('equipment-edit')?.addEventListener('click', () => {
+    if (!selected?.equipment_id) return;
     ui.mode = 'edit';
     ui.rowKey = selected.equipment_id;
     draw('equipment');
@@ -2265,6 +2265,7 @@ function drawEquipment() {
   });
   document.getElementById('equipment-section')?.addEventListener('submit', async (event) => {
     event.preventDefault();
+    if (!selected?.equipment_id) return;
     const error = document.getElementById('equipment-section-error');
     const sectionId = new FormData(event.currentTarget).get('section_id') || null;
     try {
