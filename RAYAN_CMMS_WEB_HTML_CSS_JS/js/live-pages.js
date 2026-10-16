@@ -2235,18 +2235,20 @@ function drawEquipment() {
       : equipmentDetail(selected);
   document.getElementById('workspace').className = 'workspace';
   document.getElementById('workspace').innerHTML = `<section class="panel">${filtersHtml()}${equipmentTabs()}${tableShell(['Equipment Code', 'Equipment Name', 'Category', 'Location (Plant / Line)', 'Status', 'Condition', 'Criticality'], body, shown(rows.length, all.length, 'equipment'))}</section>${detail}`;
+  if (selected && canMaintain() && ui.mode === 'view') {
+    const sectionForm = lineSections(selected.line_id).length
+      ? `<form id="equipment-section" class="live-form"><label>${esc(t('Section'))}<select name="section_id">${sectionOptions(selected.line_id, selected.section_id || '')}</select></label><button class="detail-button primary" type="submit">${esc(t('Save'))}</button><p id="equipment-section-error" class="form-error"></p></form>`
+      : `<p class="live-note">${esc(t('No sections on this line yet.'))}</p>`;
+    const afterList = document.querySelector('.detail .detail-list') || document.querySelector('.detail');
+    afterList?.insertAdjacentHTML(
+      afterList.classList?.contains('detail-list') ? 'afterend' : 'beforeend',
+      `<div class="equipment-actions"><button type="button" class="detail-button primary" id="equipment-edit">${esc(t('Edit'))}</button><button type="button" class="detail-button danger" data-delete="/equipment" data-delete-id="${esc(selected.equipment_id)}" data-delete-note="Delete this equipment? Its maintenance history and KPI charts will be removed.">${esc(t('Delete'))}</button></div>${sectionForm}<div id="equipment-parts" class="equipment-parts"></div>`,
+    );
+    loadEquipmentParts(selected);
+  }
   if (selected && ui.mode === 'view') {
     document.querySelector('.detail')?.insertAdjacentHTML('beforeend', '<div id="equipment-motor" class="equipment-motor"></div>');
     loadEquipmentMotor(selected);
-  }
-  if (selected && canMaintain() && ui.mode === 'view') {
-    document.querySelector('.detail')?.insertAdjacentHTML('beforeend', '<div id="equipment-parts" class="equipment-parts"></div>');
-    loadEquipmentParts(selected);
-    const sectionForm = lineSections(selected.line_id).length ? `<form id="equipment-section" class="live-form"><label>${esc(t('Section'))}<select name="section_id">${sectionOptions(selected.line_id, selected.section_id || '')}</select></label><button class="detail-button primary" type="submit">${esc(t('Save'))}</button><p id="equipment-section-error" class="form-error"></p></form>` : `<p class="live-note">${esc(t('No sections on this line yet.'))}</p>`;
-    document.querySelector('.detail')?.insertAdjacentHTML(
-      'beforeend',
-      `<div class="equipment-actions"><button type="button" class="detail-button primary" id="equipment-edit">${esc(t('Edit'))}</button><button type="button" class="detail-button danger" data-delete="/equipment" data-delete-id="${esc(selected.equipment_id)}" data-delete-note="Delete this equipment? Its maintenance history and KPI charts will be removed.">${esc(t('Delete'))}</button></div>${sectionForm}`,
-    );
   }
   bindFilters();
   bindRows();
