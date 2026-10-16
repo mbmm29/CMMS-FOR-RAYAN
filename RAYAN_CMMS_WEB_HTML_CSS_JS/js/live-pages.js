@@ -2489,13 +2489,8 @@ async function drawSops() {
       : `<p class="live-note">${esc(pickNote)}</p>`;
     markup = `<section class="panel sop-tech-panel">${filterBar}<div class="sop-tech-layout">${list}<div class="sop-tech-view">${sheet}</div></div></section>`;
   } else if (equipment && hasManual) {
-    const detail = selected
-      ? detailPanel('SOP Details', selected.status || '—', selected.sop_id || '—', selected.title || '', [
-        ['Equipment', selected.equipment_id], ['Category', selected.sop_type], ['Revision', selected.revision],
-        ['Effective', fmtDate(selected.effective_date)], ['Imported file', selected.document_path || manual?.filename || '—'],
-      ])
-      : `<aside class="panel detail"><h2>${esc(t('SOP Details'))}</h2><p class="live-note">${esc(`${equipment.equipment_id} · ${equipment.name || ''}`)}</p><p class="live-note">${esc(t('Imported file'))}: ${esc(manual?.filename || '—')}</p></aside>`;
-    markup = `<section class="panel">${filterBar}<div class="split">${list}<div class="asset-view sop-manual-view">${sopParagraphEditor(equipment, manual)}</div></div></section>${detail}`;
+    const detail = `<aside class="panel detail sop-details-view"><h2>${esc(t('SOP Details'))}</h2>${sopParagraphEditor(equipment, manual)}</aside>`;
+    markup = `<section class="panel sop-list-panel">${filterBar}${list}</section>${detail}`;
   } else if (equipment && !hasManual && canMaintain()) {
     const detail = `<aside class="panel detail sop-publish-detail">${sopParagraphEditor(equipment, manual)}</aside>`;
     const body = rows.map((sop) => `<tr data-row="${esc(sop.sop_id)}" class="${selected && selected.sop_id === sop.sop_id ? 'selected' : ''}">${cell(esc(sop.sop_id), true)}${cell(esc(sop.title))}${cell(esc(sop.equipment_id || '—'))}${cell(esc(sop.revision || '—'))}${cell(liveBadge(sop.status))}${cell(esc(sop.document_path || '—'))}</tr>`);
@@ -2510,14 +2505,8 @@ async function drawSops() {
       : `<aside class="panel detail"><h2>${esc(t('SOP Details'))}</h2><p class="live-note">${esc(pickNote)}</p></aside>`;
     markup = `<section class="panel">${filterBar}<div class="split">${list}<div class="asset-view">${tabsHtml(['All SOPs', 'Published'])}${tableShell(['SOP Code', 'SOP Title', 'Equipment', 'Version', 'Status', 'Imported file'], body, shown(rows.length, all.length, 'SOPs'))}</div></div></section>${detail}`;
   }
-  document.getElementById('workspace').className = 'workspace sop-board';
+  document.getElementById('workspace').className = `workspace sop-board${equipment && hasManual && !techView ? ' sop-reading' : ''}`;
   document.getElementById('workspace').innerHTML = markup;
-  if (!techView && canMaintain() && selected?.equipment_id && hasManual) {
-    const detail = document.querySelector('.detail');
-    if (detail && !detail.querySelector('[data-delete-suffix="/sop"]') && !document.getElementById('sop-import')) {
-      detail.insertAdjacentHTML('beforeend', `<button type="button" class="detail-button danger" data-delete="/equipment" data-delete-id="${esc(selected.equipment_id)}" data-delete-suffix="/sop" data-delete-note="Delete this equipment SOP? The published file will be removed.">${esc(t('Delete SOP'))}</button>`);
-    }
-  }
   bindFilters();
   bindAssets();
   if (!techView) bindRows();
