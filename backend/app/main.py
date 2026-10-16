@@ -304,6 +304,26 @@ def ensure_additive_columns():
 
 ensure_additive_columns()
 assign_missing_order_codes()
+
+
+def maybe_import_equipment_catalog():
+    """Load Add Equipment.xlsx once when the catalog marker is not in the database yet."""
+    db = SessionLocal()
+    try:
+        if db.query(Equipment).filter_by(equipment_id='A-1062').first():
+            return
+        from .equipment_catalog_import import import_equipment_catalog
+        import_equipment_catalog(db, update_existing=True)
+    except Exception:
+        try:
+            db.rollback()
+        except Exception:
+            pass
+    finally:
+        db.close()
+
+
+maybe_import_equipment_catalog()
 start_phone_notices()
 
 app=FastAPI(title='Mechanical Maintenance CMMS API',version='2.0.0')
@@ -817,6 +837,31 @@ def list_equipment(line_id:str|None=None,db:Session=Depends(get_db),u=Depends(au
     q=db.query(Equipment)
     if line_id:q=q.filter(Equipment.line_id==line_id)
     return q.order_by(Equipment.equipment_id).all()
+
+@app.post('/equipment/import-catalog')
+def import_equipment_catalog_endpoint(
+    update_existing: bool = True,
+    db: Session = Depends(get_db),
+    u=Depends(role(*ENGINEER)),
+):
+    """Load plants, lines, sections and equipment from Add Equipment.xlsx catalog."""
+    from .equipment_catalog_import import import_equipment_catalog
+    result = import_equipment_catalog(db, update_existing=update_existing)
+    audit(
+        db,
+        u,
+        'IMPORT',
+        'Equipment',
+        'add_equipment_catalog',
+        new={
+            'created': result.get('created'),
+            'updated': result.get('updated'),
+            'skipped': result.get('skipped'),
+            'error_count': result.get('error_count'),
+        },
+    )
+    db.commit()
+    return result
 
 @app.get('/equipment/lookup')
 def lookup_equipment(code: str, plant_id: str | None = None, line_id: str | None = None, db: Session = Depends(get_db), u=Depends(auth)):
