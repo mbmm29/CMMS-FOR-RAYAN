@@ -297,7 +297,16 @@ body .lube-paper .lube-table input,body .lube-paper .lube-table select{height:30
 .lube-foot{display:flex;justify-content:space-between;margin:8px 0 0;color:#31517f;font-size:11px;font-weight:700}
 .lube-help{margin:8px 0 0;color:#31517f;font-size:12px}
 .nav-link[hidden],.nav-item[hidden]{display:none!important}
-body[data-live-page="equipment"] .panel.detail,body[data-live-page="new-equipment"] .detail.pending-review,body[data-live-page="spare-parts"] .panel.detail{max-height:calc(100vh - 220px);overflow:auto}
+body[data-live-page="equipment"] .workspace > .panel.detail,
+body[data-live-page="new-equipment"] .workspace > .panel.detail,
+body[data-live-page="new-equipment"] .detail.pending-review,
+body[data-live-page="spare-parts"] .panel.detail{
+  max-height:calc(100vh - 160px)!important;
+  overflow-x:hidden!important;
+  overflow-y:auto!important;
+  -webkit-overflow-scrolling:touch;
+  overscroll-behavior:contain;
+}
 .pending-review .live-form{display:flex;flex-direction:column;gap:8px;margin-top:8px}
 .pending-review .assign-block{display:flex;flex-wrap:wrap;gap:8px;margin-top:10px}
 .pending-review .detail-button{width:auto;flex:1}
@@ -749,8 +758,8 @@ body[data-live-page="equipment"] .workspace,
 body[data-live-page="new-equipment"] .workspace{
   align-items:start;
 }
-body[data-live-page="equipment"] .workspace > .panel,
-body[data-live-page="new-equipment"] .workspace > .panel{
+body[data-live-page="equipment"] .workspace > .panel:not(.detail),
+body[data-live-page="new-equipment"] .workspace > .panel:not(.detail){
   display:flex;
   flex-direction:column;
   min-width:0;
@@ -826,6 +835,10 @@ body .spare-filter select,body .spare-form input,body .spare-form select{width:1
 .stock-critical{color:#ffd27a;font-weight:800}
 body[data-live-page="equipment"] .panel.detail,
 body[data-live-page="new-equipment"] .panel.detail{display:block!important}
+body[data-live-page="equipment"] .panel.detail .live-form,
+body[data-live-page="new-equipment"] .panel.detail .live-form{padding-bottom:20px}
+body[data-live-page="equipment"] .panel.detail .live-form .detail-button,
+body[data-live-page="new-equipment"] .panel.detail .live-form .detail-button{position:sticky;bottom:0;z-index:2}
 body[data-live-page="equipment"] .equipment-actions,
 body[data-live-page="new-equipment"] .equipment-actions{
   display:flex!important;flex-wrap:wrap;gap:8px;margin:12px 0;padding:0;align-items:center;visibility:visible!important;opacity:1!important
@@ -961,9 +974,13 @@ body.technician-interface .workspace.sop-board .detail{display:none}
     margin-left:0;margin-right:0;margin-inline:0;width:auto;max-width:100%;min-width:0;
     padding:calc(68px + env(safe-area-inset-top)) 12px calc(28px + env(safe-area-inset-bottom));
   }
-  body[data-live-page="equipment"] .panel.detail,
+  body[data-live-page="equipment"] .workspace > .panel.detail,
+  body[data-live-page="new-equipment"] .workspace > .panel.detail,
   body[data-live-page="new-equipment"] .detail.pending-review,
-  body[data-live-page="spare-parts"] .panel.detail{max-height:none;overflow:visible}
+  body[data-live-page="spare-parts"] .panel.detail{
+    max-height:calc(100vh - 140px)!important;
+    overflow-y:auto!important;
+  }
   body .page-header h1,
   .app .page-title h1{font-size:clamp(22px,6vw,30px)}
   body .header-actions .primary,
