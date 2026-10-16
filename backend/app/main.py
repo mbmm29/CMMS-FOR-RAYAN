@@ -4812,8 +4812,6 @@ def save_lubrication_report(data: LubricationSave, db: Session = Depends(get_db)
         raise HTTPException(403, 'Insufficient permission')
     if data.shift not in LUBE_SHIFTS:
         raise HTTPException(400, 'Choose a shift')
-    if len(data.lines) > 40:
-        raise HTTPException(400, 'A lubrication report can hold 40 lines')
     if is_technician_account(u):
         profile = provision_technician_profile(db, u)
         if not profile:
