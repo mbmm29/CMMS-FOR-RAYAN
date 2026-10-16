@@ -744,6 +744,44 @@ body .workspace .iso-form input{width:100%;max-width:none;height:40px;margin:0;p
 @media(min-width:1100px){
   body[data-live-page="equipment"] .workspace{grid-template-columns:minmax(0,1fr) minmax(340px,440px)}
 }
+/* Equipment list: keep a dedicated vertical scroll so the mouse wheel can move both ways. */
+body[data-live-page="equipment"] .workspace,
+body[data-live-page="new-equipment"] .workspace{
+  align-items:start;
+}
+body[data-live-page="equipment"] .workspace > .panel,
+body[data-live-page="new-equipment"] .workspace > .panel{
+  display:flex;
+  flex-direction:column;
+  min-width:0;
+  max-height:calc(100vh - 190px);
+  overflow:hidden;
+}
+body[data-live-page="equipment"] .workspace > .panel .live-filters,
+body[data-live-page="equipment"] .workspace > .panel .tabs,
+body[data-live-page="new-equipment"] .workspace > .panel .live-filters,
+body[data-live-page="new-equipment"] .workspace > .panel .tabs{
+  flex:0 0 auto;
+}
+body[data-live-page="equipment"] .workspace > .panel .table-wrap,
+body[data-live-page="new-equipment"] .workspace > .panel .table-wrap{
+  flex:1 1 auto;
+  min-height:0;
+  max-height:none;
+  overflow:auto;
+  overscroll-behavior:auto;
+  -webkit-overflow-scrolling:touch;
+}
+body[data-live-page="equipment"] .workspace > .panel .pagination,
+body[data-live-page="new-equipment"] .workspace > .panel .pagination{
+  flex:0 0 auto;
+}
+body[data-live-page="equipment"] .data-table thead th,
+body[data-live-page="new-equipment"] .data-table thead th{
+  position:sticky;
+  top:0;
+  z-index:2;
+}
 .workspace.log-board .log-temp-panel{margin:16px 0 0;padding:14px 16px;border:1px solid #c5d4ea;border-radius:12px;background:#f7faff;box-shadow:0 1px 0 #ffffffa8 inset}
 .workspace.log-board .log-temp-panel h3,.workspace.log-board .log-temp-panel h4{color:#102d60}
 .workspace.log-board .log-temp-panel h4{color:#4a6490}
