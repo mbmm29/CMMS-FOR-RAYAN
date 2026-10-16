@@ -913,8 +913,10 @@ body.technician-interface .workspace.sop-board .detail{display:none}
   .workspace.sop-board .asset-view .tabs,
   .workspace.sop-board .asset-view .table-wrap,
   .workspace.sop-board .asset-view .pagination,
-  .workspace.sop-board ~ .detail,
-  .workspace.sop-board .detail{display:none!important}
+  .workspace.sop-board:not(.sop-reading) ~ .detail,
+  .workspace.sop-board:not(.sop-reading) .detail{display:none!important}
+  .workspace.sop-board.sop-reading{grid-template-columns:minmax(0,1fr)}
+  .workspace.sop-board.sop-reading .detail.sop-details-view{display:block!important;max-height:none}
   .workspace.sop-board .sop-sheet-bar{gap:6px}
   .workspace.sop-board .sop-sheet-bar h3{flex:1 1 100%;font-size:14px}
   .sop-manual{margin-top:0;box-shadow:none}
