@@ -78,11 +78,40 @@ function dayDiff(value) {
   return Math.round((due - todayStamp()) / 86400000);
 }
 
+function equipmentRowKey(item) {
+  if (!item) return '';
+  return `${item.plant_id || ''}::${item.line_id || ''}::${item.equipment_id || ''}`;
+}
+
+function parseEquipmentRowKey(key) {
+  const parts = String(key || '').split('::');
+  if (parts.length >= 3) {
+    return { plant_id: parts[0], line_id: parts[1], equipment_id: parts.slice(2).join('::') };
+  }
+  return { plant_id: '', line_id: '', equipment_id: String(key || '') };
+}
+
+function equipmentScopeQuery(item) {
+  const params = new URLSearchParams();
+  if (item?.plant_id) params.set('plant_id', item.plant_id);
+  if (item?.line_id) params.set('line_id', item.line_id);
+  const text = params.toString();
+  return text ? `?${text}` : '';
+}
+
+function equipmentApiPath(item, suffix = '') {
+  const code = item?.equipment_id || '';
+  return `/equipment/${encodeURIComponent(code)}${suffix}${equipmentScopeQuery(item)}`;
+}
+
 function matchEquipment(text) {
   const raw = String(text || '').trim().toLowerCase();
   if (!raw || !store?.equipment) return null;
-  const byId = store.equipment.find((item) => String(item.equipment_id).toLowerCase() === raw);
-  if (byId) return byId;
+  const byId = store.equipment.filter((item) => String(item.equipment_id).toLowerCase() === raw);
+  if (byId.length === 1) return byId[0];
+  if (byId.length > 1) {
+    return byId.find((item) => item.plant_id === ui.plantId || item.plant_id === ui.annualPlant) || byId[0];
+  }
   const labeled = store.equipment.find((item) => `${item.equipment_id} — ${item.name}`.toLowerCase() === raw || `${item.equipment_id} - ${item.name}`.toLowerCase() === raw);
   if (labeled) return labeled;
   const byName = store.equipment.filter((item) => String(item.name || '').trim().toLowerCase() === raw);
@@ -257,8 +286,18 @@ function isTechnician() {
   return role === 'TECHNICIAN' || role === 'LUBRICATION_TECHNICIAN';
 }
 
-function equipmentOf(code) {
-  return store.equipment.find((item) => item.equipment_id === code) || null;
+function equipmentOf(code, plantId = '', lineId = '') {
+  const rows = (store.equipment || []).filter((item) => item.equipment_id === code);
+  if (!rows.length) return null;
+  if (plantId) {
+    const inPlant = rows.filter((item) => item.plant_id === plantId);
+    if (lineId) {
+      const onLine = inPlant.find((item) => item.line_id === lineId);
+      if (onLine) return onLine;
+    }
+    if (inPlant.length) return inPlant[0];
+  }
+  return rows[0];
 }
 
 function technicianName(code) {
@@ -2093,7 +2132,7 @@ function equipmentTabs() {
 function equipmentDetail(selected) {
   const capacity = selected?.capacity == null ? '—' : `${selected.capacity}${selected.capacity_unit ? ` ${selected.capacity_unit}` : ''}`;
   const actions = selected?.equipment_id && canMaintain()
-    ? `<div class="equipment-actions"><button type="button" class="detail-button primary" id="equipment-edit">${esc(t('Edit'))}</button><button type="button" class="detail-button danger" data-delete="/equipment" data-delete-id="${esc(selected.equipment_id)}" data-delete-note="Delete this equipment? Its maintenance history and KPI charts will be removed.">${esc(t('Delete'))}</button></div>`
+    ? `<div class="equipment-actions"><button type="button" class="detail-button primary" id="equipment-edit">${esc(t('Edit'))}</button><button type="button" class="detail-button danger" data-delete="/equipment" data-delete-id="${esc(selected.equipment_id)}" data-delete-query="${esc(equipmentScopeQuery(selected).replace(/^\?/, ''))}" data-delete-note="Delete this equipment? Its maintenance history and KPI charts will be removed.">${esc(t('Delete'))}</button></div>`
     : '';
   return `<aside class="panel detail"><h2>${esc(t('Equipment Details'))}</h2><div class="detail-top"><div class="machine">⚙</div>${liveBadge(selected?.status || '—')}<h3>${esc(selected?.equipment_id || '—')}</h3><p>${esc(selected?.name || '')}</p></div>${actions}<div class="detail-list">${detailRows([
     ['Category', selected?.equipment_type], ['Location', placeOf(selected)], ['Section', sectionName(selected?.section_id) || '—'], ['Area', selected?.area],
@@ -2167,7 +2206,7 @@ async function loadEquipmentMotor(selected, options = {}) {
   const box = document.getElementById(options.boxId || 'equipment-motor');
   if (!box || !selected?.equipment_id) return;
   try {
-    const data = await apiRequest(`/equipment/${encodeURIComponent(selected.equipment_id)}/motor-history`);
+    const data = await apiRequest(equipmentApiPath(selected, '/motor-history'));
     if (token !== equipmentMotorToken || !box.isConnected) return;
     if (!data?.included) {
       if (options.tempOnly) {
@@ -2180,14 +2219,14 @@ async function loadEquipmentMotor(selected, options = {}) {
     box.innerHTML = options.tempOnly ? equipmentLogTempHtml(data) : equipmentMotorHtml(data);
     bindTempTrendCharts(box);
     if (!options.tempOnly) {
-      document.getElementById('motor-limit')?.addEventListener('submit', (event) => saveEquipmentTempLimit(event, selected.equipment_id));
+      document.getElementById('motor-limit')?.addEventListener('submit', (event) => saveEquipmentTempLimit(event, selected));
     }
   } catch (exception) {
     if (token === equipmentMotorToken && box.isConnected) box.innerHTML = `<p class="form-error">${esc(t(exception.message || 'Could not load the chart'))}</p>`;
   }
 }
 
-async function saveEquipmentTempLimit(event, equipmentId) {
+async function saveEquipmentTempLimit(event, equipment) {
   event.preventDefault();
   const error = document.getElementById('motor-limit-error');
   const raw = String(new FormData(event.currentTarget).get('temp_limit_c') || '').trim().replace(',', '.');
@@ -2197,12 +2236,13 @@ async function saveEquipmentTempLimit(event, equipmentId) {
     return;
   }
   try {
-    await apiRequest(`/equipment/${encodeURIComponent(equipmentId)}/temp-limit`, {
+    await apiRequest(equipmentApiPath(equipment, '/temp-limit'), {
       method: 'PUT',
       body: JSON.stringify({ temp_limit_c: value }),
     });
     toast(t('Saved.'));
-    const selected = (store.equipment || []).find((item) => item.equipment_id === equipmentId);
+    const selected = (store.equipment || []).find((item) => equipmentRowKey(item) === equipmentRowKey(equipment))
+      || (store.equipment || []).find((item) => item.equipment_id === equipment?.equipment_id);
     if (selected) loadEquipmentMotor(selected);
   } catch (exception) {
     if (error) error.textContent = t(exception.message);
@@ -2220,7 +2260,9 @@ function drawEquipment() {
     if (ui.tab === 'Under Maintenance') return item.status === 'Under Maintenance';
     return true;
   });
-  const selected = rows.find((item) => item.equipment_id === ui.rowKey) || rows[0];
+  const selected = rows.find((item) => equipmentRowKey(item) === ui.rowKey)
+    || rows.find((item) => item.equipment_id === ui.rowKey)
+    || rows[0];
   const all = visibleEquipment();
   document.getElementById('metric-grid').innerHTML = metrics([
     ['Total Equipment', String(all.length), '▣', 'blue', ''],
@@ -2230,7 +2272,7 @@ function drawEquipment() {
     ['From reports', String((store.pending || []).length), '＋', 'purple', ''],
     ['Critical Assets', String(all.filter(isCriticalAsset).length), '◈', 'red', ''],
   ]);
-  const body = rows.map((item) => `<tr data-row="${esc(item.equipment_id)}" class="${selected && selected.equipment_id === item.equipment_id ? 'selected' : ''}">${cell(esc(item.equipment_id), true)}${cell(esc(item.name))}${cell(esc(item.equipment_type))}${cell(esc(placeOf(item)))}${cell(liveBadge(item.status))}${cell(liveBadge(item.condition || '—'))}${cell(liveBadge(criticalityLabel(item.criticality)))}</tr>`);
+  const body = rows.map((item) => `<tr data-row="${esc(equipmentRowKey(item))}" class="${selected && equipmentRowKey(selected) === equipmentRowKey(item) ? 'selected' : ''}">${cell(esc(item.equipment_id), true)}${cell(esc(item.name))}${cell(esc(item.equipment_type))}${cell(esc(placeOf(item)))}${cell(liveBadge(item.status))}${cell(liveBadge(item.condition || '—'))}${cell(liveBadge(criticalityLabel(item.criticality)))}</tr>`);
   const detail = ui.mode === 'create'
     ? equipmentForm()
     : ui.mode === 'edit' && selected
@@ -2256,7 +2298,7 @@ function drawEquipment() {
   document.getElementById('equipment-edit')?.addEventListener('click', () => {
     if (!selected?.equipment_id) return;
     ui.mode = 'edit';
-    ui.rowKey = selected.equipment_id;
+    ui.rowKey = equipmentRowKey(selected);
     draw('equipment');
   });
   document.getElementById('equipment-cancel')?.addEventListener('click', () => {
@@ -2269,9 +2311,9 @@ function drawEquipment() {
     const error = document.getElementById('equipment-section-error');
     const sectionId = new FormData(event.currentTarget).get('section_id') || null;
     try {
-      await apiRequest(`/equipment/${encodeURIComponent(selected.equipment_id)}/section`, { method: 'PUT', body: JSON.stringify({ section_id: sectionId || null }) });
+      await apiRequest(equipmentApiPath(selected, '/section'), { method: 'PUT', body: JSON.stringify({ section_id: sectionId || null }) });
       store = null;
-      ui.rowKey = selected.equipment_id;
+      ui.rowKey = equipmentRowKey(selected);
       toast(t('Saved.'));
       await paint('equipment');
     } catch (exception) {
@@ -2644,7 +2686,7 @@ function drawRecords() {
     const manufacturer = form.querySelector('[name="manufacturer"]').value.trim();
     const commissioning = form.querySelector('[name="commissioning_date"]').value;
     try {
-      const saved = await apiRequest(`/equipment/${encodeURIComponent(equipment.equipment_id)}/log-facts`, {
+      const saved = await apiRequest(equipmentApiPath(equipment, '/log-facts'), {
         method: 'PUT',
         body: JSON.stringify({ manufacturer: manufacturer || null, commissioning_date: commissioning || null }),
       });
@@ -3077,8 +3119,9 @@ function bindDeletes() {
       if (!window.confirm(t(note))) return;
       try {
         const suffix = button.dataset.deleteSuffix || '';
+        const query = button.dataset.deleteQuery ? `?${button.dataset.deleteQuery}` : '';
         const path = button.dataset.deleteId
-          ? `${button.dataset.delete}/${encodeURIComponent(button.dataset.deleteId)}${suffix}`
+          ? `${button.dataset.delete}/${encodeURIComponent(button.dataset.deleteId)}${suffix}${query}`
           : button.dataset.delete;
         await apiRequest(path, { method: 'DELETE' });
         store = null;
@@ -3180,8 +3223,14 @@ function bindForm(selectedEquipment = null) {
           if (data[key] != null) data[key] = Number(data[key]);
         });
         if (ui.mode === 'edit' && ui.rowKey) {
-          data.equipment_id = ui.rowKey;
-          await apiRequest(`/equipment/${encodeURIComponent(ui.rowKey)}`, { method: 'PUT', body: JSON.stringify(data) });
+          const scoped = parseEquipmentRowKey(ui.rowKey);
+          data.equipment_id = scoped.equipment_id;
+          const query = equipmentScopeQuery({
+            plant_id: scoped.plant_id || data.plant_id,
+            line_id: scoped.line_id || data.line_id,
+          });
+          await apiRequest(`/equipment/${encodeURIComponent(scoped.equipment_id)}${query}`, { method: 'PUT', body: JSON.stringify(data) });
+          ui.rowKey = equipmentRowKey({ plant_id: data.plant_id, line_id: data.line_id, equipment_id: scoped.equipment_id });
         } else {
           data.equipment_id = String(data.equipment_id || '').trim().replace(/^[A-Za-z]+-?/, '');
           if (!data.equipment_id || !/^\d+(-\d+)*$/.test(data.equipment_id)) {

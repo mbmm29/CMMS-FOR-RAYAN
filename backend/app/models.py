@@ -43,8 +43,11 @@ class LineSection(Base):
 
 class Equipment(Base):
     __tablename__='equipment'
+    __table_args__ = (
+        UniqueConstraint('plant_id', 'line_id', 'equipment_id', name='uq_equipment_plant_line_code'),
+    )
     id: Mapped[int]=mapped_column(Integer,primary_key=True)
-    equipment_id: Mapped[str]=mapped_column(String(50),unique=True,index=True)
+    equipment_id: Mapped[str]=mapped_column(String(50),index=True)
     name: Mapped[str]=mapped_column(String(150))
     equipment_type: Mapped[str]=mapped_column(String(100))
     plant_id: Mapped[str|None]=mapped_column(String(50),nullable=True)
@@ -69,7 +72,7 @@ class Component(Base):
     __tablename__='components'
     id: Mapped[int]=mapped_column(Integer,primary_key=True)
     component_id: Mapped[str]=mapped_column(String(60),unique=True,index=True)
-    equipment_id: Mapped[str]=mapped_column(String(50),ForeignKey('equipment.equipment_id'))
+    equipment_id: Mapped[str]=mapped_column(String(50),index=True)
     name: Mapped[str]=mapped_column(String(150))
     component_type: Mapped[str|None]=mapped_column(String(100),nullable=True)
     manufacturer: Mapped[str|None]=mapped_column(String(100),nullable=True)
@@ -101,7 +104,7 @@ class PMPlan(Base):
     __tablename__='pm_plans'
     id: Mapped[int]=mapped_column(Integer,primary_key=True)
     pm_id: Mapped[str]=mapped_column(String(60),unique=True,index=True)
-    equipment_id: Mapped[str|None]=mapped_column(String(50),ForeignKey('equipment.equipment_id'),nullable=True)
+    equipment_id: Mapped[str|None]=mapped_column(String(50),nullable=True,index=True)
     manual_equipment_code: Mapped[str|None]=mapped_column(String(50),nullable=True,index=True)
     manual_equipment_name: Mapped[str|None]=mapped_column(String(150),nullable=True)
     manual_plant_id: Mapped[str|None]=mapped_column(String(50),nullable=True)
@@ -162,7 +165,7 @@ class SOP(Base):
     __tablename__='sops'
     id: Mapped[int]=mapped_column(Integer,primary_key=True)
     sop_id: Mapped[str]=mapped_column(String(60),unique=True,index=True)
-    equipment_id: Mapped[str]=mapped_column(String(50),ForeignKey('equipment.equipment_id'))
+    equipment_id: Mapped[str]=mapped_column(String(50),index=True)
     component_id: Mapped[str|None]=mapped_column(String(60),nullable=True)
     title: Mapped[str]=mapped_column(String(200))
     sop_type: Mapped[str|None]=mapped_column(String(80),nullable=True)
@@ -179,7 +182,7 @@ class SOP(Base):
 class SOPParagraph(Base):
     __tablename__='sop_paragraphs'
     id: Mapped[int]=mapped_column(Integer,primary_key=True)
-    equipment_id: Mapped[str]=mapped_column(String(50),ForeignKey('equipment.equipment_id'),index=True)
+    equipment_id: Mapped[str]=mapped_column(String(50),index=True)
     position: Mapped[int]=mapped_column(Integer,default=1)
     body: Mapped[str]=mapped_column(Text,default='')
 
@@ -187,7 +190,7 @@ class SOPManual(Base):
     """Structured operating manual imported from an Excel SOP form for one machine."""
     __tablename__ = 'sop_manuals'
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    equipment_id: Mapped[str] = mapped_column(String(50), ForeignKey('equipment.equipment_id'), unique=True, index=True)
+    equipment_id: Mapped[str] = mapped_column(String(50), index=True)
     filename: Mapped[str | None] = mapped_column(String(255), nullable=True)
     title: Mapped[str | None] = mapped_column(String(300), nullable=True)
     document: Mapped[str] = mapped_column(Text, default='{}')
@@ -198,7 +201,7 @@ class WorkOrder(Base):
     id: Mapped[int]=mapped_column(Integer,primary_key=True)
     work_order_id: Mapped[str]=mapped_column(String(60),unique=True,index=True)
     work_order_type: Mapped[str]=mapped_column(String(50))
-    equipment_id: Mapped[str|None]=mapped_column(String(50),ForeignKey('equipment.equipment_id'),nullable=True)
+    equipment_id: Mapped[str|None]=mapped_column(String(50),nullable=True,index=True)
     manual_equipment_code: Mapped[str|None]=mapped_column(String(50),nullable=True,index=True)
     manual_equipment_name: Mapped[str|None]=mapped_column(String(150),nullable=True)
     manual_plant_id: Mapped[str|None]=mapped_column(String(50),nullable=True)

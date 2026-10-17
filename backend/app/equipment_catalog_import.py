@@ -179,7 +179,11 @@ def import_equipment_catalog(db: Session, rows: list[dict] | None = None, update
                 'status': status,
                 'condition': _clean(row.get('condition'))[:50] or 'Good',
             }
-            current = db.query(Equipment).filter_by(equipment_id=equipment_id).first()
+            current = db.query(Equipment).filter_by(
+                equipment_id=equipment_id,
+                plant_id=plant.plant_id,
+                line_id=line.line_id,
+            ).first()
             if current:
                 if not update_existing:
                     skipped += 1

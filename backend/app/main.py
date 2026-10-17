@@ -936,6 +936,28 @@ EQUIPMENT_CRITICALITY = {
 
 def as_dict(obj):
     return {column.name: getattr(obj, column.name) for column in obj.__table__.columns}
+
+
+def find_equipment(db: Session, equipment_id: str, plant_id: str | None = None, line_id: str | None = None) -> Equipment | None:
+    """Resolve equipment by code; plant/line required when the same code exists on more than one machine."""
+    code = (equipment_id or '').strip()
+    if not code:
+        return None
+    q = db.query(Equipment).filter(func.lower(Equipment.equipment_id) == code.lower())
+    if plant_id:
+        q = q.filter(Equipment.plant_id == plant_id)
+    if line_id:
+        q = q.filter(Equipment.line_id == line_id)
+    rows = q.all()
+    if not rows:
+        return None
+    if len(rows) == 1:
+        return rows[0]
+    if plant_id and line_id:
+        return None
+    raise HTTPException(409, 'Equipment code exists on more than one plant/line; select plant and line')
+
+
 @app.post('/equipment',response_model=EquipmentOut)
 def create_equipment(data:EquipmentCreate,db:Session=Depends(get_db),u=Depends(auth)):
     if u.role not in ENGINEER and not is_technician_account(u):
@@ -953,14 +975,15 @@ def create_equipment(data:EquipmentCreate,db:Session=Depends(get_db),u=Depends(a
     code = normalize_equipment_code(data.equipment_id)
     if not code or not re.fullmatch(r'\d+(-\d+)*', code):
         raise HTTPException(400, 'Equipment code must be numbers only')
-    if db.query(Equipment).filter_by(equipment_id=code).first(): raise HTTPException(409,'Equipment ID already exists')
+    if db.query(Equipment).filter_by(equipment_id=code, plant_id=data.plant_id, line_id=data.line_id).first():
+        raise HTTPException(409, 'Equipment ID already exists on this plant and line')
     payload = data.model_dump()
     payload['equipment_id'] = code
     payload['section_id'] = section.section_id if section else None
     o=Equipment(**payload); db.add(o); audit(db,u,'CREATE','Equipment',code,new=payload); db.commit(); db.refresh(o); return o
 @app.put('/equipment/{equipment_id}',response_model=EquipmentOut)
-def update_equipment(equipment_id:str,data:EquipmentCreate,db:Session=Depends(get_db),u=Depends(role(*ENGINEER))):
-    o=db.query(Equipment).filter_by(equipment_id=equipment_id).first()
+def update_equipment(equipment_id:str,data:EquipmentCreate,db:Session=Depends(get_db),u=Depends(role(*ENGINEER)),plant_id:str|None=None,line_id:str|None=None):
+    o=find_equipment(db, equipment_id, plant_id or data.plant_id, line_id or data.line_id)
     if not o: raise HTTPException(404,'Equipment not found')
     if not data.plant_id or not data.line_id:
         raise HTTPException(400, 'Select a plant and then a line number')
@@ -971,6 +994,14 @@ def update_equipment(equipment_id:str,data:EquipmentCreate,db:Session=Depends(ge
         raise HTTPException(400, 'Choose the equipment importance')
     if data.status not in EQUIPMENT_STATUSES:
         raise HTTPException(400, 'Invalid equipment status')
+    conflict = db.query(Equipment).filter(
+        Equipment.equipment_id == equipment_id,
+        Equipment.plant_id == data.plant_id,
+        Equipment.line_id == data.line_id,
+        Equipment.id != o.id,
+    ).first()
+    if conflict:
+        raise HTTPException(409, 'Equipment ID already exists on this plant and line')
     payload = data.model_dump()
     payload['equipment_id'] = equipment_id
     section = section_for_line(db, data.line_id, payload.get('section_id'))
@@ -981,8 +1012,8 @@ def update_equipment(equipment_id:str,data:EquipmentCreate,db:Session=Depends(ge
     audit(db,u,'UPDATE','Equipment',equipment_id,old=old,new=payload); db.commit(); db.refresh(o); return o
 
 @app.put('/equipment/{equipment_id}/section', response_model=EquipmentOut)
-def assign_equipment_section(equipment_id: str, data: EquipmentSectionUpdate, db: Session = Depends(get_db), u=Depends(role(*ENGINEER))):
-    equipment = db.query(Equipment).filter_by(equipment_id=equipment_id).first()
+def assign_equipment_section(equipment_id: str, data: EquipmentSectionUpdate, db: Session = Depends(get_db), u=Depends(role(*ENGINEER)), plant_id: str | None = None, line_id: str | None = None):
+    equipment = find_equipment(db, equipment_id, plant_id, line_id)
     if not equipment:
         raise HTTPException(404, 'Equipment not found')
     if not equipment.line_id:
@@ -996,8 +1027,8 @@ def assign_equipment_section(equipment_id: str, data: EquipmentSectionUpdate, db
     return equipment
 
 @app.put('/equipment/{equipment_id}/log-facts', response_model=EquipmentOut)
-def update_equipment_log_facts(equipment_id: str, data: EquipmentLogFacts, db: Session = Depends(get_db), u=Depends(role(*ENGINEER))):
-    equipment = db.query(Equipment).filter_by(equipment_id=equipment_id).first()
+def update_equipment_log_facts(equipment_id: str, data: EquipmentLogFacts, db: Session = Depends(get_db), u=Depends(role(*ENGINEER)), plant_id: str | None = None, line_id: str | None = None):
+    equipment = find_equipment(db, equipment_id, plant_id, line_id)
     if not equipment:
         raise HTTPException(404, 'Equipment not found')
     manufacturer = (data.manufacturer or '').strip()[:100] or None
@@ -1010,15 +1041,15 @@ def update_equipment_log_facts(equipment_id: str, data: EquipmentLogFacts, db: S
     return equipment
 
 @app.get('/equipment/{equipment_id}/motor-history')
-def equipment_motor_history_route(equipment_id: str, db: Session = Depends(get_db), u=Depends(auth)):
-    equipment = db.query(Equipment).filter_by(equipment_id=equipment_id).first()
+def equipment_motor_history_route(equipment_id: str, db: Session = Depends(get_db), u=Depends(auth), plant_id: str | None = None, line_id: str | None = None):
+    equipment = find_equipment(db, equipment_id, plant_id, line_id)
     if not equipment:
         raise HTTPException(404, 'Equipment not found')
     return equipment_motor_history(db, equipment)
 
 @app.put('/equipment/{equipment_id}/temp-limit')
-def update_equipment_temp_limit(equipment_id: str, data: EquipmentTempLimit, db: Session = Depends(get_db), u=Depends(role(*ENGINEER))):
-    equipment = db.query(Equipment).filter_by(equipment_id=equipment_id).first()
+def update_equipment_temp_limit(equipment_id: str, data: EquipmentTempLimit, db: Session = Depends(get_db), u=Depends(role(*ENGINEER)), plant_id: str | None = None, line_id: str | None = None):
+    equipment = find_equipment(db, equipment_id, plant_id, line_id)
     if not equipment:
         raise HTTPException(404, 'Equipment not found')
     limit = None if data.temp_limit_c is None else round(float(data.temp_limit_c), 1)
@@ -4400,8 +4431,8 @@ def delete_line(line_id: str, db: Session = Depends(get_db), u=Depends(role(*ENG
 
 
 @app.delete('/equipment/{equipment_id}')
-def delete_equipment(equipment_id: str, db: Session = Depends(get_db), u=Depends(role(*ENGINEER))):
-    equipment = db.query(Equipment).filter_by(equipment_id=equipment_id).first()
+def delete_equipment(equipment_id: str, db: Session = Depends(get_db), u=Depends(role(*ENGINEER)), plant_id: str | None = None, line_id: str | None = None):
+    equipment = find_equipment(db, equipment_id, plant_id, line_id)
     if not equipment:
         raise HTTPException(404, 'Equipment not found')
     purge_kpi_history(db, [equipment.equipment_id])
