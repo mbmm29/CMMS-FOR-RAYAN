@@ -3183,8 +3183,10 @@ function bindForm(selectedEquipment = null) {
           data.equipment_id = ui.rowKey;
           await apiRequest(`/equipment/${encodeURIComponent(ui.rowKey)}`, { method: 'PUT', body: JSON.stringify(data) });
         } else {
-          data.equipment_id = String(data.equipment_id || '').replace(/\D+/g, '');
-          if (!data.equipment_id) throw new Error(t('Equipment code must be numbers only'));
+          data.equipment_id = String(data.equipment_id || '').trim().replace(/^[A-Za-z]+-?/, '');
+          if (!data.equipment_id || !/^\d+(-\d+)*$/.test(data.equipment_id)) {
+            throw new Error(t('Equipment code must be numbers only'));
+          }
           await apiRequest('/equipment', { method: 'POST', body: JSON.stringify(data) });
         }
       } else if (ui.page === 'plants') {

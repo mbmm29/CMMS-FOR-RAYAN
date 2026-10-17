@@ -951,7 +951,7 @@ def create_equipment(data:EquipmentCreate,db:Session=Depends(get_db),u=Depends(a
     if data.status not in EQUIPMENT_STATUSES: raise HTTPException(400,'Invalid equipment status')
     from .equipment_code_normalize import normalize_equipment_code
     code = normalize_equipment_code(data.equipment_id)
-    if not code or not re.fullmatch(r'\d+', code):
+    if not code or not re.fullmatch(r'\d+(-\d+)*', code):
         raise HTTPException(400, 'Equipment code must be numbers only')
     if db.query(Equipment).filter_by(equipment_id=code).first(): raise HTTPException(409,'Equipment ID already exists')
     payload = data.model_dump()

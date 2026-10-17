@@ -3,7 +3,7 @@
   "count": 327,
   "rows": [
     {
-      "equipment_id": "10621",
+      "equipment_id": "1062",
       "source_code": "A-1062",
       "name": "Drum sieve",
       "category": "LAKA",
@@ -17,7 +17,7 @@
       "condition": "Good"
     },
     {
-      "equipment_id": "10622",
+      "equipment_id": "1062-2",
       "source_code": "B-1062",
       "name": "Drum sieve",
       "category": "LAKA",
@@ -59,7 +59,7 @@
       "condition": "Good"
     },
     {
-      "equipment_id": "42031",
+      "equipment_id": "4203",
       "source_code": "A-4203",
       "name": "Vibro discharger",
       "category": "MFVK",
@@ -73,7 +73,7 @@
       "condition": "Good"
     },
     {
-      "equipment_id": "32011",
+      "equipment_id": "3201",
       "source_code": "A-3201",
       "name": "Mixer",
       "category": "DFML",
@@ -87,7 +87,7 @@
       "condition": "Good"
     },
     {
-      "equipment_id": "35011",
+      "equipment_id": "3501",
       "source_code": "A-3501",
       "name": "Mixer",
       "category": "DFML",
@@ -101,7 +101,7 @@
       "condition": "Good"
     },
     {
-      "equipment_id": "38011",
+      "equipment_id": "3801",
       "source_code": "A-3801",
       "name": "Mixer",
       "category": "DFML",
@@ -115,7 +115,7 @@
       "condition": "Good"
     },
     {
-      "equipment_id": "31111",
+      "equipment_id": "3111",
       "source_code": "A-3111",
       "name": "Roller feeder",
       "category": "AHAV",
@@ -129,7 +129,7 @@
       "condition": "Good"
     },
     {
-      "equipment_id": "42131",
+      "equipment_id": "4213",
       "source_code": "A-4213",
       "name": "Conditioner",
       "category": "AHCA",
@@ -143,7 +143,7 @@
       "condition": "Good"
     },
     {
-      "equipment_id": "44131",
+      "equipment_id": "4413",
       "source_code": "A-4413",
       "name": "Conditioner",
       "category": "AHCA",
@@ -157,7 +157,7 @@
       "condition": "Good"
     },
     {
-      "equipment_id": "42151",
+      "equipment_id": "4215",
       "source_code": "A-4215",
       "name": "Retentioner",
       "category": "AHVA",
@@ -185,7 +185,7 @@
       "condition": "Good"
     },
     {
-      "equipment_id": "44151",
+      "equipment_id": "4415",
       "source_code": "A-4415",
       "name": "Retentioner",
       "category": "AHVA",
@@ -213,7 +213,7 @@
       "condition": "Good"
     },
     {
-      "equipment_id": "42151",
+      "equipment_id": "4215",
       "source_code": "A-4215",
       "name": "Retentioner",
       "category": "AHVA",
@@ -269,7 +269,7 @@
       "condition": "Good"
     },
     {
-      "equipment_id": "31121",
+      "equipment_id": "3112",
       "source_code": "A-3112",
       "name": "Roller Mill",
       "category": "DFZL",
@@ -339,7 +339,7 @@
       "condition": "Good"
     },
     {
-      "equipment_id": "40321",
+      "equipment_id": "4032",
       "source_code": "A-4032",
       "name": "Crumbler",
       "category": "DFZL",
@@ -409,7 +409,7 @@
       "condition": "Good"
     },
     {
-      "equipment_id": "71481",
+      "equipment_id": "7148",
       "source_code": "A-7148",
       "name": "Lineging scale",
       "category": "MSDD",
@@ -423,7 +423,7 @@
       "condition": "Good"
     },
     {
-      "equipment_id": "72481",
+      "equipment_id": "7248",
       "source_code": "A-7248",
       "name": "Lineging scale",
       "category": "MSDD",
@@ -535,7 +535,7 @@
       "condition": "Good"
     },
     {
-      "equipment_id": "40212",
+      "equipment_id": "4021-2",
       "source_code": "B-4021",
       "name": "Pellet mill",
       "category": "DPHD",
@@ -549,7 +549,7 @@
       "condition": "Good"
     },
     {
-      "equipment_id": "40712",
+      "equipment_id": "4071-2",
       "source_code": "B-4071",
       "name": "Pellet mill",
       "category": "DPHD",
@@ -591,7 +591,7 @@
       "condition": "Good"
     },
     {
-      "equipment_id": "40211",
+      "equipment_id": "4021",
       "source_code": "A-4021",
       "name": "Pellet mill",
       "category": "DPHD",
@@ -605,7 +605,7 @@
       "condition": "Good"
     },
     {
-      "equipment_id": "40711",
+      "equipment_id": "4071",
       "source_code": "A-4071",
       "name": "Pellet mill",
       "category": "DPHD",
@@ -619,7 +619,7 @@
       "condition": "Good"
     },
     {
-      "equipment_id": "10662",
+      "equipment_id": "1066-2",
       "source_code": "B-1066",
       "name": "Silo scale",
       "category": "MSDT",
@@ -633,7 +633,7 @@
       "condition": "Good"
     },
     {
-      "equipment_id": "13662",
+      "equipment_id": "1366-2",
       "source_code": "B-1366",
       "name": "Silo scale",
       "category": "MSDT",
@@ -647,7 +647,7 @@
       "condition": "Good"
     },
     {
-      "equipment_id": "10661",
+      "equipment_id": "1066",
       "source_code": "A-1066",
       "name": "Silo scale",
       "category": "MSDT",
@@ -661,7 +661,7 @@
       "condition": "Good"
     },
     {
-      "equipment_id": "13661",
+      "equipment_id": "1366",
       "source_code": "A-1366",
       "name": "Silo scale",
       "category": "MSDT",
@@ -675,7 +675,7 @@
       "condition": "Good"
     },
     {
-      "equipment_id": "31122",
+      "equipment_id": "3112-2",
       "source_code": "B-3112",
       "name": "Roller Mill",
       "category": "DFZL",
@@ -717,7 +717,7 @@
       "condition": "Good"
     },
     {
-      "equipment_id": "40322",
+      "equipment_id": "4032-2",
       "source_code": "B-4032",
       "name": "Crumbler",
       "category": "DFZL",
@@ -759,7 +759,7 @@
       "condition": "Good"
     },
     {
-      "equipment_id": "32012",
+      "equipment_id": "3201-2",
       "source_code": "B-3201",
       "name": "Mixer",
       "category": "DFML",
@@ -773,7 +773,7 @@
       "condition": "Good"
     },
     {
-      "equipment_id": "35012",
+      "equipment_id": "3501-2",
       "source_code": "B-3501",
       "name": "Mixer",
       "category": "DFML",
@@ -787,7 +787,7 @@
       "condition": "Good"
     },
     {
-      "equipment_id": "38012",
+      "equipment_id": "3801-2",
       "source_code": "B-3801",
       "name": "Mixer",
       "category": "DFML",
@@ -801,7 +801,7 @@
       "condition": "Good"
     },
     {
-      "equipment_id": "31112",
+      "equipment_id": "3111-2",
       "source_code": "B-3111",
       "name": "Roller feeder",
       "category": "AHAV",
@@ -843,7 +843,7 @@
       "condition": "Good"
     },
     {
-      "equipment_id": "71482",
+      "equipment_id": "7148-2",
       "source_code": "B-7148",
       "name": "Lineging scale",
       "category": "MSDD",
@@ -857,7 +857,7 @@
       "condition": "Good"
     },
     {
-      "equipment_id": "72482",
+      "equipment_id": "7248-2",
       "source_code": "B-7248",
       "name": "Lineging scale",
       "category": "MSDD",
@@ -1067,7 +1067,7 @@
       "condition": "Good"
     },
     {
-      "equipment_id": "40712",
+      "equipment_id": "4071-2",
       "source_code": "B-4071",
       "name": "Retentioner",
       "category": "AHVA",
@@ -1081,7 +1081,7 @@
       "condition": "Good"
     },
     {
-      "equipment_id": "42152",
+      "equipment_id": "4215-2",
       "source_code": "B-4215",
       "name": "Retentioner",
       "category": "AHVA",
@@ -1109,7 +1109,7 @@
       "condition": "Good"
     },
     {
-      "equipment_id": "44152",
+      "equipment_id": "4415-2",
       "source_code": "B-4415",
       "name": "Retentioner",
       "category": "AHVA",
@@ -1151,7 +1151,7 @@
       "condition": "Good"
     },
     {
-      "equipment_id": "40632",
+      "equipment_id": "4063-2",
       "source_code": "B-4063",
       "name": "Conditioner",
       "category": "AHCA",
@@ -1165,7 +1165,7 @@
       "condition": "Good"
     },
     {
-      "equipment_id": "42132",
+      "equipment_id": "4213-2",
       "source_code": "B-4213",
       "name": "Conditioner",
       "category": "AHCA",
@@ -1193,7 +1193,7 @@
       "condition": "Good"
     },
     {
-      "equipment_id": "44132",
+      "equipment_id": "4413-2",
       "source_code": "B-4413",
       "name": "Conditioner",
       "category": "AHCA",
@@ -1221,7 +1221,7 @@
       "condition": "Good"
     },
     {
-      "equipment_id": "31512",
+      "equipment_id": "3151-2",
       "source_code": "B-3151",
       "name": "Discharge airlock",
       "category": "MPSN",
@@ -1235,7 +1235,7 @@
       "condition": "Good"
     },
     {
-      "equipment_id": "37512",
+      "equipment_id": "3751-2",
       "source_code": "B-3751",
       "name": "Discharge airlock",
       "category": "MPSN",
@@ -1249,7 +1249,7 @@
       "condition": "Good"
     },
     {
-      "equipment_id": "34512",
+      "equipment_id": "3451-2",
       "source_code": "B-3451",
       "name": "Discharge airlock",
       "category": "MPSN",
@@ -1347,7 +1347,7 @@
       "condition": "Good"
     },
     {
-      "equipment_id": "34511",
+      "equipment_id": "3451",
       "source_code": "A-3451",
       "name": "Discharge airlock",
       "category": "MPSN",
@@ -1361,7 +1361,7 @@
       "condition": "Good"
     },
     {
-      "equipment_id": "37511",
+      "equipment_id": "3751",
       "source_code": "A-3751",
       "name": "Discharge airlock",
       "category": "MPSN",
@@ -1375,7 +1375,7 @@
       "condition": "Good"
     },
     {
-      "equipment_id": "31511",
+      "equipment_id": "3151",
       "source_code": "A-3151",
       "name": "Discharge airlock",
       "category": "MPSN",
@@ -1389,7 +1389,7 @@
       "condition": "Good"
     },
     {
-      "equipment_id": "10601",
+      "equipment_id": "1060",
       "source_code": "A-1060",
       "name": "Belt and bucket elevator",
       "category": "LBEB",
@@ -1403,7 +1403,7 @@
       "condition": "Good"
     },
     {
-      "equipment_id": "10751",
+      "equipment_id": "1075",
       "source_code": "A-1075",
       "name": "Belt and bucket elevator",
       "category": "LBEB",
@@ -1417,7 +1417,7 @@
       "condition": "Good"
     },
     {
-      "equipment_id": "13601",
+      "equipment_id": "1360",
       "source_code": "A-1360",
       "name": "Belt and bucket elevator",
       "category": "LBEB",
@@ -1431,7 +1431,7 @@
       "condition": "Good"
     },
     {
-      "equipment_id": "13751",
+      "equipment_id": "1375",
       "source_code": "A-1375",
       "name": "Belt and bucket elevator",
       "category": "LBEB",
@@ -1445,7 +1445,7 @@
       "condition": "Good"
     },
     {
-      "equipment_id": "33901",
+      "equipment_id": "3390",
       "source_code": "A-3390",
       "name": "Belt and bucket elevator",
       "category": "LBEB",
@@ -1459,7 +1459,7 @@
       "condition": "Good"
     },
     {
-      "equipment_id": "36901",
+      "equipment_id": "3690",
       "source_code": "A-3690",
       "name": "Belt and bucket elevator",
       "category": "LBEB",
@@ -1473,7 +1473,7 @@
       "condition": "Good"
     },
     {
-      "equipment_id": "32101",
+      "equipment_id": "3210",
       "source_code": "A-3210",
       "name": "Belt and bucket elevator",
       "category": "LBEB",
@@ -1487,7 +1487,7 @@
       "condition": "Good"
     },
     {
-      "equipment_id": "38101",
+      "equipment_id": "3810",
       "source_code": "A-3810",
       "name": "Belt and bucket elevator",
       "category": "LBEB",
@@ -1501,7 +1501,7 @@
       "condition": "Good"
     },
     {
-      "equipment_id": "41051",
+      "equipment_id": "4105",
       "source_code": "A-4105",
       "name": "Belt and bucket elevator",
       "category": "LBEB",
@@ -1529,7 +1529,7 @@
       "condition": "Good"
     },
     {
-      "equipment_id": "45051",
+      "equipment_id": "4505",
       "source_code": "A-4505",
       "name": "Belt and bucket elevator",
       "category": "LBEB",
@@ -1585,7 +1585,7 @@
       "condition": "Good"
     },
     {
-      "equipment_id": "40461",
+      "equipment_id": "4046",
       "source_code": "A-4046",
       "name": "Feeder",
       "category": "AHBG",
@@ -1599,7 +1599,7 @@
       "condition": "Good"
     },
     {
-      "equipment_id": "34142",
+      "equipment_id": "3414-2",
       "source_code": "B-3414",
       "name": "Throw sieve",
       "category": "DFTA",
@@ -1613,7 +1613,7 @@
       "condition": "Good"
     },
     {
-      "equipment_id": "31142",
+      "equipment_id": "3114-2",
       "source_code": "B-3114",
       "name": "Throw sieve",
       "category": "DFTA",
@@ -1627,7 +1627,7 @@
       "condition": "Good"
     },
     {
-      "equipment_id": "37142",
+      "equipment_id": "3714-2",
       "source_code": "B-3714",
       "name": "Throw sieve",
       "category": "DFTA",
@@ -1655,7 +1655,7 @@
       "condition": "Good"
     },
     {
-      "equipment_id": "41072",
+      "equipment_id": "4107-2",
       "source_code": "B-4107",
       "name": "Throw sieve",
       "category": "DFTA",
@@ -1683,7 +1683,7 @@
       "condition": "Good"
     },
     {
-      "equipment_id": "31141",
+      "equipment_id": "3114",
       "source_code": "A-3114",
       "name": "Throw sieve",
       "category": "DFTA",
@@ -1697,7 +1697,7 @@
       "condition": "Good"
     },
     {
-      "equipment_id": "34141",
+      "equipment_id": "3414",
       "source_code": "A-3414",
       "name": "Throw sieve",
       "category": "DFTA",
@@ -1711,7 +1711,7 @@
       "condition": "Good"
     },
     {
-      "equipment_id": "37141",
+      "equipment_id": "3714",
       "source_code": "A-3714",
       "name": "Throw sieve",
       "category": "DFTA",
@@ -1725,7 +1725,7 @@
       "condition": "Good"
     },
     {
-      "equipment_id": "41071",
+      "equipment_id": "4107",
       "source_code": "A-4107",
       "name": "Throw sieve",
       "category": "DFTA",
@@ -1739,7 +1739,7 @@
       "condition": "Good"
     },
     {
-      "equipment_id": "10551",
+      "equipment_id": "1055",
       "source_code": "A-1055",
       "name": "Trough chain conveyor",
       "category": "LBCB",
@@ -1753,7 +1753,7 @@
       "condition": "Good"
     },
     {
-      "equipment_id": "10701",
+      "equipment_id": "1070",
       "source_code": "A-1070",
       "name": "Trough chain conveyor",
       "category": "LBCB",
@@ -1767,7 +1767,7 @@
       "condition": "Good"
     },
     {
-      "equipment_id": "13551",
+      "equipment_id": "1355",
       "source_code": "A-1355",
       "name": "Trough chain conveyor",
       "category": "LBCB",
@@ -1781,7 +1781,7 @@
       "condition": "Good"
     },
     {
-      "equipment_id": "13701",
+      "equipment_id": "1370",
       "source_code": "A-1370",
       "name": "Trough chain conveyor",
       "category": "LBCB",
@@ -1795,7 +1795,7 @@
       "condition": "Good"
     },
     {
-      "equipment_id": "30451",
+      "equipment_id": "3045",
       "source_code": "A-3045",
       "name": "Trough chain conveyor",
       "category": "LBCB",
@@ -1809,7 +1809,7 @@
       "condition": "Good"
     },
     {
-      "equipment_id": "30461",
+      "equipment_id": "3046",
       "source_code": "A-3046",
       "name": "Trough chain conveyor",
       "category": "LBCB",
@@ -1837,7 +1837,7 @@
       "condition": "Good"
     },
     {
-      "equipment_id": "33461",
+      "equipment_id": "3346",
       "source_code": "A-3346",
       "name": "Trough chain conveyor",
       "category": "LBCB",
@@ -1851,7 +1851,7 @@
       "condition": "Good"
     },
     {
-      "equipment_id": "36451",
+      "equipment_id": "3645",
       "source_code": "A-3645",
       "name": "Trough chain conveyor",
       "category": "LBCB",
@@ -1865,7 +1865,7 @@
       "condition": "Good"
     },
     {
-      "equipment_id": "36461",
+      "equipment_id": "3646",
       "source_code": "A-3646",
       "name": "Trough chain conveyor",
       "category": "LBCB",
@@ -1879,7 +1879,7 @@
       "condition": "Good"
     },
     {
-      "equipment_id": "32051",
+      "equipment_id": "3205",
       "source_code": "A-3205",
       "name": "Trough chain conveyor",
       "category": "LBCB",
@@ -1907,7 +1907,7 @@
       "condition": "Good"
     },
     {
-      "equipment_id": "35051",
+      "equipment_id": "3505",
       "source_code": "A-3505",
       "name": "Trough chain conveyor",
       "category": "LBCB",
@@ -1949,7 +1949,7 @@
       "condition": "Good"
     },
     {
-      "equipment_id": "41001",
+      "equipment_id": "4100",
       "source_code": "A-4100",
       "name": "Trough chain conveyor",
       "category": "LBCB",
@@ -1977,7 +1977,7 @@
       "condition": "Good"
     },
     {
-      "equipment_id": "43001",
+      "equipment_id": "4300",
       "source_code": "A-4300",
       "name": "Trough chain conveyor",
       "category": "LBCB",
@@ -1991,7 +1991,7 @@
       "condition": "Good"
     },
     {
-      "equipment_id": "41501",
+      "equipment_id": "4150",
       "source_code": "A-4150",
       "name": "Trough chain conveyor",
       "category": "LBCB",
@@ -2019,7 +2019,7 @@
       "condition": "Good"
     },
     {
-      "equipment_id": "70301",
+      "equipment_id": "7030",
       "source_code": "A-7030",
       "name": "Trough chain conveyor",
       "category": "LBCB",
@@ -2033,7 +2033,7 @@
       "condition": "Good"
     },
     {
-      "equipment_id": "71301",
+      "equipment_id": "7130",
       "source_code": "A-7130",
       "name": "Trough chain conveyor",
       "category": "LBCB",
@@ -2061,7 +2061,7 @@
       "condition": "Good"
     },
     {
-      "equipment_id": "72301",
+      "equipment_id": "7230",
       "source_code": "A-7230",
       "name": "Trough chain conveyor",
       "category": "LBCB",
@@ -2075,7 +2075,7 @@
       "condition": "Good"
     },
     {
-      "equipment_id": "80011",
+      "equipment_id": "8001",
       "source_code": "A-8001",
       "name": "Trough chain conveyor",
       "category": "LBCB",
@@ -2089,7 +2089,7 @@
       "condition": "Good"
     },
     {
-      "equipment_id": "30302",
+      "equipment_id": "3030-2",
       "source_code": "B-3030",
       "name": "Feeder",
       "category": "AHBG",
@@ -2103,7 +2103,7 @@
       "condition": "Good"
     },
     {
-      "equipment_id": "30272",
+      "equipment_id": "3027-2",
       "source_code": "B-3027",
       "name": "Feeder",
       "category": "AHBG",
@@ -2117,7 +2117,7 @@
       "condition": "Good"
     },
     {
-      "equipment_id": "33302",
+      "equipment_id": "3330-2",
       "source_code": "B-3330",
       "name": "Feeder",
       "category": "AHBG",
@@ -2131,7 +2131,7 @@
       "condition": "Good"
     },
     {
-      "equipment_id": "33272",
+      "equipment_id": "3327-2",
       "source_code": "B-3327",
       "name": "Feeder",
       "category": "AHBG",
@@ -2145,7 +2145,7 @@
       "condition": "Good"
     },
     {
-      "equipment_id": "36302",
+      "equipment_id": "3630-2",
       "source_code": "B-3630",
       "name": "Feeder",
       "category": "AHBG",
@@ -2173,7 +2173,7 @@
       "condition": "Good"
     },
     {
-      "equipment_id": "40522",
+      "equipment_id": "4052-2",
       "source_code": "B-4052",
       "name": "Feeder",
       "category": "AHBG",
@@ -2229,7 +2229,7 @@
       "condition": "Good"
     },
     {
-      "equipment_id": "33301",
+      "equipment_id": "3330",
       "source_code": "A-3330",
       "name": "Feeder",
       "category": "AHBG",
@@ -2243,7 +2243,7 @@
       "condition": "Good"
     },
     {
-      "equipment_id": "30301",
+      "equipment_id": "3030",
       "source_code": "A-3030",
       "name": "Feeder",
       "category": "AHBG",
@@ -2257,7 +2257,7 @@
       "condition": "Good"
     },
     {
-      "equipment_id": "36301",
+      "equipment_id": "3630",
       "source_code": "A-3630",
       "name": "Feeder",
       "category": "AHBG",
@@ -2271,7 +2271,7 @@
       "condition": "Good"
     },
     {
-      "equipment_id": "33271",
+      "equipment_id": "3327",
       "source_code": "A-3327",
       "name": "Feeder",
       "category": "AHBG",
@@ -2285,7 +2285,7 @@
       "condition": "Good"
     },
     {
-      "equipment_id": "30271",
+      "equipment_id": "3027",
       "source_code": "A-3027",
       "name": "Feeder",
       "category": "AHBG",
@@ -2313,7 +2313,7 @@
       "condition": "Good"
     },
     {
-      "equipment_id": "40521",
+      "equipment_id": "4052",
       "source_code": "A-4052",
       "name": "Feeder",
       "category": "AHBG",
@@ -2327,7 +2327,7 @@
       "condition": "Good"
     },
     {
-      "equipment_id": "13801",
+      "equipment_id": "1380",
       "source_code": "A-1380",
       "name": "Small high-pressure filter",
       "category": "MVTB",
@@ -2341,7 +2341,7 @@
       "condition": "Good"
     },
     {
-      "equipment_id": "11151",
+      "equipment_id": "1115",
       "source_code": "A-1115",
       "name": "Small high-pressure filter",
       "category": "MVTB",
@@ -2369,7 +2369,7 @@
       "condition": "Good"
     },
     {
-      "equipment_id": "11051",
+      "equipment_id": "1105",
       "source_code": "A-1105",
       "name": "Small high-pressure filter",
       "category": "MVTB",
@@ -2383,7 +2383,7 @@
       "condition": "Good"
     },
     {
-      "equipment_id": "41291",
+      "equipment_id": "4129",
       "source_code": "A-4129",
       "name": "Small high-pressure filter",
       "category": "MVTB",
@@ -2411,7 +2411,7 @@
       "condition": "Good"
     },
     {
-      "equipment_id": "45291",
+      "equipment_id": "4529",
       "source_code": "A-4529",
       "name": "Small high-pressure filter",
       "category": "MVTB",
@@ -2425,7 +2425,7 @@
       "condition": "Good"
     },
     {
-      "equipment_id": "33611",
+      "equipment_id": "3361",
       "source_code": "A-3361",
       "name": "Small high-pressure filter",
       "category": "MVTB",
@@ -2439,7 +2439,7 @@
       "condition": "Good"
     },
     {
-      "equipment_id": "33711",
+      "equipment_id": "3371",
       "source_code": "A-3371",
       "name": "Small high-pressure filter",
       "category": "MVTB",
@@ -2453,7 +2453,7 @@
       "condition": "Good"
     },
     {
-      "equipment_id": "30711",
+      "equipment_id": "3071",
       "source_code": "A-3071",
       "name": "Small high-pressure filter",
       "category": "MVTB",
@@ -2467,7 +2467,7 @@
       "condition": "Good"
     },
     {
-      "equipment_id": "36611",
+      "equipment_id": "3661",
       "source_code": "A-3661",
       "name": "Small high-pressure filter",
       "category": "MVTB",
@@ -2481,7 +2481,7 @@
       "condition": "Good"
     },
     {
-      "equipment_id": "30611",
+      "equipment_id": "3061",
       "source_code": "A-3061",
       "name": "Small high-pressure filter",
       "category": "MVTB",
@@ -2509,7 +2509,7 @@
       "condition": "Good"
     },
     {
-      "equipment_id": "33811",
+      "equipment_id": "3381",
       "source_code": "A-3381",
       "name": "Small high-pressure filter",
       "category": "MVTB",
@@ -2537,7 +2537,7 @@
       "condition": "Good"
     },
     {
-      "equipment_id": "36811",
+      "equipment_id": "3681",
       "source_code": "A-3681",
       "name": "Small high-pressure filter",
       "category": "MVTB",
@@ -2565,7 +2565,7 @@
       "condition": "Good"
     },
     {
-      "equipment_id": "41641",
+      "equipment_id": "4164",
       "source_code": "A-4164",
       "name": "Small high-pressure filter",
       "category": "MVTB",
@@ -2579,7 +2579,7 @@
       "condition": "Good"
     },
     {
-      "equipment_id": "41541",
+      "equipment_id": "4154",
       "source_code": "A-4154",
       "name": "Small high-pressure filter",
       "category": "MVTB",
@@ -2621,7 +2621,7 @@
       "condition": "Good"
     },
     {
-      "equipment_id": "40631",
+      "equipment_id": "4063",
       "source_code": "A-4063",
       "name": "Conditioner",
       "category": "DCHA",
@@ -2635,7 +2635,7 @@
       "condition": "Good"
     },
     {
-      "equipment_id": "40462",
+      "equipment_id": "4046-2",
       "source_code": "B-4046",
       "name": "Feeder",
       "category": "AHBG",
@@ -2649,7 +2649,7 @@
       "condition": "Good"
     },
     {
-      "equipment_id": "30201",
+      "equipment_id": "3020",
       "source_code": "A-3020",
       "name": "Trough screw conveyor",
       "category": "AHAS",
@@ -2663,7 +2663,7 @@
       "condition": "Good"
     },
     {
-      "equipment_id": "30501",
+      "equipment_id": "3050",
       "source_code": "A-3050",
       "name": "Tubular screw conveyor",
       "category": "AHSG",
@@ -2677,7 +2677,7 @@
       "condition": "Good"
     },
     {
-      "equipment_id": "36511",
+      "equipment_id": "3651",
       "source_code": "A-3651",
       "name": "Tubular screw conveyor",
       "category": "AHSG",
@@ -2705,7 +2705,7 @@
       "condition": "Good"
     },
     {
-      "equipment_id": "33531",
+      "equipment_id": "3353",
       "source_code": "A-3353",
       "name": "Tubular screw conveyor",
       "category": "AHSG",
@@ -2719,7 +2719,7 @@
       "condition": "Good"
     },
     {
-      "equipment_id": "33201",
+      "equipment_id": "3320",
       "source_code": "A-3320",
       "name": "Trough screw conveyor",
       "category": "AHAS",
@@ -2733,7 +2733,7 @@
       "condition": "Good"
     },
     {
-      "equipment_id": "33501",
+      "equipment_id": "3350",
       "source_code": "A-3350",
       "name": "Tubular screw conveyor",
       "category": "AHSG",
@@ -2747,7 +2747,7 @@
       "condition": "Good"
     },
     {
-      "equipment_id": "30511",
+      "equipment_id": "3051",
       "source_code": "A-3051",
       "name": "Tubular screw conveyor",
       "category": "AHSG",
@@ -2761,7 +2761,7 @@
       "condition": "Good"
     },
     {
-      "equipment_id": "33521",
+      "equipment_id": "3352",
       "source_code": "A-3352",
       "name": "Tubular screw conveyor",
       "category": "AHSG",
@@ -2775,7 +2775,7 @@
       "condition": "Good"
     },
     {
-      "equipment_id": "30531",
+      "equipment_id": "3053",
       "source_code": "A-3053",
       "name": "Tubular screw conveyor",
       "category": "AHSG",
@@ -2789,7 +2789,7 @@
       "condition": "Good"
     },
     {
-      "equipment_id": "36201",
+      "equipment_id": "3620",
       "source_code": "A-3620",
       "name": "Trough screw conveyor",
       "category": "AHAS",
@@ -2803,7 +2803,7 @@
       "condition": "Good"
     },
     {
-      "equipment_id": "36501",
+      "equipment_id": "3650",
       "source_code": "A-3650",
       "name": "Tubular screw conveyor",
       "category": "AHSG",
@@ -2817,7 +2817,7 @@
       "condition": "Good"
     },
     {
-      "equipment_id": "33511",
+      "equipment_id": "3351",
       "source_code": "A-3351",
       "name": "Tubular screw conveyor",
       "category": "AHSG",
@@ -2831,7 +2831,7 @@
       "condition": "Good"
     },
     {
-      "equipment_id": "30521",
+      "equipment_id": "3052",
       "source_code": "A-3052",
       "name": "Tubular screw conveyor",
       "category": "AHSG",
@@ -2845,7 +2845,7 @@
       "condition": "Good"
     },
     {
-      "equipment_id": "36531",
+      "equipment_id": "3653",
       "source_code": "A-3653",
       "name": "Tubular screw conveyor",
       "category": "AHSG",
@@ -2859,7 +2859,7 @@
       "condition": "Good"
     },
     {
-      "equipment_id": "31271",
+      "equipment_id": "3127",
       "source_code": "A-3127",
       "name": "Tubular screw conveyor",
       "category": "AHSG",
@@ -2915,7 +2915,7 @@
       "condition": "Good"
     },
     {
-      "equipment_id": "10801",
+      "equipment_id": "1080",
       "source_code": "A-1080",
       "name": "Large high-pressure filter",
       "category": "MVTC",
@@ -2943,7 +2943,7 @@
       "condition": "Good"
     },
     {
-      "equipment_id": "40901",
+      "equipment_id": "4090",
       "source_code": "A-4090",
       "name": "Large high-pressure filter",
       "category": "MVTC",
@@ -3013,7 +3013,7 @@
       "condition": "Good"
     },
     {
-      "equipment_id": "31501",
+      "equipment_id": "3150",
       "source_code": "A-3150",
       "name": "Large high-pressure filter",
       "category": "MVTC",
@@ -3027,7 +3027,7 @@
       "condition": "Good"
     },
     {
-      "equipment_id": "34501",
+      "equipment_id": "3450",
       "source_code": "A-3450",
       "name": "Large high-pressure filter",
       "category": "MVTC",
@@ -3041,7 +3041,7 @@
       "condition": "Good"
     },
     {
-      "equipment_id": "37501",
+      "equipment_id": "3750",
       "source_code": "A-3750",
       "name": "Large high-pressure filter",
       "category": "MVTC",
@@ -3069,7 +3069,7 @@
       "condition": "Good"
     },
     {
-      "equipment_id": "41131",
+      "equipment_id": "4113",
       "source_code": "A-4113",
       "name": "Automatic flow balancer",
       "category": "MZAL",
@@ -3083,7 +3083,7 @@
       "condition": "Good"
     },
     {
-      "equipment_id": "41132",
+      "equipment_id": "4113-2",
       "source_code": "B-4113",
       "name": "Automatic flow balancer",
       "category": "MZAL",
@@ -3097,7 +3097,7 @@
       "condition": "Good"
     },
     {
-      "equipment_id": "10551",
+      "equipment_id": "1055",
       "source_code": "A-1055",
       "name": "Trough chain conveyor",
       "category": "LBCB",
@@ -3111,7 +3111,7 @@
       "condition": "Good"
     },
     {
-      "equipment_id": "13501",
+      "equipment_id": "1350",
       "source_code": "A-1350",
       "name": "Trough chain conveyor",
       "category": "LBCB",
@@ -3125,7 +3125,7 @@
       "condition": "Good"
     },
     {
-      "equipment_id": "11001",
+      "equipment_id": "1100",
       "source_code": "A-1100",
       "name": "Trough chain conveyor",
       "category": "LBCB",
@@ -3153,7 +3153,7 @@
       "condition": "Good"
     },
     {
-      "equipment_id": "41201",
+      "equipment_id": "4120",
       "source_code": "A-4120",
       "name": "Trough chain conveyor",
       "category": "LBCB",
@@ -3167,7 +3167,7 @@
       "condition": "Good"
     },
     {
-      "equipment_id": "43201",
+      "equipment_id": "4320",
       "source_code": "A-4320",
       "name": "Trough chain conveyor",
       "category": "LBCB",
@@ -3181,7 +3181,7 @@
       "condition": "Good"
     },
     {
-      "equipment_id": "45201",
+      "equipment_id": "4520",
       "source_code": "A-4520",
       "name": "Trough chain conveyor",
       "category": "LBCB",
@@ -3195,7 +3195,7 @@
       "condition": "Good"
     },
     {
-      "equipment_id": "14001",
+      "equipment_id": "1400",
       "source_code": "A-1400",
       "name": "Trough chain conveyor",
       "category": "LBCB",
@@ -3209,7 +3209,7 @@
       "condition": "Good"
     },
     {
-      "equipment_id": "40031",
+      "equipment_id": "4003",
       "source_code": "A-4003",
       "name": "Trough screw conveyor",
       "category": "AHAS",
@@ -3223,7 +3223,7 @@
       "condition": "Good"
     },
     {
-      "equipment_id": "40531",
+      "equipment_id": "4053",
       "source_code": "A-4053",
       "name": "Trough screw conveyor",
       "category": "AHAS",
@@ -3237,7 +3237,7 @@
       "condition": "Good"
     },
     {
-      "equipment_id": "10501",
+      "equipment_id": "1050",
       "source_code": "A-1050",
       "name": "Trough chain conveyor",
       "category": "LBCB",
@@ -3265,7 +3265,7 @@
       "condition": "Good"
     },
     {
-      "equipment_id": "13802",
+      "equipment_id": "1380-2",
       "source_code": "B-1380",
       "name": "Small high-pressure filter",
       "category": "MVTB",
@@ -3279,7 +3279,7 @@
       "condition": "Good"
     },
     {
-      "equipment_id": "11052",
+      "equipment_id": "1105-2",
       "source_code": "B-1105",
       "name": "Small high-pressure filter",
       "category": "MVTB",
@@ -3293,7 +3293,7 @@
       "condition": "Good"
     },
     {
-      "equipment_id": "11152",
+      "equipment_id": "1115-2",
       "source_code": "B-1115",
       "name": "Small high-pressure filter",
       "category": "MVTB",
@@ -3307,7 +3307,7 @@
       "condition": "Good"
     },
     {
-      "equipment_id": "41292",
+      "equipment_id": "4129-2",
       "source_code": "B-4129",
       "name": "Small high-pressure filter",
       "category": "MVTB",
@@ -3321,7 +3321,7 @@
       "condition": "Good"
     },
     {
-      "equipment_id": "45292",
+      "equipment_id": "4529-2",
       "source_code": "B-4529",
       "name": "Small high-pressure filter",
       "category": "MVTB",
@@ -3335,7 +3335,7 @@
       "condition": "Good"
     },
     {
-      "equipment_id": "30612",
+      "equipment_id": "3061-2",
       "source_code": "B-3061",
       "name": "Small high-pressure filter",
       "category": "MVTB",
@@ -3349,7 +3349,7 @@
       "condition": "Good"
     },
     {
-      "equipment_id": "30712",
+      "equipment_id": "3071-2",
       "source_code": "B-3071",
       "name": "Small high-pressure filter",
       "category": "MVTB",
@@ -3363,7 +3363,7 @@
       "condition": "Good"
     },
     {
-      "equipment_id": "33612",
+      "equipment_id": "3361-2",
       "source_code": "B-3361",
       "name": "Small high-pressure filter",
       "category": "MVTB",
@@ -3377,7 +3377,7 @@
       "condition": "Good"
     },
     {
-      "equipment_id": "33712",
+      "equipment_id": "3371-2",
       "source_code": "B-3371",
       "name": "Small high-pressure filter",
       "category": "MVTB",
@@ -3391,7 +3391,7 @@
       "condition": "Good"
     },
     {
-      "equipment_id": "36612",
+      "equipment_id": "3661-2",
       "source_code": "B-3661",
       "name": "Small high-pressure filter",
       "category": "MVTB",
@@ -3419,7 +3419,7 @@
       "condition": "Good"
     },
     {
-      "equipment_id": "33812",
+      "equipment_id": "3381-2",
       "source_code": "B-3381",
       "name": "Small high-pressure filter",
       "category": "MVTB",
@@ -3433,7 +3433,7 @@
       "condition": "Good"
     },
     {
-      "equipment_id": "36812",
+      "equipment_id": "3681-2",
       "source_code": "B-3681",
       "name": "Small high-pressure filter",
       "category": "MVTB",
@@ -3447,7 +3447,7 @@
       "condition": "Good"
     },
     {
-      "equipment_id": "41502",
+      "equipment_id": "4150-2",
       "source_code": "B-4150",
       "name": "Small high-pressure filter",
       "category": "MVTB",
@@ -3461,7 +3461,7 @@
       "condition": "Good"
     },
     {
-      "equipment_id": "41642",
+      "equipment_id": "4164-2",
       "source_code": "B-4164",
       "name": "Small high-pressure filter",
       "category": "MVTB",
@@ -3475,7 +3475,7 @@
       "condition": "Good"
     },
     {
-      "equipment_id": "41542",
+      "equipment_id": "4154-2",
       "source_code": "B-4154",
       "name": "Small high-pressure filter",
       "category": "MVTB",
@@ -3489,7 +3489,7 @@
       "condition": "Good"
     },
     {
-      "equipment_id": "10802",
+      "equipment_id": "1080-2",
       "source_code": "B-1080",
       "name": "Large high-pressure filter",
       "category": "MVTC",
@@ -3503,7 +3503,7 @@
       "condition": "Good"
     },
     {
-      "equipment_id": "31502",
+      "equipment_id": "3150-2",
       "source_code": "B-3150",
       "name": "Large high-pressure filter",
       "category": "MVTC",
@@ -3517,7 +3517,7 @@
       "condition": "Good"
     },
     {
-      "equipment_id": "34502",
+      "equipment_id": "3450-2",
       "source_code": "B-3450",
       "name": "Large high-pressure filter",
       "category": "MVTC",
@@ -3531,7 +3531,7 @@
       "condition": "Good"
     },
     {
-      "equipment_id": "37502",
+      "equipment_id": "3750-2",
       "source_code": "B-3750",
       "name": "Large high-pressure filter",
       "category": "MVTC",
@@ -3545,7 +3545,7 @@
       "condition": "Good"
     },
     {
-      "equipment_id": "40902",
+      "equipment_id": "4090-2",
       "source_code": "B-4090",
       "name": "Large high-pressure filter",
       "category": "MVTC",
@@ -3615,7 +3615,7 @@
       "condition": "Good"
     },
     {
-      "equipment_id": "10602",
+      "equipment_id": "1060-2",
       "source_code": "B-1060",
       "name": "Belt and bucket elevator",
       "category": "LBEB",
@@ -3629,7 +3629,7 @@
       "condition": "Good"
     },
     {
-      "equipment_id": "10752",
+      "equipment_id": "1075-2",
       "source_code": "B-1075",
       "name": "Belt and bucket elevator",
       "category": "LBEB",
@@ -3643,7 +3643,7 @@
       "condition": "Good"
     },
     {
-      "equipment_id": "13602",
+      "equipment_id": "1360-2",
       "source_code": "B-1360",
       "name": "Belt and bucket elevator",
       "category": "LBEB",
@@ -3657,7 +3657,7 @@
       "condition": "Good"
     },
     {
-      "equipment_id": "13752",
+      "equipment_id": "1375-2",
       "source_code": "B-1375",
       "name": "Belt and bucket elevator",
       "category": "LBEB",
@@ -3685,7 +3685,7 @@
       "condition": "Good"
     },
     {
-      "equipment_id": "33902",
+      "equipment_id": "3390-2",
       "source_code": "B-3390",
       "name": "Belt and bucket elevator",
       "category": "LBEB",
@@ -3699,7 +3699,7 @@
       "condition": "Good"
     },
     {
-      "equipment_id": "36902",
+      "equipment_id": "3690-2",
       "source_code": "B-3690",
       "name": "Belt and bucket elevator",
       "category": "LBEB",
@@ -3713,7 +3713,7 @@
       "condition": "Good"
     },
     {
-      "equipment_id": "32102",
+      "equipment_id": "3210-2",
       "source_code": "B-3210",
       "name": "Belt and bucket elevator",
       "category": "LBEB",
@@ -3741,7 +3741,7 @@
       "condition": "Good"
     },
     {
-      "equipment_id": "38102",
+      "equipment_id": "3810-2",
       "source_code": "B-3810",
       "name": "Belt and bucket elevator",
       "category": "LBEB",
@@ -3755,7 +3755,7 @@
       "condition": "Good"
     },
     {
-      "equipment_id": "41052",
+      "equipment_id": "4105-2",
       "source_code": "B-4105",
       "name": "Belt and bucket elevator",
       "category": "LBEB",
@@ -3783,7 +3783,7 @@
       "condition": "Good"
     },
     {
-      "equipment_id": "45052",
+      "equipment_id": "4505-2",
       "source_code": "B-4505",
       "name": "Belt and bucket elevator",
       "category": "LBEB",
@@ -3797,7 +3797,7 @@
       "condition": "Good"
     },
     {
-      "equipment_id": "30202",
+      "equipment_id": "3020-2",
       "source_code": "B-3020",
       "name": "Trough screw conveyor",
       "category": "AHAS",
@@ -3811,7 +3811,7 @@
       "condition": "Good"
     },
     {
-      "equipment_id": "33202",
+      "equipment_id": "3320-2",
       "source_code": "B-3320",
       "name": "Trough screw conveyor",
       "category": "AHAS",
@@ -3825,7 +3825,7 @@
       "condition": "Good"
     },
     {
-      "equipment_id": "36202",
+      "equipment_id": "3620-2",
       "source_code": "B-3620",
       "name": "Trough screw conveyor",
       "category": "AHAS",
@@ -3839,7 +3839,7 @@
       "condition": "Good"
     },
     {
-      "equipment_id": "40032",
+      "equipment_id": "4003-2",
       "source_code": "B-4003",
       "name": "Trough screw conveyor",
       "category": "AHAS",
@@ -3853,7 +3853,7 @@
       "condition": "Good"
     },
     {
-      "equipment_id": "40532",
+      "equipment_id": "4053-2",
       "source_code": "B-4053",
       "name": "Trough screw conveyor",
       "category": "AHAS",
@@ -3867,7 +3867,7 @@
       "condition": "Good"
     },
     {
-      "equipment_id": "42032",
+      "equipment_id": "4203-2",
       "source_code": "B-4203",
       "name": "Trough screw conveyor",
       "category": "AHAS",
@@ -3923,7 +3923,7 @@
       "condition": "Good"
     },
     {
-      "equipment_id": "30502",
+      "equipment_id": "3050-2",
       "source_code": "B-3050",
       "name": "Tubular screw conveyor",
       "category": "AHSG",
@@ -3937,7 +3937,7 @@
       "condition": "Good"
     },
     {
-      "equipment_id": "30512",
+      "equipment_id": "3051-2",
       "source_code": "B-3051",
       "name": "Tubular screw conveyor",
       "category": "AHSG",
@@ -3951,7 +3951,7 @@
       "condition": "Good"
     },
     {
-      "equipment_id": "30522",
+      "equipment_id": "3052-2",
       "source_code": "B-3052",
       "name": "Tubular screw conveyor",
       "category": "AHSG",
@@ -3965,7 +3965,7 @@
       "condition": "Good"
     },
     {
-      "equipment_id": "30532",
+      "equipment_id": "3053-2",
       "source_code": "B-3053",
       "name": "Tubular screw conveyor",
       "category": "AHSG",
@@ -3979,7 +3979,7 @@
       "condition": "Good"
     },
     {
-      "equipment_id": "33502",
+      "equipment_id": "3350-2",
       "source_code": "B-3350",
       "name": "Tubular screw conveyor",
       "category": "AHSG",
@@ -3993,7 +3993,7 @@
       "condition": "Good"
     },
     {
-      "equipment_id": "33512",
+      "equipment_id": "3351-2",
       "source_code": "B-3351",
       "name": "Tubular screw conveyor",
       "category": "AHSG",
@@ -4007,7 +4007,7 @@
       "condition": "Good"
     },
     {
-      "equipment_id": "33522",
+      "equipment_id": "3352-2",
       "source_code": "B-3352",
       "name": "Tubular screw conveyor",
       "category": "AHSG",
@@ -4021,7 +4021,7 @@
       "condition": "Good"
     },
     {
-      "equipment_id": "33532",
+      "equipment_id": "3353-2",
       "source_code": "B-3353",
       "name": "Tubular screw conveyor",
       "category": "AHSG",
@@ -4035,7 +4035,7 @@
       "condition": "Good"
     },
     {
-      "equipment_id": "36502",
+      "equipment_id": "3650-2",
       "source_code": "B-3650",
       "name": "Tubular screw conveyor",
       "category": "AHSG",
@@ -4049,7 +4049,7 @@
       "condition": "Good"
     },
     {
-      "equipment_id": "36512",
+      "equipment_id": "3651-2",
       "source_code": "B-3651",
       "name": "Tubular screw conveyor",
       "category": "AHSG",
@@ -4063,7 +4063,7 @@
       "condition": "Good"
     },
     {
-      "equipment_id": "36532",
+      "equipment_id": "3653-2",
       "source_code": "B-3653",
       "name": "Tubular screw conveyor",
       "category": "AHSG",
@@ -4077,7 +4077,7 @@
       "condition": "Good"
     },
     {
-      "equipment_id": "31272",
+      "equipment_id": "3127-2",
       "source_code": "B-3127",
       "name": "Tubular screw conveyor",
       "category": "AHSG",
@@ -4119,7 +4119,7 @@
       "condition": "Good"
     },
     {
-      "equipment_id": "10502",
+      "equipment_id": "1050-2",
       "source_code": "B-1050",
       "name": "Trough chain conveyor",
       "category": "LBCB",
@@ -4133,7 +4133,7 @@
       "condition": "Good"
     },
     {
-      "equipment_id": "10552",
+      "equipment_id": "1055-2",
       "source_code": "B-1055",
       "name": "Trough chain conveyor",
       "category": "LBCB",
@@ -4147,7 +4147,7 @@
       "condition": "Good"
     },
     {
-      "equipment_id": "10702",
+      "equipment_id": "1070-2",
       "source_code": "B-1070",
       "name": "Trough chain conveyor",
       "category": "LBCB",
@@ -4161,7 +4161,7 @@
       "condition": "Good"
     },
     {
-      "equipment_id": "13502",
+      "equipment_id": "1350-2",
       "source_code": "B-1350",
       "name": "Trough chain conveyor",
       "category": "LBCB",
@@ -4175,7 +4175,7 @@
       "condition": "Good"
     },
     {
-      "equipment_id": "13552",
+      "equipment_id": "1355-2",
       "source_code": "B-1355",
       "name": "Trough chain conveyor",
       "category": "LBCB",
@@ -4189,7 +4189,7 @@
       "condition": "Good"
     },
     {
-      "equipment_id": "13702",
+      "equipment_id": "1370-2",
       "source_code": "B-1370",
       "name": "Trough chain conveyor",
       "category": "LBCB",
@@ -4203,7 +4203,7 @@
       "condition": "Good"
     },
     {
-      "equipment_id": "11002",
+      "equipment_id": "1100-2",
       "source_code": "B-1100",
       "name": "Trough chain conveyor",
       "category": "LBCB",
@@ -4217,7 +4217,7 @@
       "condition": "Good"
     },
     {
-      "equipment_id": "30452",
+      "equipment_id": "3045-2",
       "source_code": "B-3045",
       "name": "Trough chain conveyor",
       "category": "LBCB",
@@ -4231,7 +4231,7 @@
       "condition": "Good"
     },
     {
-      "equipment_id": "30462",
+      "equipment_id": "3046-2",
       "source_code": "B-3046",
       "name": "Trough chain conveyor",
       "category": "LBCB",
@@ -4245,7 +4245,7 @@
       "condition": "Good"
     },
     {
-      "equipment_id": "14002",
+      "equipment_id": "1400-2",
       "source_code": "B-1400",
       "name": "Trough chain conveyor",
       "category": "LBCB",
@@ -4259,7 +4259,7 @@
       "condition": "Good"
     },
     {
-      "equipment_id": "33462",
+      "equipment_id": "3346-2",
       "source_code": "B-3346",
       "name": "Trough chain conveyor",
       "category": "LBCB",
@@ -4273,7 +4273,7 @@
       "condition": "Good"
     },
     {
-      "equipment_id": "41002",
+      "equipment_id": "4100-2",
       "source_code": "B-4100",
       "name": "Trough chain conveyor",
       "category": "LBCB",
@@ -4287,7 +4287,7 @@
       "condition": "Good"
     },
     {
-      "equipment_id": "41202",
+      "equipment_id": "4120-2",
       "source_code": "B-4120",
       "name": "Trough chain conveyor",
       "category": "LBCB",
@@ -4301,7 +4301,7 @@
       "condition": "Good"
     },
     {
-      "equipment_id": "43002",
+      "equipment_id": "4300-2",
       "source_code": "B-4300",
       "name": "Trough chain conveyor",
       "category": "LBCB",
@@ -4315,7 +4315,7 @@
       "condition": "Good"
     },
     {
-      "equipment_id": "43202",
+      "equipment_id": "4320-2",
       "source_code": "B-4320",
       "name": "Trough chain conveyor",
       "category": "LBCB",
@@ -4329,7 +4329,7 @@
       "condition": "Good"
     },
     {
-      "equipment_id": "41502",
+      "equipment_id": "4150-2",
       "source_code": "B-4150",
       "name": "Trough chain conveyor",
       "category": "LBCB",
@@ -4357,7 +4357,7 @@
       "condition": "Good"
     },
     {
-      "equipment_id": "45202",
+      "equipment_id": "4520-2",
       "source_code": "B-4520",
       "name": "Trough chain conveyor",
       "category": "LBCB",
@@ -4371,7 +4371,7 @@
       "condition": "Good"
     },
     {
-      "equipment_id": "36452",
+      "equipment_id": "3645-2",
       "source_code": "B-3645",
       "name": "Trough chain conveyor",
       "category": "LBCB",
@@ -4385,7 +4385,7 @@
       "condition": "Good"
     },
     {
-      "equipment_id": "36462",
+      "equipment_id": "3646-2",
       "source_code": "B-3646",
       "name": "Trough chain conveyor",
       "category": "LBCB",
@@ -4399,7 +4399,7 @@
       "condition": "Good"
     },
     {
-      "equipment_id": "32052",
+      "equipment_id": "3205-2",
       "source_code": "B-3205",
       "name": "Trough chain conveyor",
       "category": "LBCB",
@@ -4413,7 +4413,7 @@
       "condition": "Good"
     },
     {
-      "equipment_id": "35052",
+      "equipment_id": "3505-2",
       "source_code": "B-3505",
       "name": "Trough chain conveyor",
       "category": "LBCB",
@@ -4427,7 +4427,7 @@
       "condition": "Good"
     },
     {
-      "equipment_id": "70302",
+      "equipment_id": "7030-2",
       "source_code": "B-7030",
       "name": "Trough chain conveyor",
       "category": "LBCB",
@@ -4441,7 +4441,7 @@
       "condition": "Good"
     },
     {
-      "equipment_id": "80012",
+      "equipment_id": "8001-2",
       "source_code": "B-8001",
       "name": "Trough chain conveyor",
       "category": "LBCB",
@@ -4455,7 +4455,7 @@
       "condition": "Good"
     },
     {
-      "equipment_id": "71302",
+      "equipment_id": "7130-2",
       "source_code": "B-7130",
       "name": "Trough chain conveyor",
       "category": "LBCB",
@@ -4469,7 +4469,7 @@
       "condition": "Good"
     },
     {
-      "equipment_id": "72302",
+      "equipment_id": "7230-2",
       "source_code": "B-7230",
       "name": "Trough chain conveyor",
       "category": "LBCB",
@@ -4497,7 +4497,7 @@
       "condition": "Good"
     },
     {
-      "equipment_id": "80051",
+      "equipment_id": "8005",
       "source_code": "A-8005",
       "name": "Trough chain conveyor",
       "category": "AHKA",
@@ -4511,7 +4511,7 @@
       "condition": "Good"
     },
     {
-      "equipment_id": "81051",
+      "equipment_id": "8105",
       "source_code": "A-8105",
       "name": "Trough chain conveyor",
       "category": "AHKA",
@@ -4525,7 +4525,7 @@
       "condition": "Good"
     },
     {
-      "equipment_id": "82052",
+      "equipment_id": "8205-2",
       "source_code": "B-8205",
       "name": "Trough chain conveyor",
       "category": "AHKA",
@@ -4539,7 +4539,7 @@
       "condition": "Good"
     },
     {
-      "equipment_id": "80052",
+      "equipment_id": "8005-2",
       "source_code": "B-8005",
       "name": "Trough chain conveyor",
       "category": "AHKA",
@@ -4553,7 +4553,7 @@
       "condition": "Good"
     },
     {
-      "equipment_id": "81052",
+      "equipment_id": "8105-2",
       "source_code": "B-8105",
       "name": "Trough chain conveyor",
       "category": "AHKA",
@@ -4567,7 +4567,7 @@
       "condition": "Good"
     },
     {
-      "equipment_id": "82051",
+      "equipment_id": "8205",
       "source_code": "A-8205",
       "name": "Trough chain conveyor",
       "category": "AHKA",
