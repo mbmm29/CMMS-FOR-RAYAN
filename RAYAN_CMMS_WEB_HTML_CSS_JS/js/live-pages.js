@@ -4303,36 +4303,124 @@ async function compressReportPhoto(file) {
   }
 }
 
-function prepareDailyPrint() {
-  const markEmpty = (selector) => {
-    document.querySelectorAll(selector).forEach((row) => {
-      const filled = [...row.querySelectorAll('input, select, textarea')].some((field) => String(field.value || '').trim());
-      row.classList.toggle('print-hide', !filled);
-    });
-  };
-  markEmpty('#daily-rows tr');
-  markEmpty('#daily-parts tr');
+function dailyPrintStyles() {
+  return `
+@page{size:A4 portrait;margin:6mm}
+*{box-sizing:border-box}
+html,body{margin:0;padding:0;background:#fff;color:#102d60;font:8pt Arial,sans-serif}
+.daily-paper{width:198mm;max-width:100%;margin:0 auto;color:#102d60}
+.no-print,.print-hide,.send-watch,.report-alert,.lube-actions,.daily-photos{display:none!important}
+.lube-head{display:grid;grid-template-columns:28mm minmax(0,1fr) 42mm;gap:2mm;align-items:center;padding-bottom:1.5mm;border-bottom:0.4mm solid #2a5287}
+.lube-head img{width:26mm;max-height:12mm;object-fit:contain;display:block}
+.lube-head h2{margin:0;font-size:11pt;line-height:1.15;text-align:center}
+.lube-head p{margin:0.5mm 0 0;font-size:8pt;font-weight:800;text-align:center}
+.lube-head small{display:block;margin-top:0.3mm;font-size:7pt;text-align:center;color:#31517f}
+.lube-head dl{margin:0;border:0.3mm solid #2a5287}
+.lube-head dl div{display:flex;align-items:center;gap:2mm;min-height:5.5mm;padding:0 1.5mm;font-size:7.5pt;font-weight:700;border-bottom:0.3mm solid #2a5287}
+.lube-head dl div:last-child{border-bottom:0}
+.lube-head dt{margin:0;white-space:nowrap}
+.lube-head dd{margin:0;flex:1;text-align:end;font-weight:800}
+.lube-meta{display:grid;grid-template-columns:1fr 1fr;gap:1mm 6mm;margin:2mm 0 1.5mm}
+.lube-meta label{display:grid;grid-template-columns:28mm minmax(0,1fr);gap:1.5mm;align-items:center;font-size:8pt;font-weight:800}
+.lube-meta input,.lube-meta select{width:100%;height:5mm;border:0;border-bottom:0.25mm solid #8eabda;background:transparent;font:8pt Arial,sans-serif;color:#102d60}
+.sheet-scroll{overflow:visible;max-height:none}
+.lube-table{width:100%;border-collapse:collapse;table-layout:fixed}
+.lube-table th,.lube-table td{border:0.25mm solid #2a5287;padding:0.4mm 0.6mm;font-size:7pt;vertical-align:top;color:#102d60}
+.lube-table th{height:6mm;background:#e7f0ff;vertical-align:middle}
+.lube-table input,.lube-table select,.lube-table textarea{width:100%;border:0;background:transparent;font:7pt Arial,sans-serif;color:#102d60;padding:0;margin:0;height:3.6mm}
+.lube-machine{display:grid;grid-template-columns:1fr 1fr;gap:0.2mm}
+.lube-machine input[data-field="code"],.lube-machine input[data-field="name"]{grid-column:1/-1}
+.daily-work{display:grid;gap:0.2mm}
+.lube-no{text-align:center;font-weight:800;width:6%}
+.daily-parts,.daily-notes{margin-top:1.5mm}
+.daily-parts h3,.daily-notes>span{display:block;margin:0 0 0.8mm;font-size:8pt}
+.daily-note-box{position:relative}
+.daily-notes textarea{width:100%;height:12mm;min-height:12mm;border:0.25mm solid #2a5287;padding:1mm 18mm 1mm 1.5mm;font:7.5pt Arial,sans-serif;resize:none}
+.daily-tdt{position:absolute;left:1.5mm;bottom:1mm;font-size:7.5pt;font-weight:800}
+`;
+}
+
+function freezeDailyPrintFields(root) {
+  root.querySelectorAll('select').forEach((select) => {
+    const text = select.options[select.selectedIndex]?.text || select.value || '';
+    const span = root.ownerDocument.createElement('span');
+    span.textContent = text;
+    span.style.cssText = 'display:block;min-height:3.6mm;font:7pt Arial,sans-serif';
+    select.replaceWith(span);
+  });
+  root.querySelectorAll('input, textarea').forEach((field) => {
+    field.setAttribute('value', field.value);
+    if (field.tagName === 'TEXTAREA') field.textContent = field.value;
+  });
+}
+
+function printDailyReportSheet() {
+  const form = document.getElementById('daily-form');
+  if (!form) return;
+  const clone = form.cloneNode(true);
+  clone.querySelectorAll('.no-print, .send-watch, .report-alert, .lube-actions, .daily-photos').forEach((node) => node.remove());
+  clone.querySelectorAll('#daily-rows tr, #daily-parts tr').forEach((row) => {
+    const filled = [...row.querySelectorAll('input, select, textarea')].some((field) => String(field.value || '').trim());
+    if (!filled) row.remove();
+  });
   let seq = 1;
-  document.querySelectorAll('#daily-rows tr:not(.print-hide) .lube-no').forEach((cell) => {
+  clone.querySelectorAll('#daily-rows .lube-no').forEach((cell) => {
     cell.textContent = String(seq);
     seq += 1;
   });
   seq = 1;
-  document.querySelectorAll('#daily-parts tr:not(.print-hide) .lube-no').forEach((cell) => {
+  clone.querySelectorAll('#daily-parts .lube-no').forEach((cell) => {
     cell.textContent = String(seq);
     seq += 1;
   });
-}
-
-function clearDailyPrintMarks() {
-  document.querySelectorAll('#daily-rows tr.print-hide, #daily-parts tr.print-hide').forEach((row) => row.classList.remove('print-hide'));
-  document.querySelectorAll('#daily-rows tr').forEach((row, index) => {
-    const cell = row.querySelector('.lube-no');
-    if (cell) cell.textContent = String(index + 1);
+  freezeDailyPrintFields(clone);
+  clone.querySelectorAll('img').forEach((img) => {
+    try {
+      img.src = new URL(img.getAttribute('src') || 'logo-rayan.png', window.location.href).href;
+    } catch (_) {
+      /* keep relative src */
+    }
   });
-  document.querySelectorAll('#daily-parts tr').forEach((row, index) => {
-    const cell = row.querySelector('.lube-no');
-    if (cell) cell.textContent = String(index + 1);
+
+  const previous = document.getElementById('daily-print-frame');
+  if (previous) previous.remove();
+  const frame = document.createElement('iframe');
+  frame.id = 'daily-print-frame';
+  frame.setAttribute('aria-hidden', 'true');
+  frame.style.cssText = 'position:fixed;right:0;bottom:0;width:0;height:0;border:0;opacity:0;pointer-events:none';
+  document.body.appendChild(frame);
+  const doc = frame.contentDocument;
+  doc.open();
+  doc.write(`<!DOCTYPE html><html><head><meta charset="utf-8"><title>RAYAN CMMS - Daily Report</title><style>${dailyPrintStyles()}</style></head><body>${clone.outerHTML}</body></html>`);
+  doc.close();
+
+  const cleanup = () => {
+    window.setTimeout(() => frame.remove(), 800);
+  };
+  const runPrint = () => {
+    try {
+      frame.contentWindow.focus();
+      frame.contentWindow.print();
+    } finally {
+      cleanup();
+    }
+  };
+  const images = [...doc.images];
+  if (!images.length) {
+    window.setTimeout(runPrint, 50);
+    return;
+  }
+  let left = images.length;
+  const tick = () => {
+    left -= 1;
+    if (left <= 0) window.setTimeout(runPrint, 50);
+  };
+  images.forEach((img) => {
+    if (img.complete) tick();
+    else {
+      img.addEventListener('load', tick, { once: true });
+      img.addEventListener('error', tick, { once: true });
+    }
   });
 }
 
@@ -4617,21 +4705,7 @@ async function drawDailyReport() {
     const body = document.getElementById('daily-parts');
     body.insertAdjacentHTML('beforeend', dailyPartRow({}, body.children.length));
   });
-  document.getElementById('daily-print')?.addEventListener('click', () => {
-    prepareDailyPrint();
-    const restore = () => {
-      clearDailyPrintMarks();
-      window.removeEventListener('afterprint', restore);
-    };
-    window.addEventListener('afterprint', restore);
-    window.print();
-  });
-  window.addEventListener('beforeprint', () => {
-    if (document.getElementById('daily-form')) prepareDailyPrint();
-  });
-  window.addEventListener('afterprint', () => {
-    if (document.getElementById('daily-form')) clearDailyPrintMarks();
-  });
+  document.getElementById('daily-print')?.addEventListener('click', () => printDailyReportSheet());
   document.getElementById('daily-add-photo')?.addEventListener('click', () => document.getElementById('daily-photo-file')?.click());
   document.getElementById('daily-photo-file')?.addEventListener('change', (event) => {
     const files = [...event.target.files];

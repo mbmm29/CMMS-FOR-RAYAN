@@ -649,6 +649,9 @@ body .detail-button.job-open-detail .job-open-glyph{font-size:16px;line-height:1
   body:has(.daily-paper) .toast,
   body:has(.daily-paper) #screen-notice,
   body:has(.daily-paper) .review-bar{display:none!important}
+  /* Daily report Print uses a dedicated A4 iframe; keep photos off the main print path. */
+  body:has(.daily-paper) #daily-photo-print,
+  body:has(.daily-paper) .report-photo-page{display:none!important}
   body:has(.motor-paper) .motor-paper{width:auto!important;min-width:0!important;max-width:none!important;margin:0!important}
   .report-photo-page{display:flex!important;align-items:center;justify-content:center;break-before:page;page-break-before:always;break-inside:avoid;page-break-inside:avoid;page:a3photo;width:297mm;height:420mm;margin:0!important;padding:0!important;overflow:hidden;background:#fff!important;border:0!important}
   .report-photo-page.landscape{page:a3photo-land;width:420mm;height:297mm}
