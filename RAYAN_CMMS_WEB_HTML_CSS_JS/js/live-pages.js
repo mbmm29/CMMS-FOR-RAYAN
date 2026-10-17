@@ -4303,6 +4303,39 @@ async function compressReportPhoto(file) {
   }
 }
 
+function prepareDailyPrint() {
+  const markEmpty = (selector) => {
+    document.querySelectorAll(selector).forEach((row) => {
+      const filled = [...row.querySelectorAll('input, select, textarea')].some((field) => String(field.value || '').trim());
+      row.classList.toggle('print-hide', !filled);
+    });
+  };
+  markEmpty('#daily-rows tr');
+  markEmpty('#daily-parts tr');
+  let seq = 1;
+  document.querySelectorAll('#daily-rows tr:not(.print-hide) .lube-no').forEach((cell) => {
+    cell.textContent = String(seq);
+    seq += 1;
+  });
+  seq = 1;
+  document.querySelectorAll('#daily-parts tr:not(.print-hide) .lube-no').forEach((cell) => {
+    cell.textContent = String(seq);
+    seq += 1;
+  });
+}
+
+function clearDailyPrintMarks() {
+  document.querySelectorAll('#daily-rows tr.print-hide, #daily-parts tr.print-hide').forEach((row) => row.classList.remove('print-hide'));
+  document.querySelectorAll('#daily-rows tr').forEach((row, index) => {
+    const cell = row.querySelector('.lube-no');
+    if (cell) cell.textContent = String(index + 1);
+  });
+  document.querySelectorAll('#daily-parts tr').forEach((row, index) => {
+    const cell = row.querySelector('.lube-no');
+    if (cell) cell.textContent = String(index + 1);
+  });
+}
+
 function paintDailyPhotos() {
   const strip = document.getElementById('daily-photo-strip');
   const printBox = document.getElementById('daily-photo-print');
@@ -4584,7 +4617,21 @@ async function drawDailyReport() {
     const body = document.getElementById('daily-parts');
     body.insertAdjacentHTML('beforeend', dailyPartRow({}, body.children.length));
   });
-  document.getElementById('daily-print')?.addEventListener('click', () => window.print());
+  document.getElementById('daily-print')?.addEventListener('click', () => {
+    prepareDailyPrint();
+    const restore = () => {
+      clearDailyPrintMarks();
+      window.removeEventListener('afterprint', restore);
+    };
+    window.addEventListener('afterprint', restore);
+    window.print();
+  });
+  window.addEventListener('beforeprint', () => {
+    if (document.getElementById('daily-form')) prepareDailyPrint();
+  });
+  window.addEventListener('afterprint', () => {
+    if (document.getElementById('daily-form')) clearDailyPrintMarks();
+  });
   document.getElementById('daily-add-photo')?.addEventListener('click', () => document.getElementById('daily-photo-file')?.click());
   document.getElementById('daily-photo-file')?.addEventListener('change', (event) => {
     const files = [...event.target.files];
