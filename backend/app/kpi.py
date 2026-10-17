@@ -1,8 +1,11 @@
 """Approved CMMS KPI equations.
 
-The calculations follow the approved SMRP-adapted definitions and use the
-records the project actually stores: PM plans, work orders, daily reports,
-machine records, and component history.
+Availability = Tracked work time ÷ Expected work time × 100
+  Tracked work time = expected hours minus recorded downtime (and idle)
+  Expected work time = equipment count × period days × 24 h
+
+Other metrics follow the approved SMRP-adapted definitions using PM plans,
+work orders, daily reports, machine records, and component history.
 """
 import math
 from datetime import date, datetime, timedelta
@@ -227,9 +230,13 @@ def compute_kpi(db: Session, plant_id=None, line_id=None, equipment_id=None, tec
         if asset_count == 0:
             asset_count = len({row.equipment_id or row.equipment_code for row in window_items if row.equipment_id or row.equipment_code})
         idle = 0.0
-        available = round(asset_count * days * 24, 2) if asset_count else 0.0
-        uptime = round(available - idle - (scheduled_down + unscheduled_down), 2)
-        operating = round(available - idle - scheduled_down - unscheduled_down, 2)
+        # Expected work time: calendar hours the scoped assets should be available.
+        expected_work = round(asset_count * days * 24, 2) if asset_count else 0.0
+        available = expected_work
+        # Tracked work time: expected hours still available after recorded downtime/idle.
+        tracked_work = round(max(expected_work - idle - total_down, 0), 2)
+        uptime = tracked_work
+        operating = tracked_work
 
         failure_orders = [row for row in window_orders if row.work_order_type in FAILURE_TYPES]
         failure_ids = {row.work_order_id for row in failure_orders}
@@ -434,14 +441,14 @@ def compute_kpi(db: Session, plant_id=None, line_id=None, equipment_id=None, tec
             category_hours = round(sum(grouped.get(key, {}).values()), 2)
             count = int(grouped_count.get(key, 0))
             assets = int(assets_by_key.get(key, 0) or 0)
-            available_h = round(assets * window_days * 24, 2) if assets else 0.0
-            uptime_h = max(available_h - category_hours, 0)
+            expected_h = round(assets * window_days * 24, 2) if assets else 0.0
+            tracked_h = max(expected_h - category_hours, 0)
             pareto.append({
                 'id': key,
                 'name': label,
                 'count': count,
                 'hours': category_hours,
-                'availability': _pct(uptime_h, available_h) if available_h else None,
+                'availability': _pct(tracked_h, expected_h) if expected_h else None,
             })
         # Keep every plant/line visible; only trim when the list is very long.
         pareto.sort(key=lambda row: (-row['hours'], -row['count'], str(row['name']).lower()))
@@ -456,14 +463,16 @@ def compute_kpi(db: Session, plant_id=None, line_id=None, equipment_id=None, tec
             row['cumulative_pct'] = round(100 * running / total_hours_pareto, 1)
 
         return {
-            'availability': _pct(max(uptime, 0), available - idle) if available else None,
-            'uptime_h': max(uptime, 0) if available else 0,
-            'available_h': available,
+            'availability': _pct(tracked_work, expected_work) if expected_work else None,
+            'tracked_work_h': tracked_work if expected_work else 0,
+            'expected_work_h': expected_work,
+            'uptime_h': tracked_work if expected_work else 0,
+            'available_h': expected_work,
             'idle_h': idle,
             'downtime_h': total_down,
             'scheduled_downtime_h': scheduled_down,
             'unscheduled_downtime_h': unscheduled_down,
-            'operating_h': max(operating, 0) if available else 0,
+            'operating_h': tracked_work if expected_work else 0,
             'utilization': _pct(utilization_operating, utilization_available),
             'utilization_operating_h': utilization_operating,
             'utilization_available_h': utilization_available,
