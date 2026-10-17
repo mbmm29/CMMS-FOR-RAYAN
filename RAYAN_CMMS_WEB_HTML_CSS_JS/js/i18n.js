@@ -181,6 +181,8 @@ const CMMS_AR = {
   'From reports': 'من تقارير الفنيين',
   'Add a machine with its full details, and review equipment sent from technician reports.': 'أضف معدة بكل تفاصيلها، وراجع المعدات الواردة من تقارير الفنيين.',
   'Equipment code': 'رمز المعدة',
+  'Numbers only': 'أرقام فقط',
+  'Equipment code must be numbers only': 'رمز المعدة يجب أن يكون أرقاماً فقط',
   'Area': 'المنطقة',
   'Manufacturer': 'الشركة المصنعة',
   'Model': 'الموديل',

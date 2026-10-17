@@ -2912,7 +2912,7 @@ function equipmentForm(item) {
   const plants = openPlants().map((plant) => `<option value="${esc(plant.plant_id)}"${plant.plant_id === item?.plant_id ? ' selected' : ''}>${esc(plant.name)}</option>`).join('');
   const codeField = editing
     ? `<input name="equipment_id" value="${esc(item.equipment_id)}" readonly>`
-    : '<input name="equipment_id" required>';
+    : `<input name="equipment_id" required inputmode="numeric" pattern="[0-9]+" placeholder="${esc(t('Numbers only'))}">`;
   const panel = formPanel(editing ? 'Edit equipment' : 'Add Equipment', [
     field('Equipment code', codeField),
     field('Name', `<input name="name" value="${esc(val('name'))}" required>`),
@@ -3183,6 +3183,8 @@ function bindForm(selectedEquipment = null) {
           data.equipment_id = ui.rowKey;
           await apiRequest(`/equipment/${encodeURIComponent(ui.rowKey)}`, { method: 'PUT', body: JSON.stringify(data) });
         } else {
+          data.equipment_id = String(data.equipment_id || '').replace(/\D+/g, '');
+          if (!data.equipment_id) throw new Error(t('Equipment code must be numbers only'));
           await apiRequest('/equipment', { method: 'POST', body: JSON.stringify(data) });
         }
       } else if (ui.page === 'plants') {

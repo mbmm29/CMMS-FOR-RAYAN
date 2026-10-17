@@ -9,6 +9,7 @@ from pathlib import Path
 from sqlalchemy.orm import Session
 
 from .models import Equipment, LineSection, Plant, PlantLine
+from .equipment_code_normalize import normalize_equipment_code
 
 CATALOG_PATH = Path(__file__).resolve().parent / 'data' / 'add_equipment_catalog.json'
 
@@ -152,7 +153,7 @@ def import_equipment_catalog(db: Session, rows: list[dict] | None = None, update
     errors = []
     for index, row in enumerate(catalog, 1):
         try:
-            equipment_id = _clean(row.get('equipment_id'))
+            equipment_id = normalize_equipment_code(row.get('equipment_id') or row.get('source_code'))
             if not equipment_id:
                 raise ValueError('Missing equipment_id')
             plant = ensure_plant(db, row.get('plant_name') or '')

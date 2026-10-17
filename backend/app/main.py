@@ -306,11 +306,28 @@ ensure_additive_columns()
 assign_missing_order_codes()
 
 
+def maybe_normalize_equipment_ids():
+    """Strip letter prefixes and dashes from equipment codes (digits only)."""
+    db = SessionLocal()
+    try:
+        from .equipment_code_normalize import maybe_normalize_equipment_codes
+        maybe_normalize_equipment_codes(db)
+    except Exception:
+        try:
+            db.rollback()
+        except Exception:
+            pass
+    finally:
+        db.close()
+
+
 def maybe_import_equipment_catalog():
     """Load Add Equipment.xlsx once when the catalog marker is not in the database yet."""
     db = SessionLocal()
     try:
-        if db.query(Equipment).filter_by(equipment_id='A-1062').first():
+        if db.query(Equipment).filter(
+            Equipment.equipment_id.in_(('1062', '10621', '10622', 'A-1062', 'B-1062'))
+        ).first():
             return
         from .equipment_catalog_import import import_equipment_catalog
         import_equipment_catalog(db, update_existing=True)
@@ -323,6 +340,7 @@ def maybe_import_equipment_catalog():
         db.close()
 
 
+maybe_normalize_equipment_ids()
 maybe_import_equipment_catalog()
 start_phone_notices()
 
@@ -931,10 +949,15 @@ def create_equipment(data:EquipmentCreate,db:Session=Depends(get_db),u=Depends(a
     if data.criticality not in EQUIPMENT_CRITICALITY:
         raise HTTPException(400, 'Choose the equipment importance')
     if data.status not in EQUIPMENT_STATUSES: raise HTTPException(400,'Invalid equipment status')
-    if db.query(Equipment).filter_by(equipment_id=data.equipment_id).first(): raise HTTPException(409,'Equipment ID already exists')
+    from .equipment_code_normalize import normalize_equipment_code
+    code = normalize_equipment_code(data.equipment_id)
+    if not code or not re.fullmatch(r'\d+', code):
+        raise HTTPException(400, 'Equipment code must be numbers only')
+    if db.query(Equipment).filter_by(equipment_id=code).first(): raise HTTPException(409,'Equipment ID already exists')
     payload = data.model_dump()
+    payload['equipment_id'] = code
     payload['section_id'] = section.section_id if section else None
-    o=Equipment(**payload); db.add(o); audit(db,u,'CREATE','Equipment',data.equipment_id,new=payload); db.commit(); db.refresh(o); return o
+    o=Equipment(**payload); db.add(o); audit(db,u,'CREATE','Equipment',code,new=payload); db.commit(); db.refresh(o); return o
 @app.put('/equipment/{equipment_id}',response_model=EquipmentOut)
 def update_equipment(equipment_id:str,data:EquipmentCreate,db:Session=Depends(get_db),u=Depends(role(*ENGINEER))):
     o=db.query(Equipment).filter_by(equipment_id=equipment_id).first()
