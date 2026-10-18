@@ -642,6 +642,8 @@ const CMMS_AR = {
   'Select a report to view its details.': 'اختر تقريراً لعرض تفاصيله.',
   'Date / Shift': 'التاريخ / الوردية',
   'Plant / Line': 'المصنع / الخط',
+  'TDT': 'إجمالي التوقف',
+  'min': 'د',
   'Total downtime': 'إجمالي التوقف',
   'General notes': 'ملاحظات عامة',
   'Maintenance activities': 'أعمال الصيانة',
