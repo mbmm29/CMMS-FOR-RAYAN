@@ -2,7 +2,7 @@
 
 Availability = Tracked work time ÷ Expected work time × 100
   Tracked work time = expected hours minus recorded downtime (and idle)
-  Expected work time = equipment count × period days × 24 h
+  Expected work time = equipment count × period days × work-day hours (24 or 16)
 
 Other metrics follow the approved SMRP-adapted definitions using PM plans,
 work orders, daily reports, machine records, and component history.
@@ -86,7 +86,22 @@ def _blank_hours():
     return {name: 0.0 for name in HOUR_TYPES}
 
 
-def compute_kpi(db: Session, plant_id=None, line_id=None, equipment_id=None, technician_id=None, date_from=None, date_to=None):
+def compute_kpi(
+    db: Session,
+    plant_id=None,
+    line_id=None,
+    equipment_id=None,
+    technician_id=None,
+    date_from=None,
+    date_to=None,
+    hours_per_day=24,
+):
+    try:
+        hours_per_day = int(hours_per_day)
+    except (TypeError, ValueError):
+        hours_per_day = 24
+    if hours_per_day not in (16, 24):
+        hours_per_day = 24
     all_equipment = db.query(Equipment).all()
     equipment_by_id = {row.equipment_id: row for row in all_equipment}
     plants = [row for row in db.query(Plant).all() if row.active is not False]
@@ -230,8 +245,9 @@ def compute_kpi(db: Session, plant_id=None, line_id=None, equipment_id=None, tec
         if asset_count == 0:
             asset_count = len({row.equipment_id or row.equipment_code for row in window_items if row.equipment_id or row.equipment_code})
         idle = 0.0
-        # Expected work time: calendar hours the scoped assets should be available.
-        expected_work = round(asset_count * days * 24, 2) if asset_count else 0.0
+        window_days = max((window_end - window_start).days + 1, 1)
+        # Expected work time: assets × days × engineer-selected work-day hours (24 or 16).
+        expected_work = round(asset_count * window_days * hours_per_day, 2) if asset_count else 0.0
         available = expected_work
         # Tracked work time: expected hours still available after recorded downtime/idle.
         tracked_work = round(max(expected_work - idle - total_down, 0), 2)
@@ -414,7 +430,6 @@ def compute_kpi(db: Session, plant_id=None, line_id=None, equipment_id=None, tec
 
         # Downtime bars by plant/line (or equipment), with Availability on the line.
         # The date filter sets the period; categories are plants, or lines when one plant is selected.
-        window_days = max((window_end - window_start).days + 1, 1)
         assets_by_key = {}
         for row in all_equipment:
             if plant_ids and row.plant_id not in plant_ids:
@@ -441,7 +456,7 @@ def compute_kpi(db: Session, plant_id=None, line_id=None, equipment_id=None, tec
             category_hours = round(sum(grouped.get(key, {}).values()), 2)
             count = int(grouped_count.get(key, 0))
             assets = int(assets_by_key.get(key, 0) or 0)
-            expected_h = round(assets * window_days * 24, 2) if assets else 0.0
+            expected_h = round(assets * window_days * hours_per_day, 2) if assets else 0.0
             tracked_h = max(expected_h - category_hours, 0)
             pareto.append({
                 'id': key,
@@ -466,6 +481,7 @@ def compute_kpi(db: Session, plant_id=None, line_id=None, equipment_id=None, tec
             'availability': _pct(tracked_work, expected_work) if expected_work else None,
             'tracked_work_h': tracked_work if expected_work else 0,
             'expected_work_h': expected_work,
+            'hours_per_day': hours_per_day,
             'uptime_h': tracked_work if expected_work else 0,
             'available_h': expected_work,
             'idle_h': idle,

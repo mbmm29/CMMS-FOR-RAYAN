@@ -2576,14 +2576,20 @@ def kpi_dashboard(
     technician_id: str | None = None,
     date_from: date | None = None,
     date_to: date | None = None,
+    hours_per_day: int = Query(24),
     db: Session = Depends(get_db),
     u=Depends(auth),
 ):
     if is_technician_account(u) and u.technician_id:
         technician_id = u.technician_id
+    if hours_per_day not in (16, 24):
+        raise HTTPException(400, 'Work day must be 16 or 24 hours')
     plants = [item for item in (plant_id or []) if (item or '').strip()]
     plant_filter = plants or None
-    payload = compute_kpi(db, plant_filter, line_id or None, equipment_id or None, technician_id or None, date_from, date_to)
+    payload = compute_kpi(
+        db, plant_filter, line_id or None, equipment_id or None, technician_id or None,
+        date_from, date_to, hours_per_day=hours_per_day,
+    )
     period = payload.get('period') or {}
     start = date.fromisoformat(period['from']) if period.get('from') else date.today()
     end = date.fromisoformat(period['to']) if period.get('to') else date.today()

@@ -15,7 +15,17 @@ const DEFAULT_TAB = {
   'spare-parts': 'All',
 };
 const shellRender = render;
-const ui = { page: 'dashboard', tab: 'All', rowKey: '', mode: 'view', plantId: '', plantIds: [], lineId: '', sectionId: '', equipmentId: '', equipmentQuery: '', spareEquipment: '', technicianId: '', dateFrom: '', dateTo: '', annualPlant: '', annualYear: new Date().getFullYear(), annualItems: [], annualWeek: '', annualCopy: null, weekTasks: [], lubeId: '', dailyId: '', dailyFilter: '' };
+const KPI_HOURS_KEY = 'cmms-kpi-hours-per-day';
+function loadKpiHoursPerDay() {
+  const raw = Number(window.localStorage.getItem(KPI_HOURS_KEY) || 24);
+  return raw === 16 ? 16 : 24;
+}
+function saveKpiHoursPerDay(hours) {
+  const value = Number(hours) === 16 ? 16 : 24;
+  window.localStorage.setItem(KPI_HOURS_KEY, String(value));
+  return value;
+}
+const ui = { page: 'dashboard', tab: 'All', rowKey: '', mode: 'view', plantId: '', plantIds: [], lineId: '', sectionId: '', equipmentId: '', equipmentQuery: '', spareEquipment: '', technicianId: '', dateFrom: '', dateTo: '', kpiHoursPerDay: loadKpiHoursPerDay(), annualPlant: '', annualYear: new Date().getFullYear(), annualItems: [], annualWeek: '', annualCopy: null, weekTasks: [], lubeId: '', dailyId: '', dailyFilter: '' };
 const ANNUAL_MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 const WEEKDAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 const DAY_MAINTENANCE_TYPES = ['Preventive', 'Corrective', 'Emergency', 'Routine', 'Inspection', 'Lubrication', 'Motor condition'];
@@ -1207,6 +1217,8 @@ async function drawDashboard() {
   if (ui.technicianId) params.set('technician_id', ui.technicianId);
   if (ui.dateFrom) params.set('date_from', ui.dateFrom);
   if (ui.dateTo) params.set('date_to', ui.dateTo);
+  const dayHours = canMaintain() ? (ui.kpiHoursPerDay === 16 ? 16 : 24) : 24;
+  params.set('hours_per_day', String(dayHours));
   const kpi = await apiRequest(`/kpi${params.toString() ? `?${params}` : ''}`);
   const previous = kpi.previous || {};
   const targets = kpi.targets || {};
@@ -1238,7 +1250,10 @@ async function drawDashboard() {
   ];
   const orderTotal = orderParts.reduce((sum, part) => sum + part.value, 0);
   const technicianOptions = store.technicians.map((row) => `<option value="${esc(row.technician_id)}"${ui.technicianId === row.technician_id ? ' selected' : ''}>${esc(row.name)}</option>`).join('');
-  const extraFilters = `<label>${t('Technician')}<select data-filter="technician"><option value="">${esc(t('All technicians'))}</option>${technicianOptions}</select></label><label>${t('From')}<input data-filter="from" type="date" value="${esc(ui.dateFrom)}"></label><label>${t('To')}<input data-filter="to" type="date" value="${esc(ui.dateTo)}"></label>`;
+  const shiftFilter = canMaintain()
+    ? `<label class="kpi-shift">${esc(t('Work day'))}<span class="kpi-shift-toggle" role="group" aria-label="${esc(t('Work day'))}"><button type="button" data-kpi-hours="24" class="${dayHours === 24 ? 'active' : ''}">24 ${esc(t('h'))}</button><button type="button" data-kpi-hours="16" class="${dayHours === 16 ? 'active' : ''}">16 ${esc(t('h'))}</button></span></label>`
+    : '';
+  const extraFilters = `<label>${t('Technician')}<select data-filter="technician"><option value="">${esc(t('All technicians'))}</option>${technicianOptions}</select></label><label>${t('From')}<input data-filter="from" type="date" value="${esc(ui.dateFrom)}"></label><label>${t('To')}<input data-filter="to" type="date" value="${esc(ui.dateTo)}"></label>${shiftFilter}`;
   const card = (title, value, detail, note) => `<article class="kpi-card"><h3>${esc(t(title))}</h3><b>${value}</b><small>${esc(detail)}</small><small>${esc(note)}</small></article>`;
   const metricOption = (value, label) => `<option value="${value}">${esc(t(label))}</option>`;
   const targetForm = canMaintain() && plants.length <= 1 ? `<form id="kpi-target" class="live-form kpi-target"><b>${esc(t('KPI target for this plant / line / equipment'))}</b><label>${t('Metric')}<select name="metric">${metricOption('availability', 'Availability %')}${metricOption('utilization', 'Utilization %')}${metricOption('reliability', 'Reliability %')}${metricOption('mtbf', 'MTBF hours')}${metricOption('mttr', 'MTTR hours')}${metricOption('pm_compliance', 'PM compliance %')}${metricOption('downtime_h', 'Downtime hours')}${metricOption('planned_pm_pct', 'Planned PM %')}${metricOption('preventive_pct', 'Preventive %')}${metricOption('emergency_to_routine', 'Emergency to routine %')}${metricOption('emergency_to_preventive', 'Emergency to preventive %')}${metricOption('corrective_pct', 'Corrective %')}${metricOption('wo_schedule', 'Schedule compliance %')}${metricOption('wo_completion', 'WO completion %')}${metricOption('backlog', 'Backlog %')}${metricOption('failure_rate_1000h', 'Failures / 1,000 h')}</select></label><label>${t('Target')}<input name="target_value" type="number" min="0" step="0.1" required></label><button class="detail-button primary" type="submit">${esc(t('Save target'))}</button><p id="kpi-target-error" class="form-error"></p></form>` : '';
@@ -1246,7 +1261,7 @@ async function drawDashboard() {
   const workspace = document.getElementById('workspace');
   workspace.className = 'workspace kpi-layout';
   workspace.innerHTML = `${filtersHtml({ multiPlant: true, equipmentSearch: false, extra: extraFilters })}
-    <p class="kpi-period">${esc(t('Period'))} ${esc(fmtDate(kpi.period?.from))} – ${esc(fmtDate(kpi.period?.to))} · ${kpi.period?.days || 0} ${esc(t('days'))} · ${kpi.equipment_count || 0} ${esc(t('equipment'))} · ${esc(t('idle time is 0 because it is not recorded'))}</p>
+    <p class="kpi-period">${esc(t('Period'))} ${esc(fmtDate(kpi.period?.from))} – ${esc(fmtDate(kpi.period?.to))} · ${kpi.period?.days || 0} ${esc(t('days'))} · ${kpi.equipment_count || 0} ${esc(t('equipment'))} · ${esc(t('Work day'))} ${kpi.hours_per_day || dayHours} ${esc(t('h'))} · ${esc(t('idle time is 0 because it is not recorded'))}</p>
     <section class="kpi-board">
       ${card('PM overdue', String(kpi.pm_overdue ?? 0), kpiTargetText(kpi.pm_overdue_pct, null, false), `${kpiText(kpi.pm_overdue_pct, 1, '%')} ${t('of')} ${kpi.pm_due || 0} ${t('due PM plans')}`)}
       ${card('Planned PM', kpiText(kpi.planned_pm_pct, 1, '%'), kpiTargetText(kpi.planned_pm_pct, targets.planned_pm_pct, true), `${kpi.planned_pm || 0} ${t('planned of')} ${kpi.pm_total || 0}`)}
@@ -1270,10 +1285,17 @@ async function drawDashboard() {
     <section class="panel chart-panel chart-wide"><h2>${esc(t('Downtime (Hours)'))}</h2><p class="kpi-note">${esc(t(kpi.trend_by === 'line' ? 'Each line' : kpi.trend_by === 'equipment' ? 'Selected equipment' : 'Each plant'))} · ${esc(t('One black bar per plant (or per line when one plant is selected). The red line is Availability.'))} · ${esc(fmtDate(kpi.period?.from))} – ${esc(fmtDate(kpi.period?.to))} · ${esc(t('scheduled'))} ${kpiText(kpi.scheduled_downtime_h, 1)} · ${esc(t('unscheduled'))} ${kpiText(kpi.unscheduled_downtime_h, 1)}</p>${(kpi.pareto || []).length ? paretoChart(kpi.pareto, { barLabel: kpi.trend_by === 'line' ? 'Lines' : kpi.trend_by === 'equipment' ? 'Equipment' : 'Plants' }) : `<p class="chart-empty">${esc(t('No downtime in this period'))}</p>`}</section>
     <section class="panel chart-panel chart-wide"><h2>${esc(t('Oil level'))}</h2><p class="kpi-note">${esc(t(motorScopeNote()))} · ${esc(t('Rank 1 is the best reading on that day.'))}</p>${bumpChart(kpi.motor?.oil_level, 'Oil level') || `<p class="chart-empty">${esc(t('No motor readings in this period.'))}</p>`}</section>
     <section class="panel chart-panel chart-wide"><h2>${esc(t('Oil condition'))}</h2><p class="kpi-note">${esc(t(motorScopeNote()))} · ${esc(t('Rank 1 is the best reading on that day.'))}</p>${bumpChart(kpi.motor?.oil_condition, 'Oil condition') || `<p class="chart-empty">${esc(t('No motor readings in this period.'))}</p>`}</section>
-    <section class="panel chart-panel"><h2>${esc(t('Availability basis'))}</h2><div class="summary-row"><span>${esc(t('Tracked work time'))}</span><b>${kpiText(kpi.tracked_work_h ?? kpi.uptime_h, 1)} ${esc(t('h'))}</b></div><div class="summary-row"><span>${esc(t('Expected work time'))}</span><b>${kpiText(kpi.expected_work_h ?? kpi.available_h, 1)} ${esc(t('h'))}</b></div><div class="summary-row"><span>${esc(t('Idle time'))}</span><b>${kpiText(kpi.idle_h, 1)} ${esc(t('h'))}</b></div><div class="summary-row"><span>${esc(t('Downtime'))}</span><b>${kpiText(kpi.downtime_h, 1)} ${esc(t('h'))}</b></div><small class="kpi-note">${esc(t('Availability = Tracked work time ÷ Expected work time × 100. MTBF = operating time ÷ failures. MTTR = corrective hours ÷ corrective events.'))}</small></section>
+    <section class="panel chart-panel"><h2>${esc(t('Availability basis'))}</h2><div class="summary-row"><span>${esc(t('Tracked work time'))}</span><b>${kpiText(kpi.tracked_work_h ?? kpi.uptime_h, 1)} ${esc(t('h'))}</b></div><div class="summary-row"><span>${esc(t('Expected work time'))}</span><b>${kpiText(kpi.expected_work_h ?? kpi.available_h, 1)} ${esc(t('h'))}</b></div><div class="summary-row"><span>${esc(t('Work day'))}</span><b>${kpi.hours_per_day || dayHours} ${esc(t('h'))}</b></div><div class="summary-row"><span>${esc(t('Downtime'))}</span><b>${kpiText(kpi.downtime_h, 1)} ${esc(t('h'))}</b></div><small class="kpi-note">${esc(t('Availability = Tracked work time ÷ Expected work time × 100. Expected work time = equipment × days × work-day hours.'))}</small></section>
     <section class="panel chart-panel"><h2>${esc(t('Work orders and PM'))}</h2><div class="summary-row"><span>${esc(t('Issued / completed'))}</span><b>${kpi.wo_issued || 0} / ${kpi.wo_completed || 0}</b></div><div class="summary-row"><span>${esc(t('PM due / on time'))}</span><b>${kpi.pm_due || 0} / ${kpi.pm_on_time || 0}</b></div><div class="summary-row"><span>${esc(t('Corrective events'))}</span><b>${kpi.corrective_events || 0}</b></div><div class="summary-row"><span>${esc(kpiTargetText(kpi.availability, targets.availability, true))}</span><b>${esc(t('Availability'))}</b></div><div class="summary-row"><span>${esc(kpiTargetText(kpi.mtbf, targets.mtbf, true))}</span><b>${esc(t('MTBF'))}</b></div><div class="summary-row"><span>${esc(kpiTargetText(kpi.mttr, targets.mttr, false))}</span><b>${esc(t('MTTR'))}</b></div>${targetForm}</section>
     <section class="panel chart-panel"><h2>${esc(t('Component life'))}</h2><p class="kpi-note">${esc(t('Removal date − installation date. In-service components use today.'))}</p>${components}<div class="summary-row"><span>${esc(t('Average life'))}</span><b>${kpi.component_life_avg == null ? '—' : `${kpi.component_life_avg} ${t('days')}`}</b></div></section>`;
   bindFilters();
+  document.querySelectorAll('[data-kpi-hours]').forEach((button) => {
+    button.addEventListener('click', () => {
+      if (!canMaintain()) return;
+      ui.kpiHoursPerDay = saveKpiHoursPerDay(button.dataset.kpiHours);
+      drawDashboard();
+    });
+  });
   document.getElementById('kpi-target')?.addEventListener('submit', async (event) => {
     event.preventDefault();
     const error = document.getElementById('kpi-target-error');

@@ -47,6 +47,17 @@ body .live-filters{
   background:linear-gradient(180deg,#10284fcc,#0c1d3ccc);
 }
 body .live-filters label{min-width:0;color:#b7c9e6;font-size:11px;gap:6px}
+body .live-filters label.kpi-shift{display:grid;gap:6px}
+body .kpi-shift-toggle{display:grid;grid-template-columns:1fr 1fr;gap:6px;min-width:0}
+body .kpi-shift-toggle button{
+  min-height:38px;margin:0;padding:0 10px;border:1px solid #2c528c;border-radius:10px;
+  background:#071428;color:#c5d6f4;font:700 12px Arial,sans-serif;cursor:pointer
+}
+body .kpi-shift-toggle button:hover{border-color:#3b82f6;color:#f4f8ff}
+body .kpi-shift-toggle button.active{
+  border-color:#3b82f6;background:linear-gradient(180deg,#1a4f9d,#123a78);color:#fff;
+  box-shadow:0 0 0 1px #9ec4ff44,0 6px 16px #075cf544
+}
 body .live-filters select,
 body .live-filters input[type="date"],
 body .live-filters input[type="search"]{
