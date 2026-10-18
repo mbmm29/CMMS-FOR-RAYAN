@@ -1214,10 +1214,10 @@ async function drawDashboard() {
   const workDay = kpi.work_day || { hours_per_day: 24, editable: false, locked: true, lock_hour: 8 };
   const dayHours = Number(workDay.hours_per_day) === 16 ? 16 : 24;
   const mtbfNote = kpi.mtbf == null
-    ? t('No failures in this operating time')
+    ? t('No failure downtime in this period')
     : `${kpiText(kpi.operating_h, 1)} ${t('h operating')} ÷ ${kpi.failures || 0} ${t('failures')} · ${kpiMove(kpi.mtbf, previous.mtbf, true)}`;
   const mttrNote = kpi.mttr == null
-    ? t('No repair incidents in this period')
+    ? t('No repair downtime in this period')
     : `${kpiText(kpi.repair_hours ?? kpi.corrective_hours, 1)} ${t('h repair')} ÷ ${kpi.repair_events ?? kpi.failures ?? 0} ${t('incidents')} · ${kpiMove(kpi.mttr, previous.mttr, false)}`;
   document.getElementById('metric-grid').innerHTML = metrics([
     ['Availability', kpiText(kpi.availability, 1, '%'), '✓', 'green', kpiMove(kpi.availability, previous.availability, true)],

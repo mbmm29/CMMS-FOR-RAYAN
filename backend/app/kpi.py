@@ -568,9 +568,18 @@ def compute_kpi(
             'utilization_operating_h': utilization_operating,
             'utilization_available_h': utilization_available,
             'utilization_reports': utilization_reports,
-            'mtbf': _per(max(operating, 0), failures) if available else None,
-            'reliability': _reliability(max(operating, 0) if available else 0, _per(max(operating, 0), failures) if available else None),
-            'mttr': _per(repair_hours, repair_events) if repair_events else None,
+            # MTBF needs real failure downtime in the period. Zero downtime → no MTBF figure
+            # (otherwise fleet operating hours ÷ a zero-hour failure event looks like thousands of hours).
+            'mtbf': (
+                _per(max(operating, 0), failures)
+                if available and failures > 0 and repair_hours > 0
+                else None
+            ),
+            'reliability': _reliability(
+                max(operating, 0) if available else 0,
+                _per(max(operating, 0), failures) if available and failures > 0 and repair_hours > 0 else None,
+            ),
+            'mttr': _per(repair_hours, repair_events) if repair_events and repair_hours > 0 else None,
             'repair_hours': repair_hours,
             'repair_events': repair_events,
             'failures': failures,

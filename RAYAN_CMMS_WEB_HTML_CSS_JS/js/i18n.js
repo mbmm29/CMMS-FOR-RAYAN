@@ -402,6 +402,8 @@ const CMMS_AR = {
   'incidents': 'حوادث',
   'Repair incidents': 'مرات الإصلاح',
   'No repair incidents in this period': 'لا حوادث إصلاح في هذه الفترة',
+  'No failure downtime in this period': 'لا توقف أعطال في هذه الفترة',
+  'No repair downtime in this period': 'لا وقت إصلاح/توقف في هذه الفترة',
   'MTTR = total repair/downtime hours ÷ number of repair incidents. Scope follows the plant / line / equipment filter.': 'متوسط وقت الإصلاح = إجمالي ساعات الإصلاح/التوقف ÷ عدد مرات الإصلاح. النطاق حسب فلتر المصنع أو الخط أو المعدة.',
   'reports × 8 h': 'تقارير × 8 س',
   'Reliability': 'الموثوقية',
