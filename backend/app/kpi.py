@@ -4,6 +4,11 @@ Availability = Tracked work time ÷ Expected work time × 100
   Tracked work time = expected hours minus recorded downtime (and idle)
   Expected work time = equipment count × period days × work-day hours (24 or 16)
 
+MTTR = Total repair/downtime hours ÷ Number of repair incidents
+  Scoped by the KPI filter: plant, line, or single equipment.
+
+MTBF = Operating hours ÷ Number of failures (same filter scope).
+
 Other metrics follow the approved SMRP-adapted definitions using PM plans,
 work orders, daily reports, machine records, and component history.
 """
@@ -330,6 +335,9 @@ def compute_kpi(
         failures = len(failure_orders) + len(extra_failures)
         corrective_orders = [row for row in failure_orders if row.work_order_type == 'Corrective']
         corrective_hours = hours['Corrective']
+        # MTTR uses total repair/failure downtime over all incidents in the filter scope.
+        repair_hours = round(hours['Corrective'] + hours['Emergency'], 2)
+        repair_events = failures
 
         late_pm_ids = set()
         for order in window_orders:
@@ -562,7 +570,9 @@ def compute_kpi(
             'utilization_reports': utilization_reports,
             'mtbf': _per(max(operating, 0), failures) if available else None,
             'reliability': _reliability(max(operating, 0) if available else 0, _per(max(operating, 0), failures) if available else None),
-            'mttr': _per(corrective_hours, len(corrective_orders)) if corrective_orders else None,
+            'mttr': _per(repair_hours, repair_events) if repair_events else None,
+            'repair_hours': repair_hours,
+            'repair_events': repair_events,
             'failures': failures,
             'corrective_events': len(corrective_orders),
             'corrective_hours': corrective_hours,

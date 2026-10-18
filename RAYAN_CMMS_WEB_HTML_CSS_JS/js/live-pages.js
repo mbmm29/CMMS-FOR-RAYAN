@@ -1213,10 +1213,16 @@ async function drawDashboard() {
   const hours = kpi.hours || {};
   const workDay = kpi.work_day || { hours_per_day: 24, editable: false, locked: true, lock_hour: 8 };
   const dayHours = Number(workDay.hours_per_day) === 16 ? 16 : 24;
+  const mtbfNote = kpi.mtbf == null
+    ? t('No failures in this operating time')
+    : `${kpiText(kpi.operating_h, 1)} ${t('h operating')} ÷ ${kpi.failures || 0} ${t('failures')} · ${kpiMove(kpi.mtbf, previous.mtbf, true)}`;
+  const mttrNote = kpi.mttr == null
+    ? t('No repair incidents in this period')
+    : `${kpiText(kpi.repair_hours ?? kpi.corrective_hours, 1)} ${t('h repair')} ÷ ${kpi.repair_events ?? kpi.failures ?? 0} ${t('incidents')} · ${kpiMove(kpi.mttr, previous.mttr, false)}`;
   document.getElementById('metric-grid').innerHTML = metrics([
     ['Availability', kpiText(kpi.availability, 1, '%'), '✓', 'green', kpiMove(kpi.availability, previous.availability, true)],
-    ['MTBF (Hours)', kpiText(kpi.mtbf, 1), '▥', 'blue', kpiMove(kpi.mtbf, previous.mtbf, true)],
-    ['MTTR (Hours)', kpiText(kpi.mttr, 2), '⚒', 'orange', kpiMove(kpi.mttr, previous.mttr, false)],
+    ['MTBF (Hours)', kpiText(kpi.mtbf, 1), '▥', 'blue', mtbfNote],
+    ['MTTR (Hours)', kpiText(kpi.mttr, 2), '⚒', 'orange', mttrNote],
     ['PM Compliance', kpiText(kpi.pm_compliance, 1, '%'), '◷', 'blue', kpiMove(kpi.pm_compliance, previous.pm_compliance, true)],
     ['Downtime (Hours)', kpiText(kpi.downtime_h, 1), '◉', 'red', kpiMove(kpi.downtime_h, previous.downtime_h, false)],
     ['WO Completion', kpiText(kpi.wo_completion, 1, '%'), '▣', 'purple', kpiMove(kpi.wo_completion, previous.wo_completion, true)],
@@ -1277,7 +1283,7 @@ async function drawDashboard() {
     <section class="panel chart-panel chart-wide"><h2>${esc(t('Oil level'))}</h2><p class="kpi-note">${esc(t(motorScopeNote()))} · ${esc(t('Rank 1 is the best reading on that day.'))}</p>${bumpChart(kpi.motor?.oil_level, 'Oil level') || `<p class="chart-empty">${esc(t('No motor readings in this period.'))}</p>`}</section>
     <section class="panel chart-panel chart-wide"><h2>${esc(t('Oil condition'))}</h2><p class="kpi-note">${esc(t(motorScopeNote()))} · ${esc(t('Rank 1 is the best reading on that day.'))}</p>${bumpChart(kpi.motor?.oil_condition, 'Oil condition') || `<p class="chart-empty">${esc(t('No motor readings in this period.'))}</p>`}</section>
     <section class="panel chart-panel"><h2>${esc(t('Availability basis'))}</h2><div class="summary-row"><span>${esc(t('Tracked work time'))}</span><b>${kpiText(kpi.tracked_work_h ?? kpi.uptime_h, 1)} ${esc(t('h'))}</b></div><div class="summary-row"><span>${esc(t('Expected work time'))}</span><b>${kpiText(kpi.expected_work_h ?? kpi.available_h, 1)} ${esc(t('h'))}</b></div><div class="summary-row"><span>${esc(t('Work day'))}</span><b>${kpi.hours_per_day || dayHours} ${esc(t('h'))}</b></div><div class="summary-row"><span>${esc(t('Downtime'))}</span><b>${kpiText(kpi.downtime_h, 1)} ${esc(t('h'))}</b></div><small class="kpi-note">${esc(t('Availability = Tracked work time ÷ Expected work time × 100. Expected work time = equipment × days × work-day hours.'))}</small></section>
-    <section class="panel chart-panel"><h2>${esc(t('Work orders and PM'))}</h2><div class="summary-row"><span>${esc(t('Issued / completed'))}</span><b>${kpi.wo_issued || 0} / ${kpi.wo_completed || 0}</b></div><div class="summary-row"><span>${esc(t('PM due / on time'))}</span><b>${kpi.pm_due || 0} / ${kpi.pm_on_time || 0}</b></div><div class="summary-row"><span>${esc(t('Corrective events'))}</span><b>${kpi.corrective_events || 0}</b></div><div class="summary-row"><span>${esc(kpiTargetText(kpi.availability, targets.availability, true))}</span><b>${esc(t('Availability'))}</b></div><div class="summary-row"><span>${esc(kpiTargetText(kpi.mtbf, targets.mtbf, true))}</span><b>${esc(t('MTBF'))}</b></div><div class="summary-row"><span>${esc(kpiTargetText(kpi.mttr, targets.mttr, false))}</span><b>${esc(t('MTTR'))}</b></div>${targetForm}</section>
+    <section class="panel chart-panel"><h2>${esc(t('Work orders and PM'))}</h2><div class="summary-row"><span>${esc(t('Issued / completed'))}</span><b>${kpi.wo_issued || 0} / ${kpi.wo_completed || 0}</b></div><div class="summary-row"><span>${esc(t('PM due / on time'))}</span><b>${kpi.pm_due || 0} / ${kpi.pm_on_time || 0}</b></div><div class="summary-row"><span>${esc(t('Repair incidents'))}</span><b>${kpi.repair_events ?? kpi.failures ?? 0}</b></div><div class="summary-row"><span>${esc(kpiTargetText(kpi.availability, targets.availability, true))}</span><b>${esc(t('Availability'))}</b></div><div class="summary-row"><span>${esc(kpiTargetText(kpi.mtbf, targets.mtbf, true))}</span><b>${esc(t('MTBF'))}</b></div><div class="summary-row"><span>${esc(kpiTargetText(kpi.mttr, targets.mttr, false))}</span><b>${esc(t('MTTR'))}</b></div><small class="kpi-note">${esc(t('MTTR = total repair/downtime hours ÷ number of repair incidents. Scope follows the plant / line / equipment filter.'))}</small>${targetForm}</section>
     <section class="panel chart-panel"><h2>${esc(t('Component life'))}</h2><p class="kpi-note">${esc(t('Removal date − installation date. In-service components use today.'))}</p>${components}<div class="summary-row"><span>${esc(t('Average life'))}</span><b>${kpi.component_life_avg == null ? '—' : `${kpi.component_life_avg} ${t('days')}`}</b></div></section>`;
   bindFilters();
   document.querySelectorAll('[data-kpi-hours]').forEach((button) => {
