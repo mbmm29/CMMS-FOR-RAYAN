@@ -534,6 +534,16 @@ class KpiTarget(Base):
     target_value: Mapped[float] = mapped_column(Float)
 
 
+class KpiWorkDay(Base):
+    """Daily mill work-day length (16 or 24 h) used for Availability expected time."""
+    __tablename__ = 'kpi_work_days'
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    work_date: Mapped[date] = mapped_column(Date, unique=True, index=True)
+    hours_per_day: Mapped[int] = mapped_column(Integer, default=24)
+    set_by: Mapped[str | None] = mapped_column(String(80), nullable=True)
+    set_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+
 class Measurement(Base):
     __tablename__='measurements'
     id: Mapped[int]=mapped_column(Integer,primary_key=True)

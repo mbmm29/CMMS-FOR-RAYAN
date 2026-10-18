@@ -15,17 +15,7 @@ const DEFAULT_TAB = {
   'spare-parts': 'All',
 };
 const shellRender = render;
-const KPI_HOURS_KEY = 'cmms-kpi-hours-per-day';
-function loadKpiHoursPerDay() {
-  const raw = Number(window.localStorage.getItem(KPI_HOURS_KEY) || 24);
-  return raw === 16 ? 16 : 24;
-}
-function saveKpiHoursPerDay(hours) {
-  const value = Number(hours) === 16 ? 16 : 24;
-  window.localStorage.setItem(KPI_HOURS_KEY, String(value));
-  return value;
-}
-const ui = { page: 'dashboard', tab: 'All', rowKey: '', mode: 'view', plantId: '', plantIds: [], lineId: '', sectionId: '', equipmentId: '', equipmentQuery: '', spareEquipment: '', technicianId: '', dateFrom: '', dateTo: '', kpiHoursPerDay: loadKpiHoursPerDay(), annualPlant: '', annualYear: new Date().getFullYear(), annualItems: [], annualWeek: '', annualCopy: null, weekTasks: [], lubeId: '', dailyId: '', dailyFilter: '' };
+const ui = { page: 'dashboard', tab: 'All', rowKey: '', mode: 'view', plantId: '', plantIds: [], lineId: '', sectionId: '', equipmentId: '', equipmentQuery: '', spareEquipment: '', technicianId: '', dateFrom: '', dateTo: '', annualPlant: '', annualYear: new Date().getFullYear(), annualItems: [], annualWeek: '', annualCopy: null, weekTasks: [], lubeId: '', dailyId: '', dailyFilter: '' };
 const ANNUAL_MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 const WEEKDAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 const DAY_MAINTENANCE_TYPES = ['Preventive', 'Corrective', 'Emergency', 'Routine', 'Inspection', 'Lubrication', 'Motor condition'];
@@ -1217,12 +1207,12 @@ async function drawDashboard() {
   if (ui.technicianId) params.set('technician_id', ui.technicianId);
   if (ui.dateFrom) params.set('date_from', ui.dateFrom);
   if (ui.dateTo) params.set('date_to', ui.dateTo);
-  const dayHours = canMaintain() ? (ui.kpiHoursPerDay === 16 ? 16 : 24) : 24;
-  params.set('hours_per_day', String(dayHours));
   const kpi = await apiRequest(`/kpi${params.toString() ? `?${params}` : ''}`);
   const previous = kpi.previous || {};
   const targets = kpi.targets || {};
   const hours = kpi.hours || {};
+  const workDay = kpi.work_day || { hours_per_day: 24, editable: false, locked: true, lock_hour: 8 };
+  const dayHours = Number(workDay.hours_per_day) === 16 ? 16 : 24;
   document.getElementById('metric-grid').innerHTML = metrics([
     ['Availability', kpiText(kpi.availability, 1, '%'), '✓', 'green', kpiMove(kpi.availability, previous.availability, true)],
     ['MTBF (Hours)', kpiText(kpi.mtbf, 1), '▥', 'blue', kpiMove(kpi.mtbf, previous.mtbf, true)],
@@ -1250,8 +1240,9 @@ async function drawDashboard() {
   ];
   const orderTotal = orderParts.reduce((sum, part) => sum + part.value, 0);
   const technicianOptions = store.technicians.map((row) => `<option value="${esc(row.technician_id)}"${ui.technicianId === row.technician_id ? ' selected' : ''}>${esc(row.name)}</option>`).join('');
+  const shiftLocked = Boolean(workDay.locked) || !workDay.editable;
   const shiftFilter = canMaintain()
-    ? `<label class="kpi-shift">${esc(t('Work day'))}<span class="kpi-shift-toggle" role="group" aria-label="${esc(t('Work day'))}"><button type="button" data-kpi-hours="24" class="${dayHours === 24 ? 'active' : ''}">24 ${esc(t('h'))}</button><button type="button" data-kpi-hours="16" class="${dayHours === 16 ? 'active' : ''}">16 ${esc(t('h'))}</button></span></label>`
+    ? `<label class="kpi-shift">${esc(t('Work day'))}<span class="kpi-shift-toggle" role="group" aria-label="${esc(t('Work day'))}"><button type="button" data-kpi-hours="24" class="${dayHours === 24 ? 'active' : ''}"${shiftLocked ? ' disabled' : ''}>24 ${esc(t('h'))}</button><button type="button" data-kpi-hours="16" class="${dayHours === 16 ? 'active' : ''}"${shiftLocked ? ' disabled' : ''}>16 ${esc(t('h'))}</button></span><small class="kpi-shift-note">${esc(shiftLocked ? t('Work day locked at 08:00. Opens again tomorrow before 08:00.') : t('Saved for today. Selection locks at 08:00.'))}</small></label>`
     : '';
   const extraFilters = `<label>${t('Technician')}<select data-filter="technician"><option value="">${esc(t('All technicians'))}</option>${technicianOptions}</select></label><label>${t('From')}<input data-filter="from" type="date" value="${esc(ui.dateFrom)}"></label><label>${t('To')}<input data-filter="to" type="date" value="${esc(ui.dateTo)}"></label>${shiftFilter}`;
   const card = (title, value, detail, note) => `<article class="kpi-card"><h3>${esc(t(title))}</h3><b>${value}</b><small>${esc(detail)}</small><small>${esc(note)}</small></article>`;
@@ -1290,10 +1281,16 @@ async function drawDashboard() {
     <section class="panel chart-panel"><h2>${esc(t('Component life'))}</h2><p class="kpi-note">${esc(t('Removal date − installation date. In-service components use today.'))}</p>${components}<div class="summary-row"><span>${esc(t('Average life'))}</span><b>${kpi.component_life_avg == null ? '—' : `${kpi.component_life_avg} ${t('days')}`}</b></div></section>`;
   bindFilters();
   document.querySelectorAll('[data-kpi-hours]').forEach((button) => {
-    button.addEventListener('click', () => {
-      if (!canMaintain()) return;
-      ui.kpiHoursPerDay = saveKpiHoursPerDay(button.dataset.kpiHours);
-      drawDashboard();
+    button.addEventListener('click', async () => {
+      if (!canMaintain() || button.disabled) return;
+      const hours = Number(button.dataset.kpiHours) === 16 ? 16 : 24;
+      try {
+        await apiRequest('/kpi/work-day', { method: 'PUT', body: JSON.stringify({ hours_per_day: hours }) });
+        toast(t('Work day saved for today.'));
+        await drawDashboard();
+      } catch (exception) {
+        toast(t(exception.message || 'Could not save the work day'));
+      }
     });
   });
   document.getElementById('kpi-target')?.addEventListener('submit', async (event) => {

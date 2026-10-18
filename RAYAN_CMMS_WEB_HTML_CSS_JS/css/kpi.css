@@ -58,6 +58,10 @@ body .kpi-shift-toggle button.active{
   border-color:#3b82f6;background:linear-gradient(180deg,#1a4f9d,#123a78);color:#fff;
   box-shadow:0 0 0 1px #9ec4ff44,0 6px 16px #075cf544
 }
+body .kpi-shift-toggle button:disabled{
+  cursor:not-allowed;opacity:.72
+}
+body .kpi-shift-note{display:block;margin-top:4px;color:#9eb4d6;font-size:10px;line-height:1.35;font-weight:600}
 body .live-filters select,
 body .live-filters input[type="date"],
 body .live-filters input[type="search"]{

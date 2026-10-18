@@ -19,7 +19,7 @@ from .database import Base, engine, get_db, SessionLocal
 from .models import *
 from .schemas import *
 from .security import *
-from .kpi import compute_kpi, save_kpi_target
+from .kpi import compute_kpi, save_kpi_target, save_work_day, work_day_status
 from .motor_catalog import OIL_CONDITIONS, OIL_LEVELS, motor_catalog_payload, motor_place, motor_sheet_allowed
 from .push_notices import (
     clear_work_order_push,
@@ -2576,25 +2576,38 @@ def kpi_dashboard(
     technician_id: str | None = None,
     date_from: date | None = None,
     date_to: date | None = None,
-    hours_per_day: int = Query(24),
     db: Session = Depends(get_db),
     u=Depends(auth),
 ):
     if is_technician_account(u) and u.technician_id:
         technician_id = u.technician_id
-    if hours_per_day not in (16, 24):
-        raise HTTPException(400, 'Work day must be 16 or 24 hours')
     plants = [item for item in (plant_id or []) if (item or '').strip()]
     plant_filter = plants or None
-    payload = compute_kpi(
-        db, plant_filter, line_id or None, equipment_id or None, technician_id or None,
-        date_from, date_to, hours_per_day=hours_per_day,
-    )
+    payload = compute_kpi(db, plant_filter, line_id or None, equipment_id or None, technician_id or None, date_from, date_to)
     period = payload.get('period') or {}
     start = date.fromisoformat(period['from']) if period.get('from') else date.today()
     end = date.fromisoformat(period['to']) if period.get('to') else date.today()
     payload['motor'] = motor_chart(db, plant_filter, line_id or None, equipment_id or None, start, end)
     return payload
+
+
+@app.get('/kpi/work-day')
+def get_kpi_work_day(db: Session = Depends(get_db), u=Depends(auth)):
+    return work_day_status(db)
+
+
+@app.put('/kpi/work-day')
+def update_kpi_work_day(data: KpiWorkDayIn, db: Session = Depends(get_db), u=Depends(role(*ENGINEER))):
+    if int(data.hours_per_day) not in (16, 24):
+        raise HTTPException(400, 'Work day must be 16 or 24 hours')
+    try:
+        status = save_work_day(db, data.hours_per_day, username=getattr(u, 'username', None) or getattr(u, 'full_name', None))
+    except ValueError as exc:
+        raise HTTPException(409, str(exc)) from exc
+    audit(db, u, 'UPDATE', 'KpiWorkDay', status['work_date'], new={'hours_per_day': status['hours_per_day']})
+    db.commit()
+    return status
+
 
 @app.put('/kpi/targets')
 def update_kpi_target(data: KpiTargetIn, db: Session = Depends(get_db), u=Depends(role(*ENGINEER))):

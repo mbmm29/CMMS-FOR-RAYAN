@@ -8,13 +8,13 @@ Other metrics follow the approved SMRP-adapted definitions using PM plans,
 work orders, daily reports, machine records, and component history.
 """
 import math
-from datetime import date, datetime, timedelta
+from datetime import date, datetime, timedelta, timezone
 
 from sqlalchemy.orm import Session
 
 from .models import (
-    Component, DailyReport, DailyReportItem, Equipment, KpiTarget, MachineRecord,
-    Plant, PlantLine, PMPlan, WorkOrder, WorkOrderAssignment,
+    Component, DailyReport, DailyReportItem, Equipment, KpiTarget, KpiWorkDay,
+    MachineRecord, Plant, PlantLine, PMPlan, WorkOrder, WorkOrderAssignment,
 )
 
 FAILURE_TYPES = {'Corrective', 'Emergency'}
@@ -22,10 +22,82 @@ CLOSED = {'Closed', 'Completed'}
 HOUR_TYPES = ('Preventive', 'Corrective', 'Routine', 'Inspection', 'Emergency', 'Lubrication')
 RECEIVED_REPORTS = {'Submitted', 'Approved', 'Returned'}
 REPORT_SHIFT_HOURS = 8
+DEFAULT_WORK_DAY_HOURS = 24
+WORK_DAY_LOCK_HOUR = 8  # Baghdad local time
 HIGHER_IS_BETTER = {
     'availability', 'mtbf', 'pm_compliance', 'planned_pm', 'preventive_pct',
     'wo_schedule', 'wo_completion', 'utilization', 'reliability',
 }
+
+
+def plant_clock():
+    """Mill local time in Asia/Baghdad (UTC+3)."""
+    return datetime.now(timezone(timedelta(hours=3))).replace(tzinfo=None)
+
+
+def work_day_is_editable(now: datetime | None = None) -> bool:
+    """Engineers may change today's work-day hours only before 08:00."""
+    clock = now or plant_clock()
+    return clock.hour < WORK_DAY_LOCK_HOUR
+
+
+def load_work_day_hours(db: Session, start: date, end: date) -> dict[date, int]:
+    rows = db.query(KpiWorkDay).filter(
+        KpiWorkDay.work_date >= start,
+        KpiWorkDay.work_date <= end,
+    ).all()
+    return {
+        row.work_date: (16 if int(row.hours_per_day) == 16 else DEFAULT_WORK_DAY_HOURS)
+        for row in rows
+    }
+
+
+def expected_work_hours(asset_count: int, window_start: date, window_end: date, hours_by_date: dict[date, int]) -> float:
+    if not asset_count:
+        return 0.0
+    total = 0.0
+    cursor = window_start
+    while cursor <= window_end:
+        total += asset_count * hours_by_date.get(cursor, DEFAULT_WORK_DAY_HOURS)
+        cursor += timedelta(days=1)
+    return round(total, 2)
+
+
+def work_day_status(db: Session) -> dict:
+    now = plant_clock()
+    today = now.date()
+    row = db.query(KpiWorkDay).filter_by(work_date=today).first()
+    hours = int(row.hours_per_day) if row and int(row.hours_per_day) == 16 else DEFAULT_WORK_DAY_HOURS
+    editable = work_day_is_editable(now)
+    return {
+        'work_date': today.isoformat(),
+        'hours_per_day': hours if row else DEFAULT_WORK_DAY_HOURS,
+        'recorded': bool(row),
+        'editable': editable,
+        'locked': not editable,
+        'lock_hour': WORK_DAY_LOCK_HOUR,
+        'set_by': row.set_by if row else None,
+        'set_at': row.set_at.isoformat(sep=' ', timespec='minutes') if row and row.set_at else None,
+        'plant_time': now.isoformat(sep=' ', timespec='minutes'),
+    }
+
+
+def save_work_day(db: Session, hours_per_day: int, username: str | None = None) -> dict:
+    hours = 16 if int(hours_per_day) == 16 else DEFAULT_WORK_DAY_HOURS
+    now = plant_clock()
+    if not work_day_is_editable(now):
+        raise ValueError('Work day is locked after 08:00. It opens again tomorrow before 08:00.')
+    today = now.date()
+    row = db.query(KpiWorkDay).filter_by(work_date=today).first()
+    if row is None:
+        row = KpiWorkDay(work_date=today, hours_per_day=hours, set_by=username, set_at=now)
+        db.add(row)
+    else:
+        row.hours_per_day = hours
+        row.set_by = username
+        row.set_at = now
+    db.flush()
+    return work_day_status(db)
 
 
 def _hours_between(start, end):
@@ -94,14 +166,7 @@ def compute_kpi(
     technician_id=None,
     date_from=None,
     date_to=None,
-    hours_per_day=24,
 ):
-    try:
-        hours_per_day = int(hours_per_day)
-    except (TypeError, ValueError):
-        hours_per_day = 24
-    if hours_per_day not in (16, 24):
-        hours_per_day = 24
     all_equipment = db.query(Equipment).all()
     equipment_by_id = {row.equipment_id: row for row in all_equipment}
     plants = [row for row in db.query(Plant).all() if row.active is not False]
@@ -182,6 +247,7 @@ def compute_kpi(
     days = max((end - start).days + 1, 1)
     previous_end = start - timedelta(days=1)
     previous_start = previous_end - timedelta(days=days - 1)
+    hours_by_date = load_work_day_hours(db, previous_start, end)
 
     def pack(window_start, window_end):
         window_items = [
@@ -246,13 +312,14 @@ def compute_kpi(
             asset_count = len({row.equipment_id or row.equipment_code for row in window_items if row.equipment_id or row.equipment_code})
         idle = 0.0
         window_days = max((window_end - window_start).days + 1, 1)
-        # Expected work time: assets × days × engineer-selected work-day hours (24 or 16).
-        expected_work = round(asset_count * window_days * hours_per_day, 2) if asset_count else 0.0
+        # Expected work time: assets × each day's recorded work-day hours (16 or 24).
+        expected_work = expected_work_hours(asset_count, window_start, window_end, hours_by_date)
         available = expected_work
         # Tracked work time: expected hours still available after recorded downtime/idle.
         tracked_work = round(max(expected_work - idle - total_down, 0), 2)
         uptime = tracked_work
         operating = tracked_work
+        today_hours = hours_by_date.get(window_end, hours_by_date.get(window_start, DEFAULT_WORK_DAY_HOURS))
 
         failure_orders = [row for row in window_orders if row.work_order_type in FAILURE_TYPES]
         failure_ids = {row.work_order_id for row in failure_orders}
@@ -456,7 +523,7 @@ def compute_kpi(
             category_hours = round(sum(grouped.get(key, {}).values()), 2)
             count = int(grouped_count.get(key, 0))
             assets = int(assets_by_key.get(key, 0) or 0)
-            expected_h = round(assets * window_days * hours_per_day, 2) if assets else 0.0
+            expected_h = expected_work_hours(assets, window_start, window_end, hours_by_date)
             tracked_h = max(expected_h - category_hours, 0)
             pareto.append({
                 'id': key,
@@ -481,7 +548,7 @@ def compute_kpi(
             'availability': _pct(tracked_work, expected_work) if expected_work else None,
             'tracked_work_h': tracked_work if expected_work else 0,
             'expected_work_h': expected_work,
-            'hours_per_day': hours_per_day,
+            'hours_per_day': today_hours,
             'uptime_h': tracked_work if expected_work else 0,
             'available_h': expected_work,
             'idle_h': idle,
@@ -561,6 +628,7 @@ def compute_kpi(
         'components': life[:8],
         'targets': targets,
         'component_life_avg': round(sum(row['life_days'] for row in life) / len(life), 1) if life else None,
+        'work_day': work_day_status(db),
     })
     return current
 

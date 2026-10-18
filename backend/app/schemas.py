@@ -324,6 +324,10 @@ class KpiTargetIn(BaseModel):
     equipment_id: str | None = None
 
 
+class KpiWorkDayIn(BaseModel):
+    hours_per_day: int
+
+
 class ActivityWorkOrderCreate(BaseModel):
     equipment_code: str
     equipment_name: str | None = None
