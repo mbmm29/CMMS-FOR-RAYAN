@@ -486,8 +486,13 @@ body .machine-log .log-facts-save{width:auto;height:32px;margin:8px 0 0;padding:
 .daily-parts .lube-table th:nth-child(4){width:18%}
 .daily-notes{display:grid;gap:6px;margin-top:12px;font-size:13px;font-weight:800}
 .daily-note-box{position:relative}
-.daily-tdt{position:absolute;left:8px;bottom:8px;color:#102d60;font-size:13px;font-weight:800}
-body .daily-paper textarea{width:100%;min-height:64px;border:1px solid #8eabda;border-radius:0;background:#fff;color:#102d60;font:14px Arial,sans-serif;padding:8px 8px 8px 92px}
+.daily-tdt{position:absolute;left:8px;bottom:8px;color:#102d60;font-size:12px;font-weight:800;max-width:58%;line-height:1.25;white-space:normal}
+body .daily-paper textarea{width:100%;min-height:64px;border:1px solid #8eabda;border-radius:0;background:#fff;color:#102d60;font:14px Arial,sans-serif;padding:8px 8px 28px 8px}
+.time-12h{display:inline-flex;align-items:center;gap:2px;flex-wrap:nowrap;direction:ltr}
+.time-12h select{width:auto;min-width:0;padding:2px 4px;font-size:12px}
+.time-12h [data-time-h],.time-12h [data-time-m]{width:3.2em}
+.time-12h [data-time-p]{width:3.6em}
+.daily-paper td .time-12h{width:100%}
 .lube-actions{display:flex;justify-content:flex-end;gap:8px;margin-top:10px}
 .lube-actions button{border:1px solid #99baf0;border-radius:6px;background:#fff;color:#0755dc;font-weight:800;padding:8px 12px;cursor:pointer}
 .lube-actions #daily-resend,
@@ -644,8 +649,8 @@ body .detail-button.job-open-detail .job-open-glyph{font-size:16px;line-height:1
   body:has(.daily-paper) .daily-notes > span{margin:0 0 0.8mm;font-size:8pt;color:#102d60!important}
   body:has(.daily-paper) .daily-parts .lube-table th{height:5mm}
   body:has(.daily-paper) .daily-parts .lube-table td{padding:0.3mm 0.5mm}
-  body:has(.daily-paper) .daily-notes textarea{min-height:10mm!important;height:10mm!important;padding:1mm 18mm 1mm 1.5mm!important;font-size:7.5pt!important;border:0.25mm solid #2a5287!important;color:#102d60!important}
-  body:has(.daily-paper) .daily-tdt{font-size:7.5pt;left:1.5mm;bottom:1mm}
+  body:has(.daily-paper) .daily-notes textarea{min-height:10mm!important;height:10mm!important;padding:1mm 1.5mm 4mm 1.5mm!important;font-size:7.5pt!important;border:0.25mm solid #2a5287!important;color:#102d60!important}
+  body:has(.daily-paper) .daily-tdt{font-size:7pt;left:1.5mm;bottom:1mm;max-width:70%}
   body:has(.daily-paper) .toast,
   body:has(.daily-paper) #screen-notice,
   body:has(.daily-paper) .review-bar{display:none!important}

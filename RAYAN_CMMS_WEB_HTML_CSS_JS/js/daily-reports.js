@@ -16,6 +16,26 @@ document.addEventListener('DOMContentLoaded', async () => {
   const statusClass = status => ({ Submitted: 'pending', Approved: 'approved', Returned: 'returned', Draft: 'draft' }[status] || 'draft');
   const badge = status => `<span class="status ${statusClass(status)}">${escapeHtml(statusText(status))}</span>`;
   const asHours = value => Number(value || 0).toFixed(2);
+  const asClockHours = (value) => {
+    const total = Math.max(0, Number(value) || 0);
+    let hours = Math.floor(total + 1e-9);
+    let minutes = Math.round((total - hours) * 60);
+    if (minutes === 60) { hours += 1; minutes = 0; }
+    return `${hours} ${t('h')} ${t('and')} ${minutes} ${t('min')}`;
+  };
+  const formatTime12 = (value) => {
+    const text = String(value || '').trim();
+    if (!text) return '';
+    const match = text.match(/^(\d{1,2}):(\d{2})$/);
+    if (!match) return text;
+    let hour = Number(match[1]);
+    const minute = match[2];
+    if (Number.isNaN(hour) || hour > 23) return text;
+    const period = hour >= 12 ? t('PM') : t('AM');
+    hour = hour % 12;
+    if (hour === 0) hour = 12;
+    return `${hour}:${minute} ${period}`;
+  };
 
   function setText(id, value) { const element = document.getElementById(id); if (element) element.textContent = value; }
   function emptyDetails() {
@@ -264,9 +284,9 @@ document.addEventListener('DOMContentLoaded', async () => {
       <td class="lube-machine"><input value="${escapeHtml(item.equipment_code || item.equipment_id || '')}" readonly><input value="${escapeHtml(item.equipment_name || '')}" readonly><input value="${escapeHtml(plantName(item.plant_id) || '')}" readonly><input value="${escapeHtml(lineNameOf(item, report.plantId) || item.entered_line_number || '')}" readonly></td>
       <td><input value="${escapeHtml(t(item.maintenance_type || ''))}" readonly>${item.wo_id ? `<small class="lube-order">${escapeHtml(item.wo_id)}</small>` : ''}</td>
       <td class="daily-work"><input value="${escapeHtml(item.failure_reason || '')}" readonly><input value="${escapeHtml(item.action_taken || '')}" readonly></td>
-      <td><input value="${escapeHtml(reviewValue(item.maintenance_start))}" readonly></td>
-      <td><input value="${escapeHtml(reviewValue(item.maintenance_end))}" readonly></td>
-      <td><input value="${item.downtime_h != null ? asHours(item.downtime_h) : ''}" readonly></td>
+      <td><input value="${escapeHtml(formatTime12(reviewValue(item.maintenance_start)))}" readonly></td>
+      <td><input value="${escapeHtml(formatTime12(reviewValue(item.maintenance_end)))}" readonly></td>
+      <td><input value="${item.downtime_h != null ? escapeHtml(asClockHours(item.downtime_h)) : ''}" readonly title="${item.downtime_h != null ? escapeHtml(asHours(item.downtime_h) + ' ' + t('h')) : ''}"></td>
     </tr>`).join('');
     const parts = reviewParts(report.items.find(item => item.spare_parts)?.spare_parts || '');
     while (parts.length < 2) parts.push({ description: '', number: '', quantity: '' });
@@ -291,7 +311,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         </div>
         <table class="lube-table"><thead><tr><th>${escapeHtml(t('Seq.'))}</th><th>${escapeHtml(t('Machine'))}</th><th>${escapeHtml(t('Maintenance Type'))}</th><th>${escapeHtml(t('Repair Actions'))}</th><th>${escapeHtml(t('Start Time'))}</th><th>${escapeHtml(t('End Time'))}</th><th>${escapeHtml(t('Downtime (hrs)'))}</th></tr></thead><tbody>${activityRows}</tbody></table>
         <section class="daily-parts"><h3>${escapeHtml(t('SPARE PARTS USED'))}</h3><table class="lube-table"><thead><tr><th>${escapeHtml(t('No.'))}</th><th>${escapeHtml(t('Part'))}</th><th>${escapeHtml(t('Part No.'))}</th><th>${escapeHtml(t('Qty'))}</th></tr></thead><tbody>${partRows}</tbody></table></section>
-        <label class="daily-notes"><span>${escapeHtml(t('GENERAL NOTES'))}</span><div class="daily-note-box"><textarea readonly>${escapeHtml(report.notes || '')}</textarea><b class="daily-tdt">TDT: <span>${asHours(report.downtime)}</span></b></div></label>
+        <label class="daily-notes"><span>${escapeHtml(t('GENERAL NOTES'))}</span><div class="daily-note-box"><textarea readonly>${escapeHtml(report.notes || '')}</textarea><b class="daily-tdt">${escapeHtml(t('TDT'))}: <span title="${escapeHtml(asHours(report.downtime) + ' ' + t('h'))}">${escapeHtml(asClockHours(report.downtime))}</span></b></div></label>
         ${(report.photos || []).length ? `<section class="daily-photos no-print"><div class="lube-list-head"><h3>${escapeHtml(t('Photos'))}</h3></div><p class="photo-hint">${escapeHtml(t('Each photo prints on a full A3 page.'))}</p><div class="photo-strip" id="review-photo-strip"></div></section>` : ''}
         ${report.returnReason ? `<p class="daily-return no-print">${escapeHtml(t('Rejection reason'))}: ${escapeHtml(report.returnReason)}</p>` : ''}
       </form>

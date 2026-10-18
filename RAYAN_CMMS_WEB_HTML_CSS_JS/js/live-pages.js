@@ -4003,6 +4003,69 @@ function dailyHours(start, end) {
   return (minutes / 60).toFixed(2);
 }
 
+function parseClockHHmm(value) {
+  const match = String(value || '').trim().match(/^(\d{1,2}):(\d{2})$/);
+  if (!match) return null;
+  const hour = Number(match[1]);
+  const minute = Number(match[2]);
+  if (hour > 23 || minute > 59) return null;
+  return { hour, minute };
+}
+
+function to12HourParts(value) {
+  const parsed = parseClockHHmm(value);
+  if (!parsed) return { hour: '', minute: '', period: 'AM' };
+  const period = parsed.hour >= 12 ? 'PM' : 'AM';
+  let hour = parsed.hour % 12;
+  if (hour === 0) hour = 12;
+  return {
+    hour: String(hour),
+    minute: String(parsed.minute).padStart(2, '0'),
+    period,
+  };
+}
+
+function from12HourParts(hour, minute, period) {
+  const h = Number(hour);
+  const m = Number(minute);
+  if (!h || Number.isNaN(h) || Number.isNaN(m) || h < 1 || h > 12 || m < 0 || m > 59) return '';
+  let hour24 = h % 12;
+  if (String(period).toUpperCase() === 'PM') hour24 += 12;
+  return `${String(hour24).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
+}
+
+function formatTime12(value) {
+  const parts = to12HourParts(value);
+  if (!parts.hour) return '';
+  return `${parts.hour}:${parts.minute} ${t(parts.period)}`;
+}
+
+function time12SelectHtml(field, value) {
+  const parts = to12HourParts(value);
+  const blank = !parts.hour;
+  const hours = [`<option value=""${blank ? ' selected' : ''}>—</option>`].concat(Array.from({ length: 12 }, (_, index) => {
+    const hour = String(index + 1);
+    return `<option value="${hour}"${!blank && parts.hour === hour ? ' selected' : ''}>${hour}</option>`;
+  })).join('');
+  const minutes = [`<option value=""${blank ? ' selected' : ''}>—</option>`].concat(Array.from({ length: 60 }, (_, index) => {
+    const minute = String(index).padStart(2, '0');
+    return `<option value="${minute}"${!blank && parts.minute === minute ? ' selected' : ''}>${minute}</option>`;
+  })).join('');
+  return `<span class="time-12h" data-time-wrap="${esc(field)}"><select data-time-h aria-label="${esc(t('Hour'))}">${hours}</select><span>:</span><select data-time-m aria-label="${esc(t('Minute'))}">${minutes}</select><select data-time-p aria-label="${esc(t('AM/PM'))}"><option value="AM"${parts.period === 'AM' ? ' selected' : ''}>${esc(t('AM'))}</option><option value="PM"${parts.period === 'PM' ? ' selected' : ''}>${esc(t('PM'))}</option></select><input type="hidden" data-field="${esc(field)}" value="${esc(value || '')}"></span>`;
+}
+
+function syncTime12Wrap(wrap) {
+  if (!wrap) return '';
+  const hidden = wrap.querySelector('[data-field]');
+  const value = from12HourParts(
+    wrap.querySelector('[data-time-h]')?.value,
+    wrap.querySelector('[data-time-m]')?.value,
+    wrap.querySelector('[data-time-p]')?.value,
+  );
+  if (hidden) hidden.value = value;
+  return value;
+}
+
 function dailyPartsText(parts) {
   const rows = parts.filter((part) => part.description || part.number || part.quantity);
   return rows.length
@@ -4127,21 +4190,50 @@ function dailyListHtml(rows, openId, techName) {
 
 function formatDecimalHours(hours) {
   const value = Math.max(0, Number(hours) || 0);
-  const whole = Math.floor(value + 1e-9);
-  const minutes = Math.round((value - whole) * 60);
-  if (minutes === 60) return { decimal: (whole + 1).toFixed(2), clock: `${whole + 1} ${t('h')} 0 ${t('min')}` };
+  let whole = Math.floor(value + 1e-9);
+  let minutes = Math.round((value - whole) * 60);
+  if (minutes === 60) {
+    whole += 1;
+    minutes = 0;
+  }
   return {
     decimal: value.toFixed(2),
-    clock: `${whole} ${t('h')} ${minutes} ${t('min')}`,
+    clock: `${whole} ${t('h')} ${t('and')} ${minutes} ${t('min')}`,
+    compact: `${whole}${t('h')} ${minutes}${t('min')}`,
   };
 }
 
+function downtimeHoursFromInput(input) {
+  if (!input) return 0;
+  const raw = input.dataset.hours != null && input.dataset.hours !== '' ? input.dataset.hours : input.value;
+  return Number(raw) || 0;
+}
+
+function setDowntimeDisplay(input, hoursText) {
+  if (!input) return;
+  const value = hoursText === '' || hoursText == null ? '' : String(hoursText);
+  input.dataset.hours = value;
+  if (!value) {
+    input.value = '';
+    input.title = '';
+    return;
+  }
+  const shown = formatDecimalHours(value);
+  input.value = shown.compact;
+  input.title = `${shown.decimal} ${t('h')}`;
+}
+
 function refreshDailyTotal() {
-  const total = [...document.querySelectorAll('#daily-rows [data-field="downtime"]')].reduce((sum, input) => sum + (Number(input.value) || 0), 0);
+  const total = [...document.querySelectorAll('#daily-rows [data-field="downtime"]')].reduce(
+    (sum, input) => sum + downtimeHoursFromInput(input),
+    0,
+  );
   const node = document.getElementById('daily-total');
   if (!node) return;
   const shown = formatDecimalHours(total);
-  node.textContent = `${shown.decimal} ${t('h')} (${shown.clock})`;
+  // Show hours + minutes (60-min clock), not decimal tenths that look like minutes.
+  node.textContent = shown.clock;
+  node.title = `${shown.decimal} ${t('h')}`;
 }
 
 function dailyPlantLines(plantId = '') {
@@ -4195,7 +4287,11 @@ function dailyRow(item = {}, index = 0) {
   const end = item.maintenance_end ? String(item.maintenance_end).slice(0, 5) : '';
   const rowPlant = plantId || line?.plant_id || '';
   const plants = `<select data-field="plant"><option value="">${esc(t('Select plant'))}</option>${openPlants(rowPlant).map((plant) => `<option value="${esc(plant.plant_id)}"${plant.plant_id === rowPlant ? ' selected' : ''}>${esc(plant.name)}</option>`).join('')}</select>`;
-  return `<tr data-wo="${esc(item.wo_id || '')}" data-line-number="${esc(lineNumber)}" data-line-id="${esc(line?.line_id || '')}"><td class="lube-no">${index + 1}</td><td class="lube-machine"><input data-field="code" placeholder="${esc(t('Equipment number'))}" value="${esc(item.equipment_code || item.equipment_id || '')}"><input data-field="name" placeholder="${esc(t('Equipment name'))}" value="${esc(item.equipment_name || '')}">${plants}<input data-field="line" data-resolved="${line?.name ? '1' : ''}" placeholder="${esc(t('Line'))}" value="${esc(lineLabel)}"></td><td class="lube-type"><select data-field="type">${options.join('')}</select>${order}</td><td class="daily-work"><input data-field="failure" placeholder="${esc(t('Failure Reason'))}" value="${esc(item.failure_reason || '')}"><input data-field="action" placeholder="${esc(t('Repair Actions'))}" value="${esc(item.action_taken || '')}"></td><td><input data-field="start" type="time" value="${esc(start)}"></td><td><input data-field="end" type="time" value="${esc(end)}"></td><td><input data-field="downtime" value="${item.downtime_h != null && item.downtime_h !== '' ? Number(item.downtime_h).toFixed(2) : ''}" readonly></td></tr>`;
+  const downtimeShown = item.downtime_h != null && item.downtime_h !== ''
+    ? formatDecimalHours(item.downtime_h).compact
+    : '';
+  const downtimeValue = item.downtime_h != null && item.downtime_h !== '' ? Number(item.downtime_h).toFixed(2) : '';
+  return `<tr data-wo="${esc(item.wo_id || '')}" data-line-number="${esc(lineNumber)}" data-line-id="${esc(line?.line_id || '')}"><td class="lube-no">${index + 1}</td><td class="lube-machine"><input data-field="code" placeholder="${esc(t('Equipment number'))}" value="${esc(item.equipment_code || item.equipment_id || '')}"><input data-field="name" placeholder="${esc(t('Equipment name'))}" value="${esc(item.equipment_name || '')}">${plants}<input data-field="line" data-resolved="${line?.name ? '1' : ''}" placeholder="${esc(t('Line'))}" value="${esc(lineLabel)}"></td><td class="lube-type"><select data-field="type">${options.join('')}</select>${order}</td><td class="daily-work"><input data-field="failure" placeholder="${esc(t('Failure Reason'))}" value="${esc(item.failure_reason || '')}"><input data-field="action" placeholder="${esc(t('Repair Actions'))}" value="${esc(item.action_taken || '')}"></td><td>${time12SelectHtml('start', start)}</td><td>${time12SelectHtml('end', end)}</td><td><input data-field="downtime" data-hours="${esc(downtimeValue)}" value="${esc(downtimeShown)}" title="${esc(downtimeValue ? `${downtimeValue} ${t('h')}` : '')}" readonly></td></tr>`;
 }
 
 function dailyItemsFromForm() {
@@ -4227,7 +4323,11 @@ function dailyItemsFromForm() {
       maintenance_end: end,
       downtime_start: start,
       downtime_end: end,
-      downtime_h: get('downtime') ? Number(get('downtime')) : null,
+      downtime_h: (() => {
+        const downtimeInput = row.querySelector('[data-field="downtime"]');
+        const hours = downtimeHoursFromInput(downtimeInput);
+        return downtimeInput && (downtimeInput.dataset.hours || downtimeInput.value) ? hours : null;
+      })(),
       failure_reason: get('failure') || null,
       action_taken: get('action') || null,
       wo_id: row.dataset.wo || null,
@@ -4373,12 +4473,19 @@ html,body{margin:0;padding:0;background:#fff;color:#102d60;font:8pt Arial,sans-s
 .daily-parts,.daily-notes{margin-top:1.5mm}
 .daily-parts h3,.daily-notes>span{display:block;margin:0 0 0.8mm;font-size:8pt}
 .daily-note-box{position:relative}
-.daily-notes textarea{width:100%;height:12mm;min-height:12mm;border:0.25mm solid #2a5287;padding:1mm 18mm 1mm 1.5mm;font:7.5pt Arial,sans-serif;resize:none}
-.daily-tdt{position:absolute;left:1.5mm;bottom:1mm;font-size:7.5pt;font-weight:800}
+.daily-notes textarea{width:100%;height:12mm;min-height:12mm;border:0.25mm solid #2a5287;padding:1mm 1.5mm 4mm 1.5mm;font:7.5pt Arial,sans-serif;resize:none}
+.daily-tdt{position:absolute;left:1.5mm;bottom:1mm;font-size:7pt;font-weight:800;max-width:70%;line-height:1.2}
 `;
 }
 
 function freezeDailyPrintFields(root) {
+  root.querySelectorAll('.time-12h').forEach((wrap) => {
+    const hidden = wrap.querySelector('[data-field]');
+    const span = root.ownerDocument.createElement('span');
+    span.textContent = formatTime12(hidden?.value || '') || '—';
+    span.style.cssText = 'display:block;min-height:3.6mm;font:7pt Arial,sans-serif;white-space:nowrap';
+    wrap.replaceWith(span);
+  });
   root.querySelectorAll('select').forEach((select) => {
     const text = select.options[select.selectedIndex]?.text || select.value || '';
     const span = root.ownerDocument.createElement('span');
@@ -4701,10 +4808,16 @@ async function drawDailyReport() {
     document.querySelectorAll('#daily-parts input, #daily-add-part').forEach((node) => { node.disabled = true; });
   }
   document.querySelectorAll('#daily-rows tr').forEach(bindDailyRow);
-  document.getElementById('daily-rows')?.addEventListener('input', (event) => {
-    const row = event.target.closest('tr');
-    if (!row || (event.target.dataset.field !== 'start' && event.target.dataset.field !== 'end')) return;
-    row.querySelector('[data-field="downtime"]').value = dailyHours(row.querySelector('[data-field="start"]').value, row.querySelector('[data-field="end"]').value);
+  document.getElementById('daily-rows')?.addEventListener('change', (event) => {
+    const wrap = event.target.closest('.time-12h');
+    if (!wrap) return;
+    const row = wrap.closest('tr');
+    if (!row) return;
+    syncTime12Wrap(wrap);
+    setDowntimeDisplay(
+      row.querySelector('[data-field="downtime"]'),
+      dailyHours(row.querySelector('[data-field="start"]').value, row.querySelector('[data-field="end"]').value),
+    );
     refreshDailyTotal();
   });
   refreshDailyTotal();
