@@ -7,7 +7,8 @@ Availability = Tracked work time ÷ Expected work time × 100
 MTTR = Total repair/downtime hours ÷ Number of repair incidents
   Scoped by the KPI filter: plant, line, or single equipment.
 
-MTBF = Operating hours ÷ Number of failures (same filter scope).
+MTBF % = Operating hours ÷ (Operating hours + repair/downtime hours) × 100
+  Same filter scope (plant / line / equipment). Hours form kept as mtbf_h.
 
 Other metrics follow the approved SMRP-adapted definitions using PM plans,
 work orders, daily reports, machine records, and component history.
@@ -568,11 +569,17 @@ def compute_kpi(
             'utilization_operating_h': utilization_operating,
             'utilization_available_h': utilization_available,
             'utilization_reports': utilization_reports,
-            # MTBF needs real failure downtime in the period. Zero downtime → no MTBF figure
-            # (otherwise fleet operating hours ÷ a zero-hour failure event looks like thousands of hours).
-            'mtbf': (
+            # Hours form (operating ÷ failures) kept for detail; KPI card uses percentage.
+            'mtbf_h': (
                 _per(max(operating, 0), failures)
                 if available and failures > 0 and repair_hours > 0
+                else None
+            ),
+            # MTBF % = operating ÷ (operating + repair downtime) × 100 within filter scope.
+            'mtbf': (
+                100.0 if available and repair_hours <= 0 and operating > 0
+                else _pct(max(operating, 0), max(operating, 0) + repair_hours)
+                if available and (operating > 0 or repair_hours > 0)
                 else None
             ),
             'reliability': _reliability(
