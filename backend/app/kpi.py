@@ -1,8 +1,10 @@
 """Approved CMMS KPI equations.
 
 Availability = Tracked work time ÷ Expected work time × 100
-  Tracked work time = expected hours minus recorded downtime (and idle)
-  Expected work time = equipment count × period days × work-day hours (24 or 16)
+  Tracked = Expected − Downtime (inverse: more downtime → lower availability)
+  Expected = work-day hours × each equipment-day that had maintenance activity
+    in the filter scope (approved daily items / work orders). Falls back to
+    full scoped fleet × days × work-day hours when there is no activity yet.
 
 MTTR = Total repair/downtime hours ÷ Number of repair incidents
   Scoped by the KPI filter: plant, line, or single equipment.
@@ -318,10 +320,31 @@ def compute_kpi(
             asset_count = len({row.equipment_id or row.equipment_code for row in window_items if row.equipment_id or row.equipment_code})
         idle = 0.0
         window_days = max((window_end - window_start).days + 1, 1)
-        # Expected work time: assets × each day's recorded work-day hours (16 or 24).
-        expected_work = expected_work_hours(asset_count, window_start, window_end, hours_by_date)
+        # Expected work time for Availability: same equipment-days that produced the
+        # downtime figure, so Availability and Downtime stay inversely linked.
+        activity_days = set()
+        for row in accepted_items:
+            report = report_by_id.get(row.report_id)
+            code = row.equipment_id or row.equipment_code
+            if report and report.report_date and code:
+                activity_days.add((str(code), report.report_date))
+        for order in window_orders:
+            code = order.equipment_id
+            day = order.planned_date or order.request_date
+            if isinstance(day, datetime):
+                day = day.date()
+            if code and day and window_start <= day <= window_end:
+                activity_days.add((str(code), day))
+        if activity_days:
+            expected_work = round(
+                sum(hours_by_date.get(day, DEFAULT_WORK_DAY_HOURS) for _, day in activity_days),
+                2,
+            )
+        else:
+            # No maintenance activity yet — use full scoped fleet capacity.
+            expected_work = expected_work_hours(asset_count, window_start, window_end, hours_by_date)
         available = expected_work
-        # Tracked work time: expected hours still available after recorded downtime/idle.
+        # Tracked = Expected − Downtime (and idle). More downtime ⇒ lower availability.
         tracked_work = round(max(expected_work - idle - total_down, 0), 2)
         uptime = tracked_work
         operating = tracked_work
@@ -524,6 +547,34 @@ def compute_kpi(
                 asset_key = row.plant_id or 'unassigned'
             assets_by_key[asset_key] = assets_by_key.get(asset_key, 0) + 1
 
+        def chart_key_for_equipment(code, plant=None, line=None):
+            if equipment_id:
+                return equipment_id
+            if line_id:
+                return line_id
+            if single_plant:
+                return line or 'unassigned'
+            return plant or 'unassigned'
+
+        # Activity equipment-days per bar — same basis as the Availability KPI card.
+        activity_by_key = {}
+        for row in accepted_items:
+            report = report_by_id.get(row.report_id)
+            code = row.equipment_id or row.equipment_code
+            if not report or not report.report_date or not code:
+                continue
+            key = chart_key_for_equipment(code, row.plant_id, row.line_id)
+            activity_by_key.setdefault(key, set()).add((str(code), report.report_date))
+        for order in window_orders:
+            code = order.equipment_id
+            day = order.planned_date or order.request_date
+            if isinstance(day, datetime):
+                day = day.date()
+            if not code or not day or not (window_start <= day <= window_end):
+                continue
+            key = chart_key_for_equipment(code, order.manual_plant_id, order.manual_line_id)
+            activity_by_key.setdefault(key, set()).add((str(code), day))
+
         # One black bar per plant (or per line when a single plant is selected) — never merge plants.
         pareto = []
         for key, label in catalog:
@@ -532,7 +583,14 @@ def compute_kpi(
             category_hours = round(sum(grouped.get(key, {}).values()), 2)
             count = int(grouped_count.get(key, 0))
             assets = int(assets_by_key.get(key, 0) or 0)
-            expected_h = expected_work_hours(assets, window_start, window_end, hours_by_date)
+            days = activity_by_key.get(key) or set()
+            if days:
+                expected_h = round(
+                    sum(hours_by_date.get(day, DEFAULT_WORK_DAY_HOURS) for _, day in days),
+                    2,
+                )
+            else:
+                expected_h = expected_work_hours(assets, window_start, window_end, hours_by_date)
             tracked_h = max(expected_h - category_hours, 0)
             pareto.append({
                 'id': key,
