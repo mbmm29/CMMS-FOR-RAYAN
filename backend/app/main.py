@@ -129,6 +129,11 @@ def ensure_additive_columns():
             if 'returned_at' not in existing:
                 with engine.begin() as conn:
                     conn.execute(text('ALTER TABLE daily_reports ADD COLUMN returned_at TIMESTAMP'))
+            shift_col = next((c for c in inspector.get_columns('daily_reports') if c['name'] == 'shift'), None)
+            shift_len = getattr(getattr(shift_col, 'type', None), 'length', None) if shift_col else None
+            if shift_col is not None and (shift_len is None or int(shift_len or 0) < 60):
+                with engine.begin() as conn:
+                    conn.execute(text('ALTER TABLE daily_reports ALTER COLUMN shift TYPE VARCHAR(60)'))
             if 'audit_trail' in tables:
                 with engine.begin() as conn:
                     conn.execute(text(
@@ -3810,7 +3815,7 @@ def create_report(
             report_date=data.report_date,
             technician_id=technician_id,
             plant_id=data.plant_id,
-            shift=data.shift,
+            shift=normalize_daily_shift(data.shift) or DAILY_SHIFT_MORNING,
             shift_engineer=data.shift_engineer,
             general_notes=data.general_notes,
             status='Draft',
@@ -3981,7 +3986,7 @@ def update_report(
             if data.report_date is not None:
                 r.report_date = data.report_date
             if data.shift is not None:
-                r.shift = data.shift
+                r.shift = normalize_daily_shift(data.shift)
             if data.shift_engineer is not None:
                 r.shift_engineer = data.shift_engineer
             if data.general_notes is not None:
@@ -4695,8 +4700,29 @@ LUBE_SHIFTS = {
     'Evening (15:00 - 23:00)',
     'Night (23:00 - 07:00)',
 }
+DAILY_SHIFT_MORNING = 'Morning (07:00 - 19:00)'
+DAILY_SHIFT_NIGHT = 'Night (19:00 - 07:00)'
+DAILY_SHIFTS = {
+    DAILY_SHIFT_MORNING,
+    DAILY_SHIFT_NIGHT,
+}
+# Older daily-report shift labels kept so existing rows still validate on edit.
+DAILY_SHIFTS_LEGACY = {
+    'Morning (07:00 - 15:00)',
+    'Evening (15:00 - 23:00)',
+    'Night (23:00 - 07:00)',
+}
 LUBE_DAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
 LUBE_WORK_TYPES = {'Oil change', 'Grease change', 'Other'}
+
+
+def normalize_daily_shift(value: str | None) -> str | None:
+    text = (value or '').strip()
+    if not text:
+        return None
+    if text in DAILY_SHIFTS or text in DAILY_SHIFTS_LEGACY:
+        return text
+    raise HTTPException(400, 'Choose a morning (07:00-19:00) or night (19:00-07:00) shift')
 
 
 def propose_lubrication_equipment(db, report, technician_id, code, name):

@@ -298,7 +298,7 @@ class DailyReport(Base):
     status: Mapped[str] = mapped_column(
         String(30), default='Draft', index=True
     )
-    shift: Mapped[str | None] = mapped_column(String(30), nullable=True)
+    shift: Mapped[str | None] = mapped_column(String(60), nullable=True)
     shift_engineer: Mapped[str | None] = mapped_column(String(150), nullable=True)
 
     created_at: Mapped[datetime] = mapped_column(
