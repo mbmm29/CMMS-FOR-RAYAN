@@ -553,6 +553,11 @@ def create_bootstrap_system():
             provision_technician_profile(db, account)
         db.commit()
         try:
+            collapse_duplicate_machine_logs(db)
+            db.commit()
+        except Exception:
+            db.rollback()
+        try:
             release_due_corrective_orders(db)
         except Exception:
             db.rollback()
@@ -2715,11 +2720,88 @@ def consume_annual_plan(db, work_order, done_on):
     work_order.pm_id = plan.pm_id
     return plan
 
+def _machine_record_fill_score(record: MachineRecord) -> tuple:
+    """Prefer the daily-report copy of a log line over a thinner WO-only stub."""
+    return (
+        1 if record.daily_report_id else 0,
+        1 if (record.action or record.description) else 0,
+        1 if record.downtime_h is not None else 0,
+        1 if record.spare_parts else 0,
+        record.id or 0,
+    )
+
+
+def merge_machine_records_for_wo(db: Session, wo_id: str | None) -> MachineRecord | None:
+    """Keep a single equipment-log row per work order; drop accidental duplicates."""
+    if not wo_id:
+        return None
+    rows = (
+        db.query(MachineRecord)
+        .filter(MachineRecord.wo_id == wo_id)
+        .order_by(MachineRecord.id.asc())
+        .all()
+    )
+    if not rows:
+        return None
+    keep = max(rows, key=_machine_record_fill_score)
+    for extra in rows:
+        if extra.id == keep.id:
+            continue
+        for field in (
+            'daily_report_id', 'pm_id', 'technician_id', 'description', 'cause', 'action',
+            'start_time', 'end_time', 'downtime_h', 'spare_parts', 'record_type', 'equipment_id',
+            'record_date',
+        ):
+            if getattr(keep, field) in (None, '') and getattr(extra, field) not in (None, ''):
+                setattr(keep, field, getattr(extra, field))
+        db.delete(extra)
+    db.flush()
+    return keep
+
+
+def collapse_duplicate_machine_logs(db: Session) -> int:
+    """One-time / startup cleanup for duplicated equipment-log rows."""
+    removed = 0
+    wo_ids = [
+        wo_id for (wo_id,) in db.query(MachineRecord.wo_id)
+        .filter(MachineRecord.wo_id.isnot(None), MachineRecord.wo_id != '')
+        .distinct()
+        .all()
+    ]
+    for wo_id in wo_ids:
+        before = db.query(MachineRecord).filter_by(wo_id=wo_id).count()
+        merge_machine_records_for_wo(db, wo_id)
+        after = db.query(MachineRecord).filter_by(wo_id=wo_id).count()
+        removed += max(0, before - after)
+    # Orphans: same machine/day/type/action as a WO-linked row, but without wo_id.
+    linked = db.query(MachineRecord).filter(
+        MachineRecord.wo_id.isnot(None), MachineRecord.wo_id != ''
+    ).all()
+    for keep in linked:
+        action = (keep.action or keep.description or '').strip()
+        q = db.query(MachineRecord).filter(
+            MachineRecord.id != keep.id,
+            MachineRecord.equipment_id == keep.equipment_id,
+            MachineRecord.record_date == keep.record_date,
+            MachineRecord.record_type == keep.record_type,
+            (MachineRecord.wo_id.is_(None)) | (MachineRecord.wo_id == ''),
+        )
+        for orphan in q.all():
+            orphan_action = (orphan.action or orphan.description or '').strip()
+            if action and orphan_action and action != orphan_action:
+                continue
+            db.delete(orphan)
+            removed += 1
+    if removed:
+        db.flush()
+    return removed
+
+
 def record_high_machine(db, work_order, technician_id, action=None):
     """Machine history is kept only for High corrective or emergency work."""
     if work_order.work_order_type not in {'Corrective', 'Emergency'} or work_order.priority != 'High':
         return None
-    existing = db.query(MachineRecord).filter_by(wo_id=work_order.work_order_id).first()
+    existing = merge_machine_records_for_wo(db, work_order.work_order_id)
     if existing:
         if action:
             existing.action = action
@@ -2740,6 +2822,7 @@ def record_high_machine(db, work_order, technician_id, action=None):
         action=action,
     )
     db.add(record)
+    db.flush()
     return record
 
 def current_assignees(db, work_order):
@@ -3374,7 +3457,7 @@ def issue_technician_work_order(db, actor, item, report):
         responded_at=now,
     ))
     consume_annual_plan(db, work_order, report.report_date)
-    record_high_machine(db, work_order, report.technician_id, item.action_taken)
+    # Equipment log is written once by upsert_machine_log_from_daily_item after this WO is linked.
     audit(db, actor, 'AUTO_CREATE', 'WorkOrder', work_order_id, new={'source': 'Daily Report', 'report_id': report.report_id, 'priority': 'High'})
     return work_order
 
@@ -3524,9 +3607,37 @@ def upsert_machine_log_from_daily_item(db: Session, report, row):
     equipment_id = (getattr(row, 'equipment_id', None) or getattr(row, 'equipment_code', None) or '').strip()
     if not equipment_id:
         return None
-    record = None
-    if getattr(row, 'wo_id', None):
-        record = db.query(MachineRecord).filter_by(wo_id=row.wo_id).first()
+    wo_id = (getattr(row, 'wo_id', None) or '').strip() or None
+    # Prefer the existing WO-linked row (created on assign / auto-WO) so we never
+    # write a second copy of the same maintenance action.
+    record = merge_machine_records_for_wo(db, wo_id) if wo_id else None
+    if record is None and report.id:
+        record = (
+            db.query(MachineRecord)
+            .filter_by(
+                daily_report_id=report.id,
+                equipment_id=equipment_id,
+                record_date=report.report_date,
+                record_type=kind,
+                wo_id=wo_id,
+            )
+            .order_by(MachineRecord.id.asc())
+            .first()
+        )
+    if record is None and not wo_id:
+        # Reuse a same-day stub for this machine/type when the daily item has no WO yet.
+        record = (
+            db.query(MachineRecord)
+            .filter(
+                MachineRecord.equipment_id == equipment_id,
+                MachineRecord.record_date == report.report_date,
+                MachineRecord.record_type == kind,
+                (MachineRecord.wo_id.is_(None)) | (MachineRecord.wo_id == ''),
+                MachineRecord.daily_report_id == report.id,
+            )
+            .order_by(MachineRecord.id.asc())
+            .first()
+        )
     if record is None:
         record = MachineRecord(
             equipment_id=equipment_id,
@@ -3538,7 +3649,7 @@ def upsert_machine_log_from_daily_item(db: Session, report, row):
     record.record_date = report.report_date
     record.record_type = kind
     record.daily_report_id = report.id
-    record.wo_id = getattr(row, 'wo_id', None)
+    record.wo_id = wo_id
     record.pm_id = getattr(row, 'pm_id', None)
     record.technician_id = report.technician_id
     record.description = getattr(row, 'action_taken', None)
@@ -3548,6 +3659,9 @@ def upsert_machine_log_from_daily_item(db: Session, report, row):
     record.end_time = getattr(row, 'maintenance_end', None)
     record.downtime_h = getattr(row, 'downtime_h', None)
     record.spare_parts = getattr(row, 'spare_parts', None)
+    db.flush()
+    if wo_id:
+        record = merge_machine_records_for_wo(db, wo_id) or record
     return record
 
 
@@ -4112,7 +4226,6 @@ def update_report(
                     if order:
                         if row.action_taken:
                             order.corrective_action = row.action_taken
-                            record_high_machine(db, order, r.technician_id, row.action_taken)
                         if row.maintenance_start is not None:
                             order.start_time = datetime.combine(r.report_date, row.maintenance_start)
                         if row.maintenance_end is not None:

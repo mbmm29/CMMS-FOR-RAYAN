@@ -2644,9 +2644,36 @@ function isLogEntry(row) {
   return Boolean(maintenanceKind(row));
 }
 
+function logRowFillScore(row) {
+  return (
+    (row?.daily_report_id ? 4 : 0)
+    + (row?.action || row?.description ? 2 : 0)
+    + (row?.downtime_h != null && row?.downtime_h !== '' ? 1 : 0)
+    + (row?.spare_parts ? 1 : 0)
+    + (Number(row?.id) || 0) / 1e9
+  );
+}
+
+function dedupeLogRows(rows) {
+  const bestByKey = new Map();
+  const order = [];
+  for (const row of rows || []) {
+    const wo = workOrderNumber(row);
+    const key = wo ? `wo:${wo}` : `id:${row.id}`;
+    const previous = bestByKey.get(key);
+    if (!previous) {
+      bestByKey.set(key, row);
+      order.push(key);
+      continue;
+    }
+    if (logRowFillScore(row) > logRowFillScore(previous)) bestByKey.set(key, row);
+  }
+  return order.map((key) => bestByKey.get(key)).filter(Boolean);
+}
+
 function topEquipmentByLogCount(limit = 10) {
   const counts = new Map();
-  for (const row of scoped(store.records || []).filter(isLogEntry)) {
+  for (const row of dedupeLogRows(scoped(store.records || []).filter(isLogEntry))) {
     if (!row.equipment_id) continue;
     counts.set(row.equipment_id, (counts.get(row.equipment_id) || 0) + 1);
   }
@@ -2740,7 +2767,7 @@ function drawRecords() {
     ui.equipmentId = chosen;
   }
   const equipment = store.equipment.find((item) => item.equipment_id === chosen) || null;
-  const listed = scoped(store.records).filter(isLogEntry).filter((row) => !chosen || row.equipment_id === chosen);
+  const listed = dedupeLogRows(scoped(store.records).filter(isLogEntry).filter((row) => !chosen || row.equipment_id === chosen));
   const rows = listed.filter((row) => ui.tab === 'All' || maintenanceKind(row) === ui.tab)
     .slice()
     .sort((a, b) => String(a.record_date || '').localeCompare(String(b.record_date || '')) || a.id - b.id);
@@ -3677,7 +3704,7 @@ async function exportRecords() {
     toast(t('Select a machine to open its maintenance log.'));
     return;
   }
-  const listed = scoped(store.records).filter(isLogEntry).filter((row) => row.equipment_id === chosen);
+  const listed = dedupeLogRows(scoped(store.records).filter(isLogEntry).filter((row) => row.equipment_id === chosen));
   const rows = listed.filter((row) => ui.tab === 'All' || maintenanceKind(row) === ui.tab)
     .slice()
     .sort((a, b) => String(a.record_date || '').localeCompare(String(b.record_date || '')) || a.id - b.id);
