@@ -459,6 +459,8 @@ const CMMS_AR = {
   'unscheduled': 'غير مجدول',
   'No downtime in this period': 'لا يوجد توقف في هذه الفترة',
   'Availability basis': 'أساس الإتاحية',
+  'Active equipment-days': 'أيام المعدات النشطة',
+  'Availability = (Expected − Downtime) ÷ Expected × 100. Expected = active equipment-days × work-day hours (16 or 24).': 'الإتاحية = (المتوقع − التوقف) ÷ المتوقع × 100. المتوقع = أيام المعدات النشطة × ساعات الدوام (16 أو 24).',
   'Uptime': 'وقت التشغيل',
   'Available time': 'الوقت المتاح',
   'Idle time': 'وقت الخمول',
