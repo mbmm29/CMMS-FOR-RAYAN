@@ -3505,6 +3505,68 @@ MAINT_TYPES = {
     "Emergency",
     "Motor condition",
 }
+# Every daily-report activity (inspection, routine, preventive, emergency, …) goes into the equipment log.
+EQUIPMENT_LOG_TYPES = {
+    'Preventive',
+    'Corrective',
+    'Routine',
+    'Inspection',
+    'Emergency',
+    'Lubrication',
+}
+
+
+def upsert_machine_log_from_daily_item(db: Session, report, row):
+    """Write one daily-report activity into the equipment maintenance log."""
+    kind = (getattr(row, 'maintenance_type', None) or '').strip()
+    if kind not in EQUIPMENT_LOG_TYPES:
+        return None
+    equipment_id = (getattr(row, 'equipment_id', None) or getattr(row, 'equipment_code', None) or '').strip()
+    if not equipment_id:
+        return None
+    record = None
+    if getattr(row, 'wo_id', None):
+        record = db.query(MachineRecord).filter_by(wo_id=row.wo_id).first()
+    if record is None:
+        record = MachineRecord(
+            equipment_id=equipment_id,
+            record_date=report.report_date,
+            record_type=kind,
+        )
+        db.add(record)
+    record.equipment_id = equipment_id
+    record.record_date = report.report_date
+    record.record_type = kind
+    record.daily_report_id = report.id
+    record.wo_id = getattr(row, 'wo_id', None)
+    record.pm_id = getattr(row, 'pm_id', None)
+    record.technician_id = report.technician_id
+    record.description = getattr(row, 'action_taken', None)
+    record.cause = getattr(row, 'failure_reason', None)
+    record.action = getattr(row, 'action_taken', None)
+    record.start_time = getattr(row, 'maintenance_start', None)
+    record.end_time = getattr(row, 'maintenance_end', None)
+    record.downtime_h = getattr(row, 'downtime_h', None)
+    record.spare_parts = getattr(row, 'spare_parts', None)
+    return record
+
+
+def sync_machine_log_from_daily_report(db: Session, report, items):
+    """Keep the equipment log aligned with every activity on the daily report."""
+    kept_ids = set()
+    for row in items or []:
+        record = upsert_machine_log_from_daily_item(db, report, row)
+        if record is None:
+            continue
+        db.flush()
+        if record.id:
+            kept_ids.add(record.id)
+    stale = db.query(MachineRecord).filter(MachineRecord.daily_report_id == report.id)
+    if kept_ids:
+        stale = stale.filter(~MachineRecord.id.in_(kept_ids))
+    for record in stale.all():
+        db.delete(record)
+    return len(kept_ids)
 
 def propose_unknown_equipment(db, report, item):
     """Keep an unregistered machine out of the plant register until an engineer approves it."""
@@ -3883,25 +3945,9 @@ def create_report(
                     rid,
                 )
 
-            # The machine log keeps corrective and emergency work only. Oil changes are recorded from the lubrication report.
-            if row.maintenance_type in ('Corrective', 'Emergency') and not (row.wo_id and db.query(MachineRecord).filter_by(wo_id=row.wo_id).first()):
-                machine_record = MachineRecord(
-                    equipment_id=row.equipment_id,
-                    record_date=r.report_date,
-                    record_type=row.maintenance_type,
-                    daily_report_id=r.id,
-                    wo_id=row.wo_id,
-                    pm_id=row.pm_id,
-                    technician_id=r.technician_id,
-                    description=row.action_taken,
-                    cause=row.failure_reason,
-                    action=row.action_taken,
-                    start_time=row.maintenance_start,
-                    end_time=row.maintenance_end,
-                    downtime_h=row.downtime_h,
-                    spare_parts=row.spare_parts,
-                )
-                db.add(machine_record)
+            # Equipment log: every maintenance activity from the daily report (inspection, routine, preventive, emergency, …).
+            machine_record = upsert_machine_log_from_daily_item(db, r, row)
+            if machine_record is not None:
                 machine_records.append(machine_record)
 
             # The equipment was mentioned in the daily report, so its machine
@@ -3911,7 +3957,7 @@ def create_report(
                 equipment_id=row.equipment_id
             ).first()
             if eq:
-                if row.maintenance_type in ('Corrective', 'Preventive'):
+                if row.maintenance_type in ('Corrective', 'Preventive', 'Emergency', 'Routine', 'Inspection'):
                     eq.status = 'Under Maintenance'
 
         # Populate report-level fields from its first item for compatibility.
@@ -4086,6 +4132,8 @@ def update_report(
                     db, u, r, order_id,
                     successor.maintenance_type if successor else None,
                 )
+
+            sync_machine_log_from_daily_report(db, r, saved_rows)
 
             first = data.items[0]
             r.equipment_id = first.equipment_id

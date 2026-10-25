@@ -2614,11 +2614,15 @@ function workOrderNumber(row) {
 }
 
 function maintenanceKind(row) {
-  const type = row?.record_type || workOrderFor(row)?.work_order_type || '';
-  if (/Emergency/i.test(type)) return 'Emergency';
+  const type = String(row?.record_type || workOrderFor(row)?.work_order_type || '').trim();
   if (/Oil change/i.test(type)) return 'Oil change';
+  if (/Emergency/i.test(type)) return 'Emergency';
   if (/Corrective/i.test(type)) return 'Corrective';
-  return '';
+  if (/Preventive/i.test(type)) return 'Preventive';
+  if (/Routine/i.test(type)) return 'Routine';
+  if (/Inspection/i.test(type)) return 'Inspection';
+  if (/Lubrication/i.test(type)) return 'Lubrication';
+  return type || '';
 }
 
 function isLogEntry(row) {
@@ -2629,7 +2633,11 @@ function logCode(kind) {
   if (kind === 'Emergency') return 'EM';
   if (kind === 'Oil change') return 'OC';
   if (kind === 'Corrective') return 'CM';
-  return '';
+  if (kind === 'Preventive') return 'PM';
+  if (kind === 'Routine') return 'RT';
+  if (kind === 'Inspection') return 'IN';
+  if (kind === 'Lubrication') return 'LU';
+  return kind ? String(kind).slice(0, 2).toUpperCase() : '';
 }
 
 function logParts(text) {
@@ -2682,7 +2690,7 @@ function machineLogPaper(equipment, rows) {
   const commissioned = String(equipment?.commissioning_date || '').slice(0, 10);
   const lock = canMaintain() ? '' : ' readonly';
   const saveFacts = canMaintain() ? `<button class="detail-button primary no-print log-facts-save" type="submit">${esc(t('Save'))}</button>` : '';
-  return `<form class="lube-paper machine-log" id="machine-log"><header class="lube-head"><img src="logo-rayan.png?v=3" alt="Rayan"><div><h2>${esc(t('Equipment maintenance log'))}</h2><p>${esc(t('Mechanical Maintenance Department'))}</p></div><dl>${formNo('equipment_log') ? `<div><dt>${esc(t('Form No.:'))}</dt><dd>${esc(formNo('equipment_log'))}</dd></div>` : ''}<div><dt>${esc(t('Document no.'))}</dt><dd>${esc(equipment?.equipment_id || '—')}</dd></div><div><dt>${esc(t('Revision no.'))}</dt><dd>00</dd></div><div><dt>${esc(t('Issue date'))}</dt><dd>${esc(fmtDate(rows[0]?.record_date) || '—')}</dd></div></dl></header><p class="log-approve">${esc(t('Approved according to'))}: ${esc(t('Mechanical Maintenance Department'))}</p><div class="log-facts"><section><h3>${esc(t('Equipment data'))}</h3><dl><div><dt>${esc(t('Log machine name'))}</dt><dd>${esc(equipment?.name || '—')}</dd></div><div><dt>${esc(t('Machine number'))}</dt><dd>${esc(equipment?.equipment_id || '—')}</dd></div><div><dt>${esc(t('Location / section'))}</dt><dd>${esc(machinePlace(equipment))}</dd></div><div><dt>${esc(t('Commissioning date'))}</dt><dd><input name="commissioning_date" type="date" value="${esc(commissioned)}"${lock}></dd></div><div><dt>${esc(t('Manufacturer'))}</dt><dd><input name="manufacturer" value="${esc(equipment?.manufacturer || '')}"${lock}></dd></div></dl>${saveFacts}</section><section><h3>${esc(t('Maintenance type key'))}</h3><table class="log-key"><thead><tr><th>${esc(t('Maintenance type'))}</th><th>${esc(t('Symbol'))}</th></tr></thead><tbody><tr><td>${esc(t('Corrective'))}</td><td>CM</td></tr><tr><td>${esc(t('Emergency'))}</td><td>EM</td></tr><tr><td>${esc(t('Oil change'))}</td><td>OC</td></tr></tbody></table></section></div><h3 class="log-table-title">${esc(t('Maintenance work and details'))}</h3><div class="sheet-scroll"><table class="lube-table log-table"><colgroup><col class="c-no"><col class="c-date"><col class="c-type"><col class="c-reason"><col class="c-work"><col class="c-order"><col class="c-parts"><col class="c-partno"><col class="c-qty"><col class="c-down"><col class="c-tech">${canMaintain() ? '<col class="c-remove no-print">' : ''}</colgroup><thead><tr><th>${esc(t('No.'))}</th><th>${esc(t('Maintenance date'))}</th><th>${esc(t('Maintenance type'))}</th><th>${esc(t('Reason for maintenance'))}</th><th>${esc(t('Work performed'))}</th><th>${esc(t('Work order no.'))}</th><th>${esc(t('Parts used'))}</th><th>${esc(t('Part No.'))}</th><th>${esc(t('Quantity'))}</th><th>${esc(t('Downtime time'))}</th><th>${esc(t('Technician name'))}</th>${canMaintain() ? `<th class="no-print">${esc(t('Delete'))}</th>` : ''}</tr></thead><tbody>${body}</tbody></table></div></form>`;
+  return `<form class="lube-paper machine-log" id="machine-log"><header class="lube-head"><img src="logo-rayan.png?v=3" alt="Rayan"><div><h2>${esc(t('Equipment maintenance log'))}</h2><p>${esc(t('Mechanical Maintenance Department'))}</p></div><dl>${formNo('equipment_log') ? `<div><dt>${esc(t('Form No.:'))}</dt><dd>${esc(formNo('equipment_log'))}</dd></div>` : ''}<div><dt>${esc(t('Document no.'))}</dt><dd>${esc(equipment?.equipment_id || '—')}</dd></div><div><dt>${esc(t('Revision no.'))}</dt><dd>00</dd></div><div><dt>${esc(t('Issue date'))}</dt><dd>${esc(fmtDate(rows[0]?.record_date) || '—')}</dd></div></dl></header><p class="log-approve">${esc(t('Approved according to'))}: ${esc(t('Mechanical Maintenance Department'))}</p><div class="log-facts"><section><h3>${esc(t('Equipment data'))}</h3><dl><div><dt>${esc(t('Log machine name'))}</dt><dd>${esc(equipment?.name || '—')}</dd></div><div><dt>${esc(t('Machine number'))}</dt><dd>${esc(equipment?.equipment_id || '—')}</dd></div><div><dt>${esc(t('Location / section'))}</dt><dd>${esc(machinePlace(equipment))}</dd></div><div><dt>${esc(t('Commissioning date'))}</dt><dd><input name="commissioning_date" type="date" value="${esc(commissioned)}"${lock}></dd></div><div><dt>${esc(t('Manufacturer'))}</dt><dd><input name="manufacturer" value="${esc(equipment?.manufacturer || '')}"${lock}></dd></div></dl>${saveFacts}</section><section><h3>${esc(t('Maintenance type key'))}</h3><table class="log-key"><thead><tr><th>${esc(t('Maintenance type'))}</th><th>${esc(t('Symbol'))}</th></tr></thead><tbody><tr><td>${esc(t('Preventive'))}</td><td>PM</td></tr><tr><td>${esc(t('Corrective'))}</td><td>CM</td></tr><tr><td>${esc(t('Emergency'))}</td><td>EM</td></tr><tr><td>${esc(t('Routine'))}</td><td>RT</td></tr><tr><td>${esc(t('Inspection'))}</td><td>IN</td></tr><tr><td>${esc(t('Oil change'))}</td><td>OC</td></tr><tr><td>${esc(t('Lubrication'))}</td><td>LU</td></tr></tbody></table></section></div><h3 class="log-table-title">${esc(t('Maintenance work and details'))}</h3><div class="sheet-scroll"><table class="lube-table log-table"><colgroup><col class="c-no"><col class="c-date"><col class="c-type"><col class="c-reason"><col class="c-work"><col class="c-order"><col class="c-parts"><col class="c-partno"><col class="c-qty"><col class="c-down"><col class="c-tech">${canMaintain() ? '<col class="c-remove no-print">' : ''}</colgroup><thead><tr><th>${esc(t('No.'))}</th><th>${esc(t('Maintenance date'))}</th><th>${esc(t('Maintenance type'))}</th><th>${esc(t('Reason for maintenance'))}</th><th>${esc(t('Work performed'))}</th><th>${esc(t('Work order no.'))}</th><th>${esc(t('Parts used'))}</th><th>${esc(t('Part No.'))}</th><th>${esc(t('Quantity'))}</th><th>${esc(t('Downtime time'))}</th><th>${esc(t('Technician name'))}</th>${canMaintain() ? `<th class="no-print">${esc(t('Delete'))}</th>` : ''}</tr></thead><tbody>${body}</tbody></table></div></form>`;
 }
 
 function drawRecords() {
@@ -2694,15 +2702,15 @@ function drawRecords() {
     .sort((a, b) => String(a.record_date || '').localeCompare(String(b.record_date || '')) || a.id - b.id);
   document.getElementById('metric-grid').innerHTML = metrics([
     ['Total', String(listed.length), '▤', 'blue', ''],
+    ['Preventive', String(listed.filter((row) => maintenanceKind(row) === 'Preventive').length), '◷', 'blue', ''],
     ['Corrective', String(listed.filter((row) => maintenanceKind(row) === 'Corrective').length), '⚒', 'orange', ''],
     ['Emergency', String(listed.filter((row) => maintenanceKind(row) === 'Emergency').length), '◉', 'red', ''],
-    ['Oil changes', String(listed.filter((row) => maintenanceKind(row) === 'Oil change').length), '◉', 'purple', ''],
-    ['Equipment', String(new Set(listed.map((row) => row.equipment_id).filter(Boolean)).size), '⚙', 'blue', ''],
-    ['Total Downtime (hrs)', numberText(sum(listed, 'downtime_h'), 1), '◷', 'green', ''],
+    ['Routine', String(listed.filter((row) => maintenanceKind(row) === 'Routine').length), '▣', 'purple', ''],
+    ['Inspection', String(listed.filter((row) => maintenanceKind(row) === 'Inspection').length), '✓', 'green', ''],
   ]);
   dateLabel(listed.map((row) => row.record_date));
   document.getElementById('workspace').className = 'workspace log-board';
-  document.getElementById('workspace').innerHTML = `<section class="panel"><div class="split">${assetList(chosen)}<div class="asset-view">${tabsHtml(['All', 'Corrective', 'Emergency', 'Oil change'])}${chosen ? `${machineLogPaper(equipment, rows)}<div id="equipment-log-motor" class="equipment-motor log-temp-panel"></div>` : `<p class="live-note">${esc(t('Select a machine to open its maintenance log.'))}</p>`}</div></div></section>`;
+  document.getElementById('workspace').innerHTML = `<section class="panel"><div class="split">${assetList(chosen)}<div class="asset-view">${tabsHtml(['All', 'Preventive', 'Corrective', 'Emergency', 'Routine', 'Inspection', 'Oil change'])}${chosen ? `${machineLogPaper(equipment, rows)}<div id="equipment-log-motor" class="equipment-motor log-temp-panel"></div>` : `<p class="live-note">${esc(t('Select a machine to open its maintenance log.'))}</p>`}</div></div></section>`;
   bindAssets();
   bindRows();
   bindDeletes();
@@ -3657,9 +3665,13 @@ async function exportRecords() {
         { label: t('Manufacturer'), value: manufacturer || '—' },
       ],
       key: [
+        { label: t('Preventive'), value: 'PM' },
         { label: t('Corrective'), value: 'CM' },
         { label: t('Emergency'), value: 'EM' },
+        { label: t('Routine'), value: 'RT' },
+        { label: t('Inspection'), value: 'IN' },
         { label: t('Oil change'), value: 'OC' },
+        { label: t('Lubrication'), value: 'LU' },
       ],
       headings: [t('No.'), t('Maintenance date'), t('Maintenance type'), t('Reason for maintenance'), t('Work performed'), t('Work order no.'), t('Parts used'), t('Part No.'), t('Quantity'), t('Downtime time'), t('Technician name')],
       lines,
