@@ -15,7 +15,7 @@ const DEFAULT_TAB = {
   'spare-parts': 'All',
 };
 const shellRender = render;
-const ui = { page: 'dashboard', tab: 'All', rowKey: '', mode: 'view', plantId: '', plantIds: [], lineId: '', sectionId: '', equipmentId: '', equipmentQuery: '', spareEquipment: '', technicianId: '', dateFrom: '', dateTo: '', annualPlant: '', annualYear: new Date().getFullYear(), annualItems: [], annualWeek: '', annualCopy: null, weekTasks: [], lubeId: '', dailyId: '', dailyFilter: '' };
+const ui = { page: 'dashboard', tab: 'All', rowKey: '', mode: 'view', plantId: '', plantIds: [], lineId: '', sectionId: '', equipmentId: '', equipmentQuery: '', spareEquipment: '', spareQuery: '', technicianId: '', dateFrom: '', dateTo: '', annualPlant: '', annualYear: new Date().getFullYear(), annualItems: [], annualWeek: '', annualCopy: null, weekTasks: [], lubeId: '', dailyId: '', dailyFilter: '' };
 const ANNUAL_MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 const WEEKDAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 const DAY_MAINTENANCE_TYPES = ['Preventive', 'Corrective', 'Emergency', 'Routine', 'Inspection', 'Lubrication', 'Motor condition'];
@@ -5008,20 +5008,34 @@ async function saveSparePart(event, partId) {
   }
 }
 
-async function drawSpareParts() {
-  const query = ui.spareEquipment ? `?equipment_id=${encodeURIComponent(ui.spareEquipment)}` : '';
-  const parts = await apiRequest(`/spare-parts${query}`);
-  const selected = ui.mode === 'create' ? null : (parts.find((item) => item.part_id === ui.rowKey) || parts[0]);
+let sparePartsCache = [];
+
+function sparePartMatches(part, query) {
+  const needle = String(query || '').trim().toLocaleLowerCase('ar');
+  if (!needle) return true;
+  const number = String(part?.part_number || '').toLocaleLowerCase('ar');
+  const name = String(part?.name || '').toLocaleLowerCase('ar');
+  return number.includes(needle) || name.includes(needle);
+}
+
+function paintSparePartsList(parts) {
+  const keepSearchFocus = document.activeElement?.id === 'spare-search';
+  const caret = keepSearchFocus && typeof document.activeElement.selectionStart === 'number'
+    ? document.activeElement.selectionStart
+    : null;
+  const filtered = parts.filter((item) => sparePartMatches(item, ui.spareQuery));
+  const selected = ui.mode === 'create' ? null : (filtered.find((item) => item.part_id === ui.rowKey) || filtered[0] || null);
   if (selected) ui.rowKey = selected.part_id;
-  const tracked = parts.filter((item) => item.stock_qty != null).length;
-  const empty = parts.filter((item) => item.stock_qty != null && Number(item.stock_qty) <= 0).length;
-  const criticalCount = parts.filter((item) => stockClass(item) === 'stock-critical' || (item.critical_qty != null && item.stock_qty != null && Number(item.stock_qty) <= Number(item.critical_qty))).length;
+  else if (ui.mode !== 'create') ui.rowKey = '';
+  const tracked = filtered.filter((item) => item.stock_qty != null).length;
+  const empty = filtered.filter((item) => item.stock_qty != null && Number(item.stock_qty) <= 0).length;
+  const criticalCount = filtered.filter((item) => stockClass(item) === 'stock-critical' || (item.critical_qty != null && item.stock_qty != null && Number(item.stock_qty) <= Number(item.critical_qty))).length;
   document.getElementById('metric-grid').innerHTML = metrics([
-    ['Spare parts', String(parts.length), '□', 'blue', ''],
+    ['Spare parts', String(filtered.length), '□', 'blue', ui.spareQuery ? `${parts.length} ${t('total')}` : ''],
     ['With a balance', String(tracked), '▣', 'green', ''],
     ['Out of stock', String(empty), '×', 'red', ''],
     ['Critical balance', String(criticalCount), '!', 'orange', ''],
-    ['Linked equipment', String(new Set(parts.flatMap((item) => (item.equipment || []).map((row) => row.equipment_id))).size), '⚙', 'orange', ''],
+    ['Linked equipment', String(new Set(filtered.flatMap((item) => (item.equipment || []).map((row) => row.equipment_id))).size), '⚙', 'orange', ''],
   ]);
   const equipmentOptions = [`<option value="">${esc(t('All equipment'))}</option>`].concat(
     (store.equipment || [])
@@ -5029,7 +5043,10 @@ async function drawSpareParts() {
       .sort((a, b) => String(a.equipment_id).localeCompare(String(b.equipment_id)))
       .map((item) => `<option value="${esc(item.equipment_id)}"${item.equipment_id === ui.spareEquipment ? ' selected' : ''}>${esc(item.equipment_id)} — ${esc(item.name)}</option>`),
   );
-  const body = parts.map((item) => {
+  const emptyMessage = ui.spareQuery
+    ? t('No spare parts match this search.')
+    : t('No spare parts yet.');
+  const body = filtered.map((item) => {
     const machines = (item.equipment || []).map((row) => row.equipment_id).join(', ') || '—';
     const stock = item.stock_qty == null ? t('No warehouse balance') : stockAmount(item.stock_qty);
     const tone = stockClass(item);
@@ -5038,13 +5055,25 @@ async function drawSpareParts() {
     return `<tr data-row="${esc(item.part_id)}" class="${selected && selected.part_id === item.part_id ? 'selected' : ''}">${cell(esc(item.part_number), true)}${cell(esc(item.name))}${cell(esc(machines))}${cell(stockCell)}${cell(esc(critical))}${cell(esc(item.unit || 'pcs'))}</tr>`;
   });
   document.getElementById('workspace').className = 'workspace';
-  document.getElementById('workspace').innerHTML = `<section class="panel"><label class="spare-filter">${esc(t('Linked equipment'))}<select id="spare-equipment">${equipmentOptions.join('')}</select></label>${tableShell(['Part No.', 'Part name', 'Linked equipment', 'Stock', 'Critical balance', 'Unit'], body.length ? body : [`<tr><td colspan="6">${esc(t('No spare parts yet.'))}</td></tr>`], shown(parts.length, parts.length, 'parts'))}</section>${ui.mode === 'create' ? spareForm(null) : (selected ? spareForm(selected) : `<aside class="panel detail"><h2>${esc(t('Spare parts'))}</h2><p class="live-note">${esc(t('No spare parts yet.'))}</p></aside>`)}`;
+  document.getElementById('workspace').innerHTML = `<section class="panel"><div class="spare-toolbar"><label class="spare-filter spare-search">${esc(t('Search'))}<input id="spare-search" type="search" value="${esc(ui.spareQuery || '')}" placeholder="${esc(t('Part No. or part name'))}" autocomplete="off"></label><label class="spare-filter">${esc(t('Linked equipment'))}<select id="spare-equipment">${equipmentOptions.join('')}</select></label></div>${tableShell(['Part No.', 'Part name', 'Linked equipment', 'Stock', 'Critical balance', 'Unit'], body.length ? body : [`<tr><td colspan="6">${esc(emptyMessage)}</td></tr>`], shown(filtered.length, parts.length, 'parts'))}</section>${ui.mode === 'create' ? spareForm(null) : (selected ? spareForm(selected) : `<aside class="panel detail"><h2>${esc(t('Spare parts'))}</h2><p class="live-note">${esc(emptyMessage)}</p></aside>`)}`;
   document.getElementById('spare-equipment')?.addEventListener('change', (event) => {
     ui.spareEquipment = event.target.value;
     ui.rowKey = '';
     ui.mode = 'view';
     drawSpareParts();
   });
+  const search = document.getElementById('spare-search');
+  search?.addEventListener('input', (event) => {
+    ui.spareQuery = event.target.value;
+    ui.rowKey = '';
+    ui.mode = 'view';
+    paintSparePartsList(sparePartsCache);
+  });
+  if (keepSearchFocus && search) {
+    search.focus();
+    const pos = caret == null ? search.value.length : Math.min(caret, search.value.length);
+    search.setSelectionRange(pos, pos);
+  }
   const form = document.getElementById('spare-form');
   if (form) {
     paintSpareEquipment(form);
@@ -5052,6 +5081,12 @@ async function drawSpareParts() {
   }
   bindRows();
   bindDeletes();
+}
+
+async function drawSpareParts() {
+  const query = ui.spareEquipment ? `?equipment_id=${encodeURIComponent(ui.spareEquipment)}` : '';
+  sparePartsCache = await apiRequest(`/spare-parts${query}`);
+  paintSparePartsList(sparePartsCache);
 }
 
 function drawIso() {
