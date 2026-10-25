@@ -340,8 +340,26 @@ def maybe_import_equipment_catalog():
         db.close()
 
 
+def maybe_import_mekanik_spare_parts():
+    """Load mechanical warehouse parts from ميكانيك.pdf once when marker part is missing."""
+    db = SessionLocal()
+    try:
+        if db.query(SparePart).filter(SparePart.part_number == '14919').first():
+            return
+        from .spare_parts_import import import_mekanik_spare_parts
+        import_mekanik_spare_parts(db, update_existing=True)
+    except Exception:
+        try:
+            db.rollback()
+        except Exception:
+            pass
+    finally:
+        db.close()
+
+
 maybe_normalize_equipment_ids()
 maybe_import_equipment_catalog()
+maybe_import_mekanik_spare_parts()
 start_phone_notices()
 
 app=FastAPI(title='Mechanical Maintenance CMMS API',version='2.0.0')
@@ -1292,6 +1310,20 @@ def list_spare_parts(equipment_id: str | None = None, db: Session = Depends(get_
         }
         parts = [part for part in parts if part.part_id in linked]
     return [spare_part_payload(db, part) for part in parts]
+
+@app.post('/spare-parts/import-mekanik')
+def import_mekanik_spare_parts_endpoint(
+    update_existing: bool = True,
+    db: Session = Depends(get_db),
+    u=Depends(role(*ENGINEER)),
+):
+    """Import / refresh Part No., Part name, and Stock from ميكانيك.pdf warehouse extract."""
+    from .spare_parts_import import import_mekanik_spare_parts
+    result = import_mekanik_spare_parts(db, update_existing=update_existing)
+    audit(db, u, 'IMPORT', 'SparePart', 'mekanik', new=result)
+    db.commit()
+    return result
+
 
 @app.post('/spare-parts')
 def create_spare_part(data: SparePartIn, db: Session = Depends(get_db), u=Depends(role(*ENGINEER))):
