@@ -4925,36 +4925,125 @@ function spareEquipmentIds(form) {
   return String(form.querySelector('[name="equipment_ids"]')?.value || '').split(',').map((item) => item.trim()).filter(Boolean);
 }
 
+function spareEquipmentCategory(row) {
+  return String(row?.equipment_type || row?.model || '').trim();
+}
+
+function spareEquipmentInCategory(row, category) {
+  const cat = String(category || '').trim().toLocaleLowerCase('ar');
+  if (!cat) return false;
+  return String(row?.equipment_type || '').trim().toLocaleLowerCase('ar') === cat
+    || String(row?.model || '').trim().toLocaleLowerCase('ar') === cat;
+}
+
+function spareEquipmentSearchMatch(row, query) {
+  const needle = String(query || '').trim().toLocaleLowerCase('ar');
+  if (!needle) return false;
+  return [
+    row?.equipment_id,
+    row?.name,
+    row?.equipment_type,
+    row?.model,
+  ].some((value) => String(value || '').toLocaleLowerCase('ar').includes(needle));
+}
+
+function setSpareEquipmentIds(form, ids) {
+  const hidden = form.querySelector('[name="equipment_ids"]');
+  if (!hidden) return;
+  const unique = [];
+  ids.forEach((id) => {
+    const code = String(id || '').trim();
+    if (code && !unique.includes(code)) unique.push(code);
+  });
+  hidden.value = unique.join(',');
+}
+
 function spareLinkHtml(ids) {
   const items = ids.map((id) => {
     const equipment = (store.equipment || []).find((row) => row.equipment_id === id);
-    return `<li><b>${esc(id)}</b><span>${esc(equipment?.name || '')}</span><button type="button" data-remove-equipment="${esc(id)}">${esc(t('Remove'))}</button></li>`;
+    const category = spareEquipmentCategory(equipment);
+    return `<li><b>${esc(id)}</b><span>${esc(equipment?.name || '')}${category ? ` · ${esc(category)}` : ''}</span><button type="button" data-remove-equipment="${esc(id)}">${esc(t('Remove'))}</button></li>`;
   }).join('');
-  const remaining = (store.equipment || [])
-    .filter((row) => !ids.includes(row.equipment_id))
-    .sort((a, b) => String(a.equipment_id).localeCompare(String(b.equipment_id)));
-  const options = remaining.map((row) => `<option value="${esc(row.equipment_id)}">${esc(row.equipment_id)} — ${esc(row.name)}</option>`).join('');
-  return `<ul class="spare-links">${items || `<li class="live-note">${esc(t('Choose the equipment for this part'))}</li>`}</ul><label>${esc(t('Linked equipment'))}<select id="spare-add-equipment"><option value="">${esc(t('Select'))}</option>${options}</select></label>`;
+  const categories = [...new Set(
+    (store.equipment || [])
+      .map((row) => spareEquipmentCategory(row))
+      .filter(Boolean),
+  )].sort((a, b) => a.localeCompare(b));
+  const categoryOptions = categories.map((cat) => `<option value="${esc(cat)}">${esc(cat)}</option>`).join('');
+  return `<ul class="spare-links">${items || `<li class="live-note">${esc(t('Choose the equipment for this part'))}</li>`}</ul>
+    <label class="spare-equip-search-label">${esc(t('Search equipment'))}<input id="spare-equip-search" type="search" placeholder="${esc(t('Number, name, or category'))}" autocomplete="off"></label>
+    <div id="spare-equip-results" class="spare-equip-results" hidden></div>
+    <label>${esc(t('Link by Category'))}<select id="spare-add-category"><option value="">${esc(t('Select'))}</option>${categoryOptions}</select></label>
+    <p class="live-note">${esc(t('Choosing a Category links this part to every machine in that Category.'))}</p>`;
+}
+
+function paintSpareEquipResults(form, query) {
+  const box = form.querySelector('#spare-equip-results');
+  if (!box) return;
+  const linked = new Set(spareEquipmentIds(form));
+  const needle = String(query || '').trim();
+  if (!needle) {
+    box.hidden = true;
+    box.innerHTML = '';
+    return;
+  }
+  const rows = (store.equipment || [])
+    .filter((row) => !linked.has(row.equipment_id) && spareEquipmentSearchMatch(row, needle))
+    .sort((a, b) => String(a.equipment_id).localeCompare(String(b.equipment_id)))
+    .slice(0, 40);
+  if (!rows.length) {
+    box.hidden = false;
+    box.innerHTML = `<p class="live-note">${esc(t('No equipment match this search.'))}</p>`;
+    return;
+  }
+  box.hidden = false;
+  box.innerHTML = rows.map((row) => {
+    const category = spareEquipmentCategory(row);
+    return `<button type="button" class="spare-equip-hit" data-add-equipment="${esc(row.equipment_id)}"><b>${esc(row.equipment_id)}</b><span>${esc(row.name || '')}${category ? ` · ${esc(category)}` : ''}</span></button>`;
+  }).join('');
+  box.querySelectorAll('[data-add-equipment]').forEach((button) => {
+    button.addEventListener('click', () => {
+      setSpareEquipmentIds(form, [...spareEquipmentIds(form), button.dataset.addEquipment]);
+      paintSpareEquipment(form);
+    });
+  });
 }
 
 function paintSpareEquipment(form) {
   const box = form.querySelector('#spare-equipment-box');
   if (!box) return;
+  const keepSearch = document.activeElement?.id === 'spare-equip-search';
+  const caret = keepSearch && typeof document.activeElement.selectionStart === 'number'
+    ? document.activeElement.selectionStart
+    : null;
+  const previousQuery = form.querySelector('#spare-equip-search')?.value || '';
   box.innerHTML = spareLinkHtml(spareEquipmentIds(form));
-  box.querySelector('#spare-add-equipment')?.addEventListener('change', (event) => {
-    const id = event.target.value;
-    if (!id) return;
-    const hidden = form.querySelector('[name="equipment_ids"]');
-    hidden.value = [...spareEquipmentIds(form), id].join(',');
+  const search = box.querySelector('#spare-equip-search');
+  if (search && previousQuery) search.value = previousQuery;
+  search?.addEventListener('input', (event) => {
+    paintSpareEquipResults(form, event.target.value);
+  });
+  box.querySelector('#spare-add-category')?.addEventListener('change', (event) => {
+    const category = event.target.value;
+    if (!category) return;
+    const extra = (store.equipment || [])
+      .filter((row) => spareEquipmentInCategory(row, category))
+      .map((row) => row.equipment_id);
+    setSpareEquipmentIds(form, [...spareEquipmentIds(form), ...extra]);
     paintSpareEquipment(form);
   });
   box.querySelectorAll('[data-remove-equipment]').forEach((button) => {
     button.addEventListener('click', () => {
-      const hidden = form.querySelector('[name="equipment_ids"]');
-      hidden.value = spareEquipmentIds(form).filter((id) => id !== button.dataset.removeEquipment).join(',');
+      setSpareEquipmentIds(form, spareEquipmentIds(form).filter((id) => id !== button.dataset.removeEquipment));
       paintSpareEquipment(form);
     });
   });
+  if (previousQuery) paintSpareEquipResults(form, previousQuery);
+  if (keepSearch && search) {
+    search.focus();
+    const pos = caret == null ? search.value.length : Math.min(caret, search.value.length);
+    search.setSelectionRange(pos, pos);
+  }
 }
 
 function spareForm(part) {

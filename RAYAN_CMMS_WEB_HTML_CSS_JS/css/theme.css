@@ -845,6 +845,12 @@ body .equipment-motor .live-form input{width:100%;max-width:none;height:38px;mar
 body .spare-filter select,body .spare-filter input,body .spare-form input,body .spare-form select{width:100%;max-width:none;height:38px;margin:0;padding:0 10px;border:1px solid #8eabda;border-radius:8px;background:#fff;color:#102d60;color-scheme:light;font:14px Arial,sans-serif}
 @media (max-width:900px){.spare-toolbar{grid-template-columns:1fr}}
 .spare-form{display:grid;gap:8px}
+.spare-equip-search-label{display:grid;gap:6px}
+.spare-equip-results{display:flex;flex-direction:column;gap:4px;max-height:220px;overflow:auto;padding:6px;border:1px solid #8eabda;border-radius:8px;background:#0b2a58}
+.spare-equip-hit{display:flex;align-items:center;gap:8px;width:100%;margin:0;padding:8px 10px;border:0;border-radius:6px;background:#123a72;color:#f4f8ff;text-align:start;cursor:pointer}
+.spare-equip-hit:hover{background:#1a4f96}
+.spare-equip-hit b{flex:0 0 auto}
+.spare-equip-hit span{flex:1 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#d5e4ff}
 .spare-links{display:flex;flex-direction:column;gap:6px;width:100%;margin:0;padding:0;list-style:none}
 .spare-links li{display:flex;align-items:center;justify-content:flex-start;gap:8px;width:100%;min-width:0}
 .spare-links b{color:#f4f8ff;font-size:13px}
