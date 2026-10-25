@@ -40,6 +40,7 @@ body .mini-search{color:#9eb4d6;background:#071428;border-color:#2c528c}
 body .asset{border-bottom-color:#1c365f}
 body .asset.selected{background:#16325f}
 body .asset em{color:#9ec4ff}
+body .asset .asset-count{margin-inline-start:auto;padding:2px 8px;border-radius:999px;background:#1a4a8c;color:#d7e8ff;font:700 11px/1.4 Arial,sans-serif;font-style:normal;white-space:nowrap}
 body .table-button{background:#10284f;color:#9ec4ff}
 body .split .equipment-list{border-inline-end:1px solid #23406e;border-right:0}
 body .h-bars span,body .h-bars b{color:#c5d6f4}

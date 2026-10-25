@@ -1326,22 +1326,37 @@ function assetList(selectedCode, options = {}) {
   const markMissingSop = Boolean(options.markMissingSop);
   const withSop = (requireSop || markMissingSop) ? equipmentIdsWithSopFile() : null;
   const plants = selectedPlantIds();
-  const items = (store?.equipment || []).filter((item) => {
-    if (plants.length && !plants.includes(item.plant_id)) return false;
-    if (!plants.length && ui.plantId && item.plant_id !== ui.plantId) return false;
-    if (ui.lineId && item.line_id !== ui.lineId) return false;
-    if (ui.sectionId && item.section_id !== ui.sectionId) return false;
-    if (ui.equipmentId && item.equipment_id !== ui.equipmentId && options.narrowToEquipment) return false;
-    if (requireSop && withSop && !withSop.has(item.equipment_id)) return false;
-    if (!equipmentMatchesQuery(item)) return false;
-    return true;
-  });
-  return `<aside class="equipment-list"><h3>${esc(t('Select Equipment'))}</h3><label class="mini-search">⌕ <input id="asset-search" placeholder="${esc(t('Search equipment...'))}"></label>${items.map((item) => {
+  const counts = options.counts || null;
+  const heading = options.heading || 'Select Equipment';
+  const emptyNote = options.emptyNote || (requireSop ? 'No equipment with an SOP file.' : 'No equipment');
+  let items = Array.isArray(options.items)
+    ? options.items.slice()
+    : (store?.equipment || []).filter((item) => {
+      if (plants.length && !plants.includes(item.plant_id)) return false;
+      if (!plants.length && ui.plantId && item.plant_id !== ui.plantId) return false;
+      if (ui.lineId && item.line_id !== ui.lineId) return false;
+      if (ui.sectionId && item.section_id !== ui.sectionId) return false;
+      if (ui.equipmentId && item.equipment_id !== ui.equipmentId && options.narrowToEquipment) return false;
+      if (requireSop && withSop && !withSop.has(item.equipment_id)) return false;
+      return true;
+    });
+  if (options.onlyIds) {
+    const allowed = options.onlyIds instanceof Set ? options.onlyIds : new Set(options.onlyIds);
+    items = items.filter((item) => allowed.has(item.equipment_id));
+  }
+  if (Array.isArray(options.orderIds) && options.orderIds.length) {
+    const order = new Map(options.orderIds.map((id, index) => [id, index]));
+    items.sort((a, b) => (order.get(a.equipment_id) ?? 9999) - (order.get(b.equipment_id) ?? 9999));
+  }
+  items = items.filter((item) => equipmentMatchesQuery(item));
+  return `<aside class="equipment-list"><h3>${esc(t(heading))}</h3><label class="mini-search">⌕ <input id="asset-search" placeholder="${esc(t('Search equipment...'))}"></label>${items.map((item) => {
     const missing = markMissingSop && withSop && !withSop.has(item.equipment_id);
     const classes = `asset${item.equipment_id === selectedCode ? ' selected' : ''}${missing ? ' missing-sop' : ''}`;
     const title = missing ? ` title="${esc(t('No SOP file'))}"` : '';
-    return `<div class="${classes}" data-asset="${esc(item.equipment_id)}"${title}><span class="asset-icon">⚙</span><span><b>${esc(item.equipment_id)}</b><small>${esc(item.name)}</small>${missing ? `<em class="sop-missing-tag">${esc(t('No SOP'))}</em>` : ''}</span></div>`;
-  }).join('') || `<p class="live-note">${esc(t(requireSop ? 'No equipment with an SOP file.' : 'No equipment'))}</p>`}</aside>`;
+    const count = counts ? counts[item.equipment_id] : null;
+    const countBadge = count != null ? `<em class="asset-count" title="${esc(t('Maintenance actions'))}">${esc(String(count))}</em>` : '';
+    return `<div class="${classes}" data-asset="${esc(item.equipment_id)}"${title}><span class="asset-icon">⚙</span><span><b>${esc(item.equipment_id)}</b><small>${esc(item.name)}</small>${missing ? `<em class="sop-missing-tag">${esc(t('No SOP'))}</em>` : ''}</span>${countBadge}</div>`;
+  }).join('') || `<p class="live-note">${esc(t(emptyNote))}</p>`}</aside>`;
 }
 
 function drawWorkOrders() {
@@ -2629,6 +2644,28 @@ function isLogEntry(row) {
   return Boolean(maintenanceKind(row));
 }
 
+function topEquipmentByLogCount(limit = 10) {
+  const counts = new Map();
+  for (const row of scoped(store.records || []).filter(isLogEntry)) {
+    if (!row.equipment_id) continue;
+    counts.set(row.equipment_id, (counts.get(row.equipment_id) || 0) + 1);
+  }
+  const plants = selectedPlantIds();
+  const ranked = (store?.equipment || [])
+    .filter((item) => {
+      if (!counts.has(item.equipment_id)) return false;
+      if (plants.length && !plants.includes(item.plant_id)) return false;
+      if (!plants.length && ui.plantId && item.plant_id !== ui.plantId) return false;
+      if (ui.lineId && item.line_id !== ui.lineId) return false;
+      if (ui.sectionId && item.section_id !== ui.sectionId) return false;
+      return true;
+    })
+    .map((item) => ({ item, count: counts.get(item.equipment_id) || 0 }))
+    .sort((a, b) => b.count - a.count || String(a.item.equipment_id).localeCompare(String(b.item.equipment_id)))
+    .slice(0, limit);
+  return ranked;
+}
+
 function logCode(kind) {
   if (kind === 'Emergency') return 'EM';
   if (kind === 'Oil change') return 'OC';
@@ -2694,7 +2731,14 @@ function machineLogPaper(equipment, rows) {
 }
 
 function drawRecords() {
-  const chosen = ui.equipmentId;
+  const top = topEquipmentByLogCount(10);
+  const topIds = top.map((row) => row.item.equipment_id);
+  const countById = Object.fromEntries(top.map((row) => [row.item.equipment_id, row.count]));
+  let chosen = ui.equipmentId;
+  if (chosen && !topIds.includes(chosen)) {
+    chosen = topIds[0] || '';
+    ui.equipmentId = chosen;
+  }
   const equipment = store.equipment.find((item) => item.equipment_id === chosen) || null;
   const listed = scoped(store.records).filter(isLogEntry).filter((row) => !chosen || row.equipment_id === chosen);
   const rows = listed.filter((row) => ui.tab === 'All' || maintenanceKind(row) === ui.tab)
@@ -2710,7 +2754,13 @@ function drawRecords() {
   ]);
   dateLabel(listed.map((row) => row.record_date));
   document.getElementById('workspace').className = 'workspace log-board';
-  document.getElementById('workspace').innerHTML = `<section class="panel"><div class="split">${assetList(chosen)}<div class="asset-view">${tabsHtml(['All', 'Preventive', 'Corrective', 'Emergency', 'Routine', 'Inspection', 'Oil change'])}${chosen ? `${machineLogPaper(equipment, rows)}<div id="equipment-log-motor" class="equipment-motor log-temp-panel"></div>` : `<p class="live-note">${esc(t('Select a machine to open its maintenance log.'))}</p>`}</div></div></section>`;
+  document.getElementById('workspace').innerHTML = `<section class="panel"><div class="split">${assetList(chosen, {
+    items: top.map((row) => row.item),
+    orderIds: topIds,
+    counts: countById,
+    heading: 'Top 10 by maintenance',
+    emptyNote: 'No equipment with maintenance actions yet.',
+  })}<div class="asset-view">${tabsHtml(['All', 'Preventive', 'Corrective', 'Emergency', 'Routine', 'Inspection', 'Oil change'])}${chosen ? `${machineLogPaper(equipment, rows)}<div id="equipment-log-motor" class="equipment-motor log-temp-panel"></div>` : `<p class="live-note">${esc(t('Select a machine to open its maintenance log.'))}</p>`}</div></div></section>`;
   bindAssets();
   bindRows();
   bindDeletes();
