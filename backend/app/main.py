@@ -341,10 +341,11 @@ def maybe_import_equipment_catalog():
 
 
 def maybe_import_mekanik_spare_parts():
-    """Load mechanical warehouse parts from ميكانيك.pdf once when marker part is missing."""
+    """Load mechanical warehouse parts from ميكانيك.pdf when the catalog is not fully loaded yet."""
     db = SessionLocal()
     try:
-        if db.query(SparePart).filter(SparePart.part_number == '14919').first():
+        loaded = db.query(SparePart).filter(SparePart.notes == 'ميكانيك.pdf').count()
+        if loaded >= 2500:
             return
         from .spare_parts_import import import_mekanik_spare_parts
         import_mekanik_spare_parts(db, update_existing=True)
