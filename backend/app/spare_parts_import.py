@@ -7,7 +7,7 @@ from pathlib import Path
 
 from sqlalchemy.orm import Session
 
-from .models import SparePart
+from .models import Equipment, SparePart, SparePartEquipment
 
 CATALOG_PATH = Path(__file__).resolve().parent / 'data' / 'mekanik_spare_parts.json'
 SOURCE_NOTE = 'ميكانيك.pdf'
@@ -32,6 +32,73 @@ def _next_part_seq(db: Session) -> int:
         if value and value.startswith('SP-') and value[3:].isdigit():
             numbers.append(int(value[3:]))
     return (max(numbers) if numbers else 0) + 1
+
+
+def _equipment_by_category(db: Session) -> dict[str, set[str]]:
+    """Map Category (equipment_type / model) → equipment codes."""
+    by_category: dict[str, set[str]] = {}
+    for row in db.query(Equipment).all():
+        code = (row.equipment_id or '').strip()
+        if not code:
+            continue
+        for raw in (row.equipment_type, row.model):
+            cat = _clean(raw).upper()
+            if len(cat) < 3 or not re.fullmatch(r'[A-Z0-9]{3,12}', cat):
+                continue
+            by_category.setdefault(cat, set()).add(code)
+    return by_category
+
+
+def link_spare_parts_by_category(db: Session) -> dict:
+    """Link spare parts whose name/number contains an equipment Category code.
+
+    Example: part name \"Side Seal DFML-80146-810\" → all equipment with Category DFML.
+    """
+    by_category = _equipment_by_category(db)
+    if not by_category:
+        return {
+            'categories': 0,
+            'matched_parts': 0,
+            'links_added': 0,
+            'equipment_linked': 0,
+        }
+
+    categories = sorted(by_category.keys(), key=len, reverse=True)
+    pattern = re.compile(
+        r'(?<![A-Za-z0-9])(' + '|'.join(re.escape(cat) for cat in categories) + r')(?![A-Za-z0-9])',
+        re.IGNORECASE,
+    )
+    existing_links = {
+        (row.part_id, row.equipment_id)
+        for row in db.query(SparePartEquipment).all()
+    }
+    matched_parts = 0
+    links_added = 0
+    equipment_hit: set[str] = set()
+
+    for part in db.query(SparePart).all():
+        text = f'{part.part_number or ""} {part.name or ""}'
+        found = {match.group(1).upper() for match in pattern.finditer(text)}
+        if not found:
+            continue
+        matched_parts += 1
+        for cat in found:
+            for equipment_id in by_category.get(cat, ()):
+                key = (part.part_id, equipment_id)
+                if key in existing_links:
+                    continue
+                db.add(SparePartEquipment(part_id=part.part_id, equipment_id=equipment_id))
+                existing_links.add(key)
+                links_added += 1
+                equipment_hit.add(equipment_id)
+
+    db.commit()
+    return {
+        'categories': len(by_category),
+        'matched_parts': matched_parts,
+        'links_added': links_added,
+        'equipment_linked': len(equipment_hit),
+    }
 
 
 def import_mekanik_spare_parts(db: Session, update_existing: bool = True) -> dict:
@@ -91,10 +158,12 @@ def import_mekanik_spare_parts(db: Session, update_existing: bool = True) -> dic
         created += 1
 
     db.commit()
+    links = link_spare_parts_by_category(db)
     return {
         'source': SOURCE_NOTE,
         'rows': len(rows),
         'created': created,
         'updated': updated,
         'skipped': skipped,
+        'category_links': links,
     }

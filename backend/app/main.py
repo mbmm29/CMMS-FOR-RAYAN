@@ -341,14 +341,15 @@ def maybe_import_equipment_catalog():
 
 
 def maybe_import_mekanik_spare_parts():
-    """Load mechanical warehouse parts from ميكانيك.pdf when the catalog is not fully loaded yet."""
+    """Load mechanical warehouse parts and link them to equipment by Category code."""
     db = SessionLocal()
     try:
+        from .spare_parts_import import import_mekanik_spare_parts, link_spare_parts_by_category
         loaded = db.query(SparePart).filter(SparePart.notes == 'ميكانيك.pdf').count()
-        if loaded >= 2500:
-            return
-        from .spare_parts_import import import_mekanik_spare_parts
-        import_mekanik_spare_parts(db, update_existing=True)
+        if loaded < 2500:
+            import_mekanik_spare_parts(db, update_existing=True)
+        else:
+            link_spare_parts_by_category(db)
     except Exception:
         try:
             db.rollback()
@@ -1322,6 +1323,19 @@ def import_mekanik_spare_parts_endpoint(
     from .spare_parts_import import import_mekanik_spare_parts
     result = import_mekanik_spare_parts(db, update_existing=update_existing)
     audit(db, u, 'IMPORT', 'SparePart', 'mekanik', new=result)
+    db.commit()
+    return result
+
+
+@app.post('/spare-parts/link-by-category')
+def link_spare_parts_by_category_endpoint(
+    db: Session = Depends(get_db),
+    u=Depends(role(*ENGINEER)),
+):
+    """Link spare parts to equipment when the part name contains the equipment Category."""
+    from .spare_parts_import import link_spare_parts_by_category
+    result = link_spare_parts_by_category(db)
+    audit(db, u, 'LINK', 'SparePart', 'category', new=result)
     db.commit()
     return result
 
