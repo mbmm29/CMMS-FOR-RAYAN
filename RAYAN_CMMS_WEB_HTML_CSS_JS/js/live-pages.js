@@ -483,7 +483,7 @@ function setHeader(page) {
     action.textContent = t('+ Add Equipment');
   } else {
     action.hidden = false;
-    action.textContent = t(page === 'machine-records' ? 'Export' : spec.action);
+    action.textContent = t(page === 'machine-records' ? 'Export PDF' : spec.action);
   }
   document.querySelectorAll('.engineer-only').forEach((link) => {
     link.hidden = !canMaintain();
@@ -3697,89 +3697,50 @@ ${drawing}
   return packWorkbook(sheet, model.sheetName, model.logo, 2);
 }
 
-async function exportRecords() {
+function exportRecords() {
   const chosen = ui.equipmentId;
   const equipment = (store.equipment || []).find((item) => item.equipment_id === chosen) || null;
-  if (!equipment) {
+  const form = document.getElementById('machine-log');
+  if (!equipment || !form) {
     toast(t('Select a machine to open its maintenance log.'));
     return;
   }
-  const listed = dedupeLogRows(scoped(store.records).filter(isLogEntry).filter((row) => row.equipment_id === chosen));
-  const rows = listed.filter((row) => ui.tab === 'All' || maintenanceKind(row) === ui.tab)
-    .slice()
-    .sort((a, b) => String(a.record_date || '').localeCompare(String(b.record_date || '')) || a.id - b.id);
-  const form = document.getElementById('machine-log');
-  const commissioning = form?.querySelector('[name="commissioning_date"]')?.value || String(equipment.commissioning_date || '').slice(0, 10);
-  const manufacturer = form?.querySelector('[name="manufacturer"]')?.value ?? equipment.manufacturer ?? '';
-  const formNumber = formNo('equipment_log');
-  const meta = [];
-  if (formNumber) meta.push({ label: t('Form No.:'), value: formNumber });
-  meta.push({ label: t('Document no.'), value: equipment.equipment_id || '—' });
-  meta.push({ label: t('Revision no.'), value: '00' });
-  meta.push({ label: t('Issue date'), value: fmtDate(rows[0]?.record_date) });
-  const lines = rows.map((row, index) => {
-    const kind = maintenanceKind(row);
-    const parts = kind === 'Oil change' ? oilChangeParts(row) : { ...logParts(row.spare_parts), quantity: '—', work: row.action || row.description || '—' };
-    const downtime = row.downtime_h == null || row.downtime_h === '' ? '—' : numberText(row.downtime_h, 2);
-    return [
-      index + 1,
-      fmtDate(row.record_date),
-      logCode(kind),
-      kind === 'Oil change' ? t('Oil change') : (row.cause || '—'),
-      parts.work || '—',
-      workOrderNumber(row) || '—',
-      parts.names || '—',
-      parts.numbers || '—',
-      parts.quantity || '—',
-      downtime,
-      technicianName(row.technician_id) || '—',
-    ];
+
+  // Print the on-screen log paper as PDF so layout matches the website exactly.
+  const frozen = [];
+  form.querySelectorAll('input, textarea').forEach((field) => {
+    if (field.type === 'hidden' || field.type === 'checkbox' || field.type === 'radio') return;
+    const block = document.createElement('div');
+    block.className = 'log-print-value';
+    const raw = field.value || '';
+    block.textContent = field.type === 'date' && /^\d{4}-\d{2}-\d{2}$/.test(raw) ? (fmtDate(raw) || '—') : (raw || '—');
+    frozen.push({ field, block });
+    field.replaceWith(block);
   });
-  let logo = null;
-  try {
-    const response = await fetch('logo-rayan.png?v=3');
-    if (response.ok) logo = new Uint8Array(await response.arrayBuffer());
-  } catch (_) {
-    logo = null;
-  }
-  try {
-    const blob = buildMaintenanceLogWorkbook({
-      rtl: document.documentElement.dir === 'rtl',
-      sheetName: excelSheetName(t('Equipment maintenance log')),
-      title: t('Equipment maintenance log'),
-      department: t('Mechanical Maintenance Department'),
-      approved: `${t('Approved according to')}: ${t('Mechanical Maintenance Department')}`,
-      equipmentTitle: t('Equipment data'),
-      keyTitle: t('Maintenance type key'),
-      typeHeading: t('Maintenance type'),
-      symbolHeading: t('Symbol'),
-      tableTitle: t('Maintenance work and details'),
-      empty: t('No log lines for this machine yet.'),
-      meta,
-      facts: [
-        { label: t('Log machine name'), value: equipment.name || '—' },
-        { label: t('Machine number'), value: equipment.equipment_id || '—' },
-        { label: t('Location / section'), value: machinePlace(equipment) },
-        { label: t('Commissioning date'), value: fmtDate(commissioning) || '—' },
-        { label: t('Manufacturer'), value: manufacturer || '—' },
-      ],
-      key: [
-        { label: t('Preventive'), value: 'PM' },
-        { label: t('Corrective'), value: 'CM' },
-        { label: t('Emergency'), value: 'EM' },
-        { label: t('Routine'), value: 'RT' },
-        { label: t('Inspection'), value: 'IN' },
-        { label: t('Oil change'), value: 'OC' },
-        { label: t('Lubrication'), value: 'LU' },
-      ],
-      headings: [t('No.'), t('Maintenance date'), t('Maintenance type'), t('Reason for maintenance'), t('Work performed'), t('Work order no.'), t('Parts used'), t('Part No.'), t('Quantity'), t('Downtime time'), t('Technician name')],
-      lines,
-      logo,
+
+  const previousTitle = document.title;
+  document.title = `maintenance-log-${equipment.equipment_id}`;
+  document.body.classList.add('log-printing');
+  document.getElementById('equipment-log-motor')?.classList.add('no-print');
+
+  const restore = () => {
+    frozen.forEach(({ field, block }) => {
+      if (block.isConnected) block.replaceWith(field);
     });
-    downloadBlob(blob, `maintenance-log-${equipment.equipment_id}.xlsx`);
-  } catch (exception) {
-    toast(t(exception.message) || t('Could not export the maintenance log.'));
-  }
+    document.body.classList.remove('log-printing');
+    document.getElementById('equipment-log-motor')?.classList.remove('no-print');
+    document.title = previousTitle;
+    window.removeEventListener('afterprint', restore);
+  };
+  window.addEventListener('afterprint', restore);
+  window.setTimeout(() => {
+    try {
+      window.print();
+    } catch (exception) {
+      restore();
+      toast(t(exception.message) || t('Could not export the maintenance log.'));
+    }
+  }, 50);
 }
 
 function buildAnnualPlanWorkbook(model) {

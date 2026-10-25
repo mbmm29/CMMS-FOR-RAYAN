@@ -594,13 +594,83 @@ body .detail-button.job-open-detail .job-open-glyph{font-size:16px;line-height:1
   body:has(.lube-sheet) .lube-sheet .lube-type{padding:0.4mm}
   body:has(.lube-sheet) .lube-sheet .lube-order{font-size:7pt;padding:0 1mm}
   body:has(.lube-sheet) .lube-sheet .lube-foot{display:flex;justify-content:space-between;margin-top:2mm;font-size:8pt}
+  body.log-printing .sidebar,
+  body.log-printing .page-header,
+  body.log-printing .topbar,
+  body.log-printing .metric-grid,
+  body.log-printing .equipment-list,
+  body.log-printing .tabs,
+  body.log-printing .equipment-motor,
+  body.log-printing .toast,
+  body.log-printing .no-print,
   body:has(.machine-log) .equipment-list,
   body:has(.machine-log) .tabs,
   body:has(.machine-log) .metric-grid{display:none!important}
-  body:has(.machine-log) .machine-log{width:auto!important}
-  body:has(.machine-log) .log-table{font-size:8pt}
+  body.log-printing .shell,
+  body.log-printing .content,
+  body.log-printing .workspace,
+  body.log-printing .panel,
+  body.log-printing .split,
+  body.log-printing .asset-view{display:block!important;margin:0!important;padding:0!important;border:0!important;box-shadow:none!important;background:#fff!important;width:auto!important;max-width:none!important;min-height:0!important;height:auto!important;overflow:visible!important}
+  body.log-printing .machine-log,
+  body:has(.machine-log) .machine-log{
+    page:logsheet;
+    box-sizing:border-box!important;
+    width:283mm!important;
+    max-width:283mm!important;
+    margin:0 auto!important;
+    padding:0!important;
+    border:0!important;
+    box-shadow:none!important;
+    background:#fff!important;
+    color:#102d60!important;
+    print-color-adjust:exact;
+    -webkit-print-color-adjust:exact;
+  }
+  body.log-printing .machine-log .lube-head{
+    display:grid!important;
+    grid-template-columns:42mm minmax(0,1fr) 55mm!important;
+    gap:3mm;
+    align-items:center;
+    padding-bottom:2mm;
+    margin:0 0 2mm;
+    border-bottom:0.45mm solid #2a5287;
+  }
+  body.log-printing .machine-log .lube-head img{width:40mm!important;max-width:40mm!important;height:auto!important;object-fit:contain;background:transparent!important;border:0!important;box-shadow:none!important}
+  body.log-printing .machine-log .lube-head h2{margin:0;font-size:14pt;line-height:1.2;text-align:center;color:#102d60!important}
+  body.log-printing .machine-log .lube-head p{margin:1mm 0 0;font-size:9pt;font-weight:800;text-align:center;color:#102d60!important}
+  body.log-printing .machine-log .lube-head dl{width:100%;margin:0;border:0.35mm solid #2a5287}
+  body.log-printing .machine-log .lube-head dl div{display:flex!important;align-items:center;justify-content:space-between;gap:2mm;min-height:6mm;padding:0 2mm;font-size:8pt;border-bottom:0.3mm solid #2a5287}
+  body.log-printing .machine-log .lube-head dl div:last-child{border-bottom:0}
+  body.log-printing .machine-log .lube-head dt{margin:0;font-weight:700;white-space:nowrap}
+  body.log-printing .machine-log .lube-head dd{margin:0;font-weight:800;text-align:end}
+  body.log-printing .machine-log .log-approve{margin:2mm 0;font-size:9pt;font-weight:700;color:#102d60!important}
+  body.log-printing .machine-log .log-facts{
+    display:grid!important;
+    grid-template-columns:minmax(0,1.35fr) minmax(0,.7fr)!important;
+    gap:4mm;
+    align-items:start;
+    margin:0 0 3mm;
+  }
+  body.log-printing .machine-log .log-facts h3,
+  body.log-printing .machine-log .log-table-title{margin:0 0 1.5mm;font-size:10pt;color:#102d60!important}
+  body.log-printing .machine-log .log-facts dl{display:grid;gap:1mm;margin:0}
+  body.log-printing .machine-log .log-facts dl div{display:grid!important;grid-template-columns:38mm minmax(0,1fr)!important;gap:2mm;align-items:center;border-bottom:0.25mm solid #d5e2f5;min-height:6mm;padding:0.4mm 0}
+  body.log-printing .machine-log .log-facts dt{font-weight:800;font-size:8pt}
+  body.log-printing .machine-log .log-facts dd{margin:0;font-size:8pt}
+  body.log-printing .machine-log .log-print-value{min-height:5mm;display:flex;align-items:center;font-size:8pt;font-weight:700;color:#102d60!important}
+  body.log-printing .machine-log .log-key{width:100%;border-collapse:collapse}
+  body.log-printing .machine-log .log-key th,
+  body.log-printing .machine-log .log-key td{border:0.3mm solid #2a5287;padding:1.2mm 2mm;font-size:8pt;text-align:start}
+  body.log-printing .machine-log .log-key th{background:#e7f0ff!important;color:#102d60!important}
+  body.log-printing .machine-log .sheet-scroll{overflow:visible!important;max-height:none!important}
+  body.log-printing .machine-log .log-table,
+  body:has(.machine-log) .log-table{width:100%!important;min-width:0!important;table-layout:fixed;border-collapse:collapse;font-size:7.5pt}
+  body.log-printing .machine-log .log-table th,
+  body.log-printing .machine-log .log-table td,
   body:has(.machine-log) .log-table th,
-  body:has(.machine-log) .log-table td{font-size:8pt;padding:3px}
+  body:has(.machine-log) .log-table td{border:0.3mm solid #2a5287;padding:1.2mm 1mm;font-size:7.5pt;vertical-align:top;white-space:normal;overflow-wrap:anywhere;color:#102d60!important}
+  body.log-printing .machine-log .log-table th{background:#e7f0ff!important;font-weight:800}
   body:has(.daily-paper) .app,
   body:has(.daily-paper) .main-content,
   body:has(.daily-paper) .reports-layout,
