@@ -3367,10 +3367,11 @@ function zipStore(entries) {
       ...u32(crc), ...u32(data.length), ...u32(data.length), ...u16(name.length), 0, 0,
     ]);
     parts.push(local, name, data);
+    // Central directory: extra(2)+comment(2)+disk(2)+internal(2)+external(4)+offset(4) = 16 bytes after name length.
     central.push(bytesOf([
       0x50, 0x4b, 0x01, 0x02, 20, 0, 20, 0, 0, 0, 0, 0, 0, 0, 0, 0,
       ...u32(crc), ...u32(data.length), ...u32(data.length), ...u16(name.length),
-      0, 0, 0, 0, 0, 0, 0, 0, 0, 0, ...u32(offset),
+      0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, ...u32(offset),
     ]), name);
     offset += local.length + name.length + data.length;
   });
@@ -3385,6 +3386,23 @@ function zipStore(entries) {
 
 function xmlText(value) {
   return String(value ?? '').replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F]/g, '').replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;').replaceAll('"', '&quot;');
+}
+
+function excelSheetName(value) {
+  const clean = String(value ?? 'Sheet1').replace(/[\\/?*[\]:]/g, ' ').replace(/\s+/g, ' ').trim();
+  return (clean || 'Sheet1').slice(0, 31);
+}
+
+function downloadBlob(blob, filename) {
+  const link = document.createElement('a');
+  const href = URL.createObjectURL(blob);
+  link.href = href;
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  // Revoking immediately can truncate the download and produce a corrupt .xlsx in Excel.
+  setTimeout(() => URL.revokeObjectURL(href), 60_000);
 }
 
 function columnLetters(index) {
@@ -3472,6 +3490,10 @@ function worksheetRows(cells, heights) {
 
 function packWorkbook(sheet, sheetName, logo, logoRows = 4) {
   const encoder = new TextEncoder();
+  const safeName = excelSheetName(sheetName);
+  const pngLogo = logo && logo.length > 8 && logo[0] === 0x89 && logo[1] === 0x50 && logo[2] === 0x4e && logo[3] === 0x47
+    ? logo
+    : null;
   const files = [
     { name: '[Content_Types].xml', data: encoder.encode(`<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">
@@ -3481,7 +3503,7 @@ function packWorkbook(sheet, sheetName, logo, logoRows = 4) {
 <Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/>
 <Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>
 <Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/>
-${logo ? '<Override PartName="/xl/drawings/drawing1.xml" ContentType="application/vnd.openxmlformats-officedocument.drawing+xml"/>' : ''}
+${pngLogo ? '<Override PartName="/xl/drawings/drawing1.xml" ContentType="application/vnd.openxmlformats-officedocument.drawing+xml"/>' : ''}
 </Types>`) },
     { name: '_rels/.rels', data: encoder.encode(`<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
@@ -3489,7 +3511,7 @@ ${logo ? '<Override PartName="/xl/drawings/drawing1.xml" ContentType="applicatio
 </Relationships>`) },
     { name: 'xl/workbook.xml', data: encoder.encode(`<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">
-<sheets><sheet name="${xmlText(sheetName)}" sheetId="1" r:id="rId1"/></sheets>
+<sheets><sheet name="${xmlText(safeName)}" sheetId="1" r:id="rId1"/></sheets>
 </workbook>`) },
     { name: 'xl/_rels/workbook.xml.rels', data: encoder.encode(`<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
@@ -3497,23 +3519,23 @@ ${logo ? '<Override PartName="/xl/drawings/drawing1.xml" ContentType="applicatio
 <Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/>
 </Relationships>`) },
     { name: 'xl/styles.xml', data: encoder.encode(workbookStyles()) },
-    { name: 'xl/worksheets/sheet1.xml', data: encoder.encode(sheet) },
+    { name: 'xl/worksheets/sheet1.xml', data: encoder.encode(pngLogo ? sheet : String(sheet).replace(/<drawing\b[^>]*\/>/g, '')) },
   ];
-  if (logo) {
+  if (pngLogo) {
     files.push(
       { name: 'xl/worksheets/_rels/sheet1.xml.rels', data: encoder.encode(`<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
 <Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/drawing" Target="../drawings/drawing1.xml"/>
 </Relationships>`) },
       { name: 'xl/drawings/drawing1.xml', data: encoder.encode(`<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<xdr:wsDr xmlns:xdr="http://schemas.openxmlformats.org/drawingml/2006/spreadsheetDrawing" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">
+<xdr:wsDr xmlns:xdr="http://schemas.openxmlformats.org/drawingml/2006/spreadsheetDrawing" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">
 <xdr:twoCellAnchor editAs="oneCell">
 <xdr:from><xdr:col>0</xdr:col><xdr:colOff>80000</xdr:colOff><xdr:row>0</xdr:row><xdr:rowOff>40000</xdr:rowOff></xdr:from>
-<xdr:to><xdr:col>2</xdr:col><xdr:colOff>0</xdr:colOff><xdr:row>${logoRows}</xdr:row><xdr:rowOff>0</xdr:rowOff></xdr:to>
+<xdr:to><xdr:col>2</xdr:col><xdr:colOff>0</xdr:colOff><xdr:row>${Math.max(1, Number(logoRows) || 2)}</xdr:row><xdr:rowOff>0</xdr:rowOff></xdr:to>
 <xdr:pic>
 <xdr:nvPicPr><xdr:cNvPr id="1" name="Logo"/><xdr:cNvPicPr><a:picLocks noChangeAspect="1"/></xdr:cNvPicPr></xdr:nvPicPr>
-<xdr:blipFill><a:blip xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" r:embed="rId1"/><a:stretch><a:fillRect/></a:stretch></xdr:blipFill>
-<xdr:spPr><a:prstGeom prst="rect"><a:avLst/></a:prstGeom></xdr:spPr>
+<xdr:blipFill><a:blip r:embed="rId1"/><a:stretch><a:fillRect/></a:stretch></xdr:blipFill>
+<xdr:spPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="1200000" cy="600000"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom></xdr:spPr>
 </xdr:pic>
 <xdr:clientData/>
 </xdr:twoCellAnchor>
@@ -3522,7 +3544,7 @@ ${logo ? '<Override PartName="/xl/drawings/drawing1.xml" ContentType="applicatio
 <Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
 <Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="../media/logo.png"/>
 </Relationships>`) },
-      { name: 'xl/media/logo.png', data: logo },
+      { name: 'xl/media/logo.png', data: pngLogo },
     );
   }
   return zipStore(files);
@@ -3696,7 +3718,7 @@ async function exportRecords() {
   try {
     const blob = buildMaintenanceLogWorkbook({
       rtl: document.documentElement.dir === 'rtl',
-      sheetName: t('Equipment maintenance log').slice(0, 31),
+      sheetName: excelSheetName(t('Equipment maintenance log')),
       title: t('Equipment maintenance log'),
       department: t('Mechanical Maintenance Department'),
       approved: `${t('Approved according to')}: ${t('Mechanical Maintenance Department')}`,
@@ -3727,11 +3749,7 @@ async function exportRecords() {
       lines,
       logo,
     });
-    const link = document.createElement('a');
-    link.href = URL.createObjectURL(blob);
-    link.download = `maintenance-log-${equipment.equipment_id}.xlsx`;
-    link.click();
-    URL.revokeObjectURL(link.href);
+    downloadBlob(blob, `maintenance-log-${equipment.equipment_id}.xlsx`);
   } catch (exception) {
     toast(t(exception.message) || t('Could not export the maintenance log.'));
   }
@@ -3840,7 +3858,7 @@ async function exportAnnualPlan() {
   }
   const blob = buildAnnualPlanWorkbook({
     rtl: document.documentElement.dir === 'rtl',
-    sheetName: t('Annual preventive maintenance plan').slice(0, 31),
+    sheetName: excelSheetName(t('Annual preventive maintenance plan')),
     title: t('Annual preventive maintenance plan'),
     subtitle,
     headings: [t('No.'), t('Machine number'), t('Machine name'), t('Line number'), t('Line name'), t('Task description'), t('Maintenance type'), t('Every (days)'), t('By running hours')],
@@ -3850,11 +3868,7 @@ async function exportAnnualPlan() {
     logo,
   });
   const safe = String(plant?.name || ui.annualPlant).replace(/[\\/:*?"<>|]/g, '-').slice(0, 40);
-  const link = document.createElement('a');
-  link.href = URL.createObjectURL(blob);
-  link.download = `annual-plan-${ui.annualYear}-${safe}.xlsx`;
-  link.click();
-  URL.revokeObjectURL(link.href);
+  downloadBlob(blob, `annual-plan-${ui.annualYear}-${safe}.xlsx`);
 }
 
 function pendingSource(row) {
