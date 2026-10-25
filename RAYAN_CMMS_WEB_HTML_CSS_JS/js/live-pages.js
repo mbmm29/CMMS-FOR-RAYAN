@@ -3876,7 +3876,13 @@ async function decidePending(row, decision) {
 }
 
 const LUBE_SHIFTS = ['Morning (07:00 - 15:00)', 'Evening (15:00 - 23:00)', 'Night (23:00 - 07:00)'];
-const DAILY_SHIFTS = ['Morning (07:00 - 19:00)', 'Night (19:00 - 07:00)'];
+const DAILY_SHIFTS = [
+  'Morning (07:00 - 15:00)',
+  'Evening (15:00 - 23:00)',
+  'Night (23:00 - 07:00)',
+  'Morning 12h (07:00 - 19:00)',
+  'Night 12h (19:00 - 07:00)',
+];
 
 function dailyShiftOptions(selected) {
   const chosen = String(selected || '').trim();

@@ -3815,7 +3815,7 @@ def create_report(
             report_date=data.report_date,
             technician_id=technician_id,
             plant_id=data.plant_id,
-            shift=normalize_daily_shift(data.shift) or DAILY_SHIFT_MORNING,
+            shift=normalize_daily_shift(data.shift) or DAILY_SHIFT_DEFAULT,
             shift_engineer=data.shift_engineer,
             general_notes=data.general_notes,
             status='Draft',
@@ -4700,17 +4700,18 @@ LUBE_SHIFTS = {
     'Evening (15:00 - 23:00)',
     'Night (23:00 - 07:00)',
 }
-DAILY_SHIFT_MORNING = 'Morning (07:00 - 19:00)'
-DAILY_SHIFT_NIGHT = 'Night (19:00 - 07:00)'
+DAILY_SHIFT_DEFAULT = 'Morning (07:00 - 15:00)'
 DAILY_SHIFTS = {
-    DAILY_SHIFT_MORNING,
-    DAILY_SHIFT_NIGHT,
-}
-# Older daily-report shift labels kept so existing rows still validate on edit.
-DAILY_SHIFTS_LEGACY = {
     'Morning (07:00 - 15:00)',
     'Evening (15:00 - 23:00)',
     'Night (23:00 - 07:00)',
+    'Morning 12h (07:00 - 19:00)',
+    'Night 12h (19:00 - 07:00)',
+}
+# Older 12h labels from the previous two-shift rollout.
+DAILY_SHIFTS_LEGACY = {
+    'Morning (07:00 - 19:00)',
+    'Night (19:00 - 07:00)',
 }
 LUBE_DAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
 LUBE_WORK_TYPES = {'Oil change', 'Grease change', 'Other'}
@@ -4722,7 +4723,7 @@ def normalize_daily_shift(value: str | None) -> str | None:
         return None
     if text in DAILY_SHIFTS or text in DAILY_SHIFTS_LEGACY:
         return text
-    raise HTTPException(400, 'Choose a morning (07:00-19:00) or night (19:00-07:00) shift')
+    raise HTTPException(400, 'Choose a valid daily maintenance shift')
 
 
 def propose_lubrication_equipment(db, report, technician_id, code, name):
