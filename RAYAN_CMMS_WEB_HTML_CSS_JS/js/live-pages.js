@@ -5368,6 +5368,74 @@ async function uploadSpareStockPdf(file) {
   }
 }
 
+function closeEquipmentImportReport() {
+  document.getElementById('equipment-import-report')?.remove();
+}
+
+function showEquipmentImportReport(result) {
+  const created = Number(result?.created) || 0;
+  const rejected = Array.isArray(result?.rejected) ? result.rejected : [];
+  const rejectedCount = Number(result?.rejected_count) || rejected.length;
+  if (created > 0) {
+    toast(t('Equipment PDF imported: {created} added successfully.').replace('{created}', String(created)));
+  } else if (!rejectedCount) {
+    toast(t('No equipment was added from this file.'));
+  }
+  if (!rejectedCount) return;
+  if (created > 0) {
+    screenNotice(
+      t('{count} row(s) were not added — see details.').replace('{count}', String(rejectedCount)),
+      'error',
+    );
+  } else {
+    screenNotice(t('No equipment was added from this file.'), 'error');
+  }
+  closeEquipmentImportReport();
+  const rows = rejected.slice(0, 200).map((item) => {
+    const code = item.equipment_id || '—';
+    const name = item.name || '—';
+    const place = [item.plant_name, item.line_name].filter(Boolean).join(' / ') || '—';
+    const reason = t(item.reason || 'Could not save this equipment row');
+    return `<tr>
+      <td><b>${esc(code)}</b></td>
+      <td>${esc(name)}</td>
+      <td>${esc(place)}</td>
+      <td>${esc(reason)}</td>
+    </tr>`;
+  }).join('');
+  const overlay = document.createElement('div');
+  overlay.id = 'equipment-import-report';
+  overlay.className = 'equipment-import-report';
+  overlay.innerHTML = `<div class="equipment-import-card" role="dialog" aria-modal="true" aria-labelledby="equipment-import-title">
+    <div class="equipment-import-head">
+      <h2 id="equipment-import-title">${esc(t('Equipment import report'))}</h2>
+      <button type="button" class="equipment-import-close" data-close-import-report aria-label="${esc(t('Close'))}">×</button>
+    </div>
+    <p class="equipment-import-summary">${esc(t('Equipment PDF imported: {created} added successfully.').replace('{created}', String(created)))}
+      · ${esc(t('Not added'))}: <b>${esc(String(rejectedCount))}</b></p>
+    <div class="equipment-import-table-wrap">
+      <table class="equipment-import-table">
+        <thead><tr>
+          <th>${esc(t('Equipment code'))}</th>
+          <th>${esc(t('Equipment Name'))}</th>
+          <th>${esc(t('Location (Plant / Line)'))}</th>
+          <th>${esc(t('Reason'))}</th>
+        </tr></thead>
+        <tbody>${rows}</tbody>
+      </table>
+    </div>
+    <div class="equipment-import-actions">
+      <button type="button" class="detail-button primary" data-close-import-report>${esc(t('Close'))}</button>
+    </div>
+  </div>`;
+  document.body.appendChild(overlay);
+  overlay.addEventListener('click', (event) => {
+    if (event.target === overlay || event.target.closest('[data-close-import-report]')) {
+      closeEquipmentImportReport();
+    }
+  });
+}
+
 async function uploadEquipmentCatalogPdf(file) {
   if (!canMaintain()) return;
   if (!file || !/\.pdf$/i.test(file.name || '')) {
@@ -5397,16 +5465,10 @@ async function uploadEquipmentCatalogPdf(file) {
     store.pending = pending;
     drawEquipment();
     hideSpareImportOverlay();
-    const created = Number(result?.created) || 0;
-    const skipped = Number(result?.skipped) || 0;
-    const errors = Number(result?.error_count) || 0;
-    toast(t('Equipment PDF imported: {created} new, {skipped} already on plant/line skipped, {errors} errors.')
-      .replace('{created}', String(created))
-      .replace('{skipped}', String(skipped))
-      .replace('{errors}', String(errors)));
+    showEquipmentImportReport(result || {});
   } catch (exception) {
     hideSpareImportOverlay();
-    toast(t(exception.message) || t('Could not import the equipment PDF.'));
+    screenNotice(t(exception.message) || t('Could not import the equipment PDF.'), 'error');
   }
 }
 

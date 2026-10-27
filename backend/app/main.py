@@ -998,6 +998,7 @@ async def upload_equipment_catalog_pdf(
             'skipped': result.get('skipped'),
             'updated': result.get('updated'),
             'error_count': result.get('error_count'),
+            'rejected_count': result.get('rejected_count'),
         },
     )
     db.commit()

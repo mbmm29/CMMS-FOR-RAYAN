@@ -223,20 +223,74 @@ def _row_dict(
     }
 
 
-def parse_add_equipment_pdf_text(text: str) -> list[dict]:
-    """Parse Add Equipment.pdf rows (English one-line form, with Arabic two-line fallback)."""
+def _reject_item(
+    *,
+    equipment_id: str = '',
+    name: str = '',
+    plant_name: str = '',
+    line_name: str = '',
+    reason: str,
+    kind: str = 'error',
+    row: int | None = None,
+    raw: str = '',
+) -> dict:
+    return {
+        'equipment_id': _clean(equipment_id),
+        'name': _english_text(name) or _clean(name),
+        'plant_name': _clean(plant_name),
+        'line_name': _clean(line_name),
+        'reason': _clean(reason),
+        'kind': kind,
+        'row': row,
+        'raw': _clean(raw)[:180],
+    }
+
+
+def _guess_code_name(line: str) -> tuple[str, str]:
+    match = re.match(r'^(\d{3,8})\s+(.+?)(?:\s+[A-Za-z]{3,8}\b|$)', _clean(line))
+    if not match:
+        digits = re.match(r'^(\d{3,8})\b', _clean(line))
+        return (digits.group(1) if digits else ''), ''
+    return match.group(1), _clean(match.group(2))
+
+
+def parse_add_equipment_pdf_text(text: str) -> tuple[list[dict], list[dict]]:
+    """Parse Add Equipment.pdf rows. Returns (valid_rows, parse_rejects)."""
     lines = [line.strip() for line in (text or '').splitlines() if line.strip()]
     rows: list[dict] = []
+    rejects: list[dict] = []
     index = 0
     while index < len(lines):
-        en = EN_ROW_RE.match(lines[index])
+        line = lines[index]
+        en = EN_ROW_RE.match(line)
         if en:
             try:
                 year = int(en.group(8))
             except ValueError:
+                code, name = en.group(1), en.group(2)
+                rejects.append(_reject_item(
+                    equipment_id=code,
+                    name=name,
+                    plant_name=en.group(4),
+                    line_name=en.group(5),
+                    reason='Invalid year on this row',
+                    kind='parse',
+                    row=index + 1,
+                    raw=line,
+                ))
                 index += 1
                 continue
             if year < 1990 or year > 2100:
+                rejects.append(_reject_item(
+                    equipment_id=en.group(1),
+                    name=en.group(2),
+                    plant_name=en.group(4),
+                    line_name=en.group(5),
+                    reason=f'Year {year} is out of range',
+                    kind='parse',
+                    row=index + 1,
+                    raw=line,
+                ))
                 index += 1
                 continue
             line_name = _clean(en.group(5))
@@ -259,10 +313,33 @@ def parse_add_equipment_pdf_text(text: str) -> list[dict]:
 
         # Legacy Arabic two-line rows → still stored in English.
         if index >= len(lines) - 1:
+            if re.match(r'^\d{3,8}\b', line) and 'Equipment code' not in line:
+                code, name = _guess_code_name(line)
+                rejects.append(_reject_item(
+                    equipment_id=code,
+                    name=name,
+                    reason='Incomplete row (missing plant, line, or year)',
+                    kind='parse',
+                    row=index + 1,
+                    raw=line,
+                ))
             break
         match1 = LINE1_RE.match(lines[index])
         match2 = LINE2_RE.match(lines[index + 1]) if match1 else None
         if not match1 or not match2:
+            if re.match(r'^\d{3,8}\b', line) and 'Equipment code' not in line and not EN_ROW_RE.match(line):
+                # Likely a broken English row (truncated PDF line).
+                code, name = _guess_code_name(line)
+                if 'Feed Mill' in line or match1:
+                    rejects.append(_reject_item(
+                        equipment_id=code or (match1.group(1) if match1 else ''),
+                        name=name or (match1.group(2) if match1 else ''),
+                        plant_name=match1.group(4) if match1 else '',
+                        reason='Incomplete or unreadable row in the PDF',
+                        kind='parse',
+                        row=index + 1,
+                        raw=line,
+                    ))
             index += 1
             continue
         plant = _clean(
@@ -276,9 +353,29 @@ def parse_add_equipment_pdf_text(text: str) -> list[dict]:
         try:
             year = int(match2.group(5))
         except ValueError:
+            rejects.append(_reject_item(
+                equipment_id=match1.group(1),
+                name=match1.group(2),
+                plant_name=plant,
+                line_name=line_name,
+                reason='Invalid year on this row',
+                kind='parse',
+                row=index + 1,
+                raw=f'{lines[index]} | {lines[index + 1]}',
+            ))
             index += 1
             continue
         if year < 1990 or year > 2100:
+            rejects.append(_reject_item(
+                equipment_id=match1.group(1),
+                name=match1.group(2),
+                plant_name=plant,
+                line_name=line_name,
+                reason=f'Year {year} is out of range',
+                kind='parse',
+                row=index + 1,
+                raw=f'{lines[index]} | {lines[index + 1]}',
+            ))
             index += 1
             continue
         rows.append(_row_dict(
@@ -292,23 +389,23 @@ def parse_add_equipment_pdf_text(text: str) -> list[dict]:
             year=year,
         ))
         index += 2
-    return rows
+    return rows, rejects
 
 
-def parse_add_equipment_pdf(pdf_bytes: bytes) -> list[dict]:
+def parse_add_equipment_pdf(pdf_bytes: bytes) -> tuple[list[dict], list[dict]]:
     text = extract_equipment_pdf_raw_text(pdf_bytes)
     if not looks_like_add_equipment_form(text):
         raise ValueError(
             'This PDF is not the Add Equipment form. '
             'Upload a file with the same layout as Add Equipment.pdf.'
         )
-    rows = parse_add_equipment_pdf_text(text)
+    rows, rejects = parse_add_equipment_pdf_text(text)
     if len(rows) < 5:
         raise ValueError(
             'Could not read equipment rows from this PDF. '
             'Use the same form as Add Equipment.pdf.'
         )
-    return rows
+    return rows, rejects
 
 
 def normalize_section_name(raw: str) -> str:
@@ -407,24 +504,84 @@ def ensure_section(db: Session, line: PlantLine, section_name: str) -> LineSecti
     return section
 
 
-def import_equipment_catalog(db: Session, rows: list[dict] | None = None, update_existing: bool = True) -> dict:
-    """Upsert equipment. Same Equipment code may exist on another plant/line; duplicate on same plant+line is skipped/updated."""
+def import_equipment_catalog(
+    db: Session,
+    rows: list[dict] | None = None,
+    update_existing: bool = True,
+    parse_rejects: list[dict] | None = None,
+) -> dict:
+    """Upsert equipment. Valid rows are saved; failed/skipped rows are listed with reasons."""
     catalog = rows if rows is not None else load_catalog()
     created = updated = skipped = 0
-    errors = []
+    rejected: list[dict] = list(parse_rejects or [])
+    errors: list[dict] = []
     seen: set[tuple[str, str, str]] = set()
+
+    def note_reject(*, equipment_id='', name='', plant_name='', line_name='', reason='', kind='error', row=None):
+        item = _reject_item(
+            equipment_id=equipment_id,
+            name=name,
+            plant_name=plant_name,
+            line_name=line_name,
+            reason=reason,
+            kind=kind,
+            row=row,
+        )
+        rejected.append(item)
+        if kind == 'error':
+            errors.append({
+                'row': row,
+                'equipment_id': item['equipment_id'],
+                'name': item['name'],
+                'error': reason,
+            })
+
     for index, row in enumerate(catalog, 1):
         nested = db.begin_nested()
+        name = _english_text(row.get('name')) or _clean(row.get('name'))
+        plant_label = _clean(row.get('plant_name'))
+        line_label = _clean(row.get('line_name'))
         try:
             equipment_id = normalize_equipment_code(row.get('equipment_id') or row.get('source_code'))
             if not equipment_id:
-                raise ValueError('Missing equipment_id')
-            plant = ensure_plant(db, row.get('plant_name') or '')
-            line = ensure_line(db, plant, row.get('line_name') or '')
+                nested.rollback()
+                note_reject(
+                    name=name,
+                    plant_name=plant_label,
+                    line_name=line_label,
+                    reason='Missing equipment code',
+                    kind='error',
+                    row=index,
+                )
+                continue
+            plant = ensure_plant(db, plant_label or '')
+            try:
+                line = ensure_line(db, plant, line_label or '')
+            except ValueError as exc:
+                nested.rollback()
+                note_reject(
+                    equipment_id=equipment_id,
+                    name=name,
+                    plant_name=plant_label or plant.name,
+                    line_name=line_label,
+                    reason=str(exc) or 'Unrecognized line',
+                    kind='error',
+                    row=index,
+                )
+                continue
             scope_key = (plant.plant_id, line.line_id, equipment_id)
             if scope_key in seen:
                 nested.rollback()
                 skipped += 1
+                note_reject(
+                    equipment_id=equipment_id,
+                    name=name,
+                    plant_name=plant.name,
+                    line_name=line.name,
+                    reason='Duplicate row in the same file (same code on this plant and line)',
+                    kind='duplicate',
+                    row=index,
+                )
                 continue
             section = ensure_section(db, line, row.get('section_name') or '')
             year = row.get('year')
@@ -433,7 +590,7 @@ def import_equipment_catalog(db: Session, rows: list[dict] | None = None, update
             if status not in {'Running', 'Operational', 'Under Maintenance', 'Out of Service'}:
                 status = 'Running'
             payload = {
-                'name': (_english_text(row.get('name'))[:150] or equipment_id),
+                'name': (name[:150] or equipment_id),
                 'equipment_type': (_english_text(row.get('category'))[:100] or 'Equipment'),
                 'plant_id': plant.plant_id,
                 'line_id': line.line_id,
@@ -447,7 +604,6 @@ def import_equipment_catalog(db: Session, rows: list[dict] | None = None, update
                 'status': status,
                 'condition': _clean(row.get('condition'))[:50] or 'Good',
             }
-            # Unique within plant + line only (same code allowed on another line/plant).
             current = db.query(Equipment).filter_by(
                 equipment_id=equipment_id,
                 plant_id=plant.plant_id,
@@ -458,6 +614,15 @@ def import_equipment_catalog(db: Session, rows: list[dict] | None = None, update
                 if not update_existing:
                     nested.commit()
                     skipped += 1
+                    note_reject(
+                        equipment_id=equipment_id,
+                        name=name or current.name,
+                        plant_name=plant.name,
+                        line_name=line.name,
+                        reason='Already exists on this plant and line — not inserted again',
+                        kind='duplicate',
+                        row=index,
+                    )
                     continue
                 for key, value in payload.items():
                     setattr(current, key, value)
@@ -472,18 +637,38 @@ def import_equipment_catalog(db: Session, rows: list[dict] | None = None, update
         except IntegrityError:
             nested.rollback()
             skipped += 1
+            note_reject(
+                equipment_id=normalize_equipment_code(row.get('equipment_id') or row.get('source_code')),
+                name=name,
+                plant_name=plant_label,
+                line_name=line_label,
+                reason='Already exists on this plant and line — not inserted again',
+                kind='duplicate',
+                row=index,
+            )
         except Exception as exc:
             nested.rollback()
-            errors.append({'row': index, 'equipment_id': row.get('equipment_id'), 'error': str(exc)})
+            note_reject(
+                equipment_id=normalize_equipment_code(row.get('equipment_id') or row.get('source_code')),
+                name=name,
+                plant_name=plant_label,
+                line_name=line_label,
+                reason=str(exc).strip() or 'Could not save this equipment row',
+                kind='error',
+                row=index,
+            )
     db.commit()
+    hard_errors = [item for item in rejected if item.get('kind') in {'error', 'parse'}]
     return {
-        'ok': not errors,
+        'ok': not hard_errors,
         'total': len(catalog),
         'created': created,
         'updated': updated,
         'skipped': skipped,
+        'rejected': rejected[:200],
+        'rejected_count': len(rejected),
         'errors': errors[:50],
-        'error_count': len(errors),
+        'error_count': len(hard_errors),
     }
 
 
@@ -493,10 +678,16 @@ def import_equipment_pdf_bytes(
     filename: str | None = None,
     update_existing: bool = False,
 ) -> dict:
-    """Import Add Equipment.pdf: add new machines; skip when same code already exists on that plant+line."""
-    rows = parse_add_equipment_pdf(pdf_bytes)
-    result = import_equipment_catalog(db, rows=rows, update_existing=update_existing)
+    """Import Add Equipment.pdf: add valid rows; report code/name/reason for rows not inserted."""
+    rows, parse_rejects = parse_add_equipment_pdf(pdf_bytes)
+    result = import_equipment_catalog(
+        db,
+        rows=rows,
+        update_existing=update_existing,
+        parse_rejects=parse_rejects,
+    )
     result['filename'] = _clean(filename) or SOURCE_PDF_NOTE
     result['source'] = SOURCE_PDF_NOTE
     result['rows'] = len(rows)
+    result['parse_rejects'] = len(parse_rejects)
     return result
