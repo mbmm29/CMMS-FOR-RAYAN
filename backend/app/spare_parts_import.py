@@ -108,34 +108,54 @@ def _equipment_by_category(db: Session) -> dict[str, set[str]]:
     return by_category
 
 
-def link_spare_parts_by_category(db: Session, commit: bool = True) -> dict:
+def link_spare_parts_by_category(
+    db: Session,
+    commit: bool = True,
+    part_ids: list[str] | None = None,
+) -> dict:
     """Link spare parts whose name/number contains an equipment Category code.
 
     Example: part name \"Side Seal DFML-80146-810\" → all equipment with Category DFML.
+    When part_ids is set, only those parts are scanned (needed for large PDF imports).
     """
     by_category = _equipment_by_category(db)
+    empty = {
+        'categories': 0,
+        'matched_parts': 0,
+        'links_added': 0,
+        'equipment_linked': 0,
+    }
     if not by_category:
-        return {
-            'categories': 0,
-            'matched_parts': 0,
-            'links_added': 0,
-            'equipment_linked': 0,
-        }
+        return empty
 
     categories = sorted(by_category.keys(), key=len, reverse=True)
+    if not categories:
+        return empty
     pattern = re.compile(
         r'(?<![A-Za-z0-9])(' + '|'.join(re.escape(cat) for cat in categories) + r')(?![A-Za-z0-9])',
         re.IGNORECASE,
     )
+
+    query = db.query(SparePart)
+    if part_ids is not None:
+        ids = [pid for pid in part_ids if pid]
+        if not ids:
+            return {**empty, 'categories': len(by_category)}
+        query = query.filter(SparePart.part_id.in_(ids))
+    parts = query.all()
+    if not parts:
+        return {**empty, 'categories': len(by_category)}
+
+    part_id_set = {part.part_id for part in parts}
     existing_links = {
         (row.part_id, row.equipment_id)
-        for row in db.query(SparePartEquipment).all()
+        for row in db.query(SparePartEquipment).filter(SparePartEquipment.part_id.in_(part_id_set)).all()
     }
     matched_parts = 0
     links_added = 0
     equipment_hit: set[str] = set()
 
-    for part in db.query(SparePart).all():
+    for part in parts:
         text = f'{part.part_number or ""} {part.name or ""}'
         found = {match.group(1).upper() for match in pattern.finditer(text)}
         if not found:
@@ -461,8 +481,23 @@ def import_spare_rows(
         touched.append(part)
 
     db.flush()
-    links = link_spare_parts_by_category(db, commit=False)
+    touched_ids = [part.part_id for part in touched if part.part_id]
+    # Commit stock first so a Category-link failure cannot roll back the import.
     db.commit()
+    links = {
+        'categories': 0,
+        'matched_parts': 0,
+        'links_added': 0,
+        'equipment_linked': 0,
+    }
+    try:
+        links = link_spare_parts_by_category(db, commit=True, part_ids=touched_ids)
+    except Exception:
+        try:
+            db.rollback()
+        except Exception:
+            pass
+        links = {**links, 'skipped_error': True}
     return {
         'source': source or SOURCE_NOTE,
         'rows': len(rows),
@@ -472,7 +507,7 @@ def import_spare_rows(
         'skipped_existing': skipped_existing,
         'dedupe': dedupe,
         'category_links': links,
-        'touched_ids': [part.part_id for part in touched if part.part_id],
+        'touched_ids': touched_ids,
     }
 
 

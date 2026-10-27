@@ -1168,6 +1168,9 @@ def watch_critical_stock(db, parts):
         if part is None or not part.part_id or part.part_id in seen:
             continue
         seen.add(part.part_id)
+        # Parts without a critical level are ignored (bulk PDF import must stay fast).
+        if part.critical_qty is None:
+            continue
         if not _stock_is_critical(part):
             db.query(PushDelivery).filter_by(kind='critical_stock', ref=part.part_id).delete(synchronize_session=False)
             continue
@@ -1403,17 +1406,37 @@ async def upload_spare_stock_pdf(
         result = import_mekanik_pdf_bytes(db, raw, filename=filename)
     except ValueError as exc:
         raise HTTPException(400, str(exc)) from exc
-    touched_ids = result.pop('touched_ids', [])
-    if touched_ids:
-        touched = db.query(SparePart).filter(SparePart.part_id.in_(touched_ids)).all()
-        watch_critical_stock(db, touched)
-    audit(db, u, 'UPLOAD', 'SparePart', filename or 'stock.pdf', new={
-        'rows': result.get('rows'),
-        'created': result.get('created'),
-        'updated': result.get('updated'),
-        'category_links': result.get('category_links'),
-    })
-    db.commit()
+    except Exception as exc:
+        try:
+            db.rollback()
+        except Exception:
+            pass
+        detail = str(exc).strip() or 'Could not import the stock PDF.'
+        raise HTTPException(500, detail[:300]) from exc
+    touched_ids = result.pop('touched_ids', []) or []
+    try:
+        if touched_ids:
+            # Only parts that already have a critical level — avoids thousands of deletes after import.
+            touched = (
+                db.query(SparePart)
+                .filter(SparePart.part_id.in_(touched_ids), SparePart.critical_qty.isnot(None))
+                .all()
+            )
+            if touched:
+                watch_critical_stock(db, touched)
+        audit(db, u, 'UPLOAD', 'SparePart', filename or 'stock.pdf', new={
+            'rows': result.get('rows'),
+            'created': result.get('created'),
+            'updated': result.get('updated'),
+            'category_links': result.get('category_links'),
+        })
+        db.commit()
+    except Exception:
+        try:
+            db.rollback()
+        except Exception:
+            pass
+        # Stock rows were already committed inside the importer; return success counts.
     return result
 
 
