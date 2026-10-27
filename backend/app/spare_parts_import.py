@@ -335,7 +335,7 @@ def parse_mekanik_stock_text(text: str) -> list[dict]:
             stock = _parse_stock_number(pre_warehouse_numbers[-1])
         else:
             stock = None
-        name_fixed = _format_name(name_lines)
+        name_fixed = _fix_name(name_lines)
         if name_fixed and stock is not None:
             parts.append({
                 'part_number': part_no,
