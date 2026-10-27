@@ -1,8 +1,11 @@
-"""Import equipment rows from the Add Equipment catalog JSON."""
+"""Import equipment rows from the Add Equipment catalog JSON / PDF form."""
 from __future__ import annotations
 
 import json
 import re
+import shutil
+import subprocess
+import tempfile
 from datetime import date
 from pathlib import Path
 
@@ -12,6 +15,31 @@ from .models import Equipment, LineSection, Plant, PlantLine
 from .equipment_code_normalize import normalize_equipment_code
 
 CATALOG_PATH = Path(__file__).resolve().parent / 'data' / 'add_equipment_catalog.json'
+SOURCE_PDF_NOTE = 'Add Equipment.pdf'
+ARABIC_RE = re.compile(
+    r'[\u0600-\u06FF\u0750-\u077F\u08A0-\u08FF\uFB50-\uFDFF\uFE70-\uFEFF]+'
+)
+FORM_MARKERS = (
+    'Equipment code',
+    'Category',
+    'Plant',
+    'الاعلاف',
+    'فالعالا',  # reversed الاعلاف from pdftotext -raw
+)
+LINE1_RE = re.compile(r'^(\d{3,8})\s+(.+?)\s+([A-Za-z]{3,8})\s+(\S+)$')
+LINE2_RE = re.compile(
+    r'^(\S+)\s+(Intake\s*\d+|Line\s*\d+|Line\d+|Line)(?:\s+(OTL))?\s+(.+)\s+(\d{4})$',
+    re.IGNORECASE,
+)
+KNOWN_SECTIONS = {
+    'ppr': 'PPR',
+    'mix': 'Mix',
+    'bag': 'Bagging',
+    'baging': 'Bagging',
+    'bagging': 'Bagging',
+    'outload': 'Outload',
+    'otl': 'OTL',
+}
 
 PLANT_MATCHERS = (
     ('الاعلاف الاولى', ('الاعلاف الاولى', 'الاعلاف الأولى', 'اعلاف اولى', 'اعلاف أولى', 'first feed')),
@@ -56,6 +84,128 @@ def parse_line(raw: str) -> tuple[int, str]:
     if text.casefold() == 'line':
         return 99, 'Line'
     raise ValueError(f'Unrecognized line: {raw!r}')
+
+
+def _reverse_chars(text: str) -> str:
+    return text[::-1]
+
+
+def _repair_plant_fragment(text: str) -> str:
+    """Undo RTL visual order for Arabic plant name fragments from pdftotext -raw."""
+    return ARABIC_RE.sub(lambda match: _reverse_chars(match.group(0)), text or '')
+
+
+def _split_section_area(rest: str) -> tuple[str, str]:
+    text = _clean(rest)
+    if not text:
+        return '', ''
+    tokens = text.split()
+    if not tokens:
+        return '', ''
+    first_key = tokens[0].casefold()
+    if first_key in KNOWN_SECTIONS:
+        section = KNOWN_SECTIONS[first_key]
+        area = _clean(' '.join(tokens[1:]))
+        return section, area
+    return '', text
+
+
+def extract_equipment_pdf_raw_text(pdf_bytes: bytes) -> str:
+    if not pdf_bytes:
+        raise ValueError('Empty PDF file')
+    pdftotext = shutil.which('pdftotext')
+    if not pdftotext:
+        raise ValueError('PDF reader is not installed on the server (pdftotext).')
+    with tempfile.TemporaryDirectory(prefix='add-equipment-') as tmp:
+        pdf_path = Path(tmp) / 'equipment.pdf'
+        txt_path = Path(tmp) / 'equipment.txt'
+        pdf_path.write_bytes(pdf_bytes)
+        result = subprocess.run(
+            [pdftotext, '-raw', '-enc', 'UTF-8', str(pdf_path), str(txt_path)],
+            capture_output=True,
+            text=True,
+            encoding='utf-8',
+            errors='replace',
+        )
+        if result.returncode != 0:
+            detail = (result.stderr or result.stdout or '').strip() or 'pdftotext failed'
+            raise ValueError(detail)
+        return txt_path.read_text(encoding='utf-8', errors='replace')
+
+
+def looks_like_add_equipment_form(text: str) -> bool:
+    sample = text[:5000]
+    if 'Equipment code' in sample and 'Category' in sample:
+        return True
+    return any(marker in sample for marker in FORM_MARKERS) and len(re.findall(r'(?m)^\d{3,8}\s+', text)) >= 10
+
+
+def parse_add_equipment_pdf_text(text: str) -> list[dict]:
+    """Parse Add Equipment.pdf rows (same columns as the Excel/PDF catalog form)."""
+    lines = [line.strip() for line in (text or '').splitlines() if line.strip()]
+    rows: list[dict] = []
+    index = 0
+    while index < len(lines) - 1:
+        first = lines[index]
+        second = lines[index + 1]
+        match1 = LINE1_RE.match(first)
+        match2 = LINE2_RE.match(second) if match1 else None
+        if not match1 or not match2:
+            index += 1
+            continue
+        code = match1.group(1)
+        name = _clean(match1.group(2))
+        category = _clean(match1.group(3)).upper()
+        plant = _clean(
+            f'{_repair_plant_fragment(match1.group(4))} {_repair_plant_fragment(match2.group(1))}'
+        )
+        line_name = _clean(match2.group(2))
+        if match2.group(3):
+            # "Line OTL" → line Line, section OTL
+            section_name = 'OTL'
+            area = _clean(match2.group(4))
+        else:
+            section_name, area = _split_section_area(match2.group(4))
+        try:
+            year = int(match2.group(5))
+        except ValueError:
+            index += 1
+            continue
+        if year < 1990 or year > 2100:
+            index += 1
+            continue
+        rows.append({
+            'equipment_id': code,
+            'source_code': code,
+            'name': name,
+            'category': category,
+            'plant_name': plant,
+            'line_name': line_name,
+            'section_name': section_name,
+            'area': area,
+            'year': year,
+            'serial_number': None,
+            'status': 'Running',
+            'condition': 'Good',
+        })
+        index += 2
+    return rows
+
+
+def parse_add_equipment_pdf(pdf_bytes: bytes) -> list[dict]:
+    text = extract_equipment_pdf_raw_text(pdf_bytes)
+    if not looks_like_add_equipment_form(text):
+        raise ValueError(
+            'This PDF is not the Add Equipment form. '
+            'Upload a file with the same layout as Add Equipment.pdf.'
+        )
+    rows = parse_add_equipment_pdf_text(text)
+    if len(rows) < 5:
+        raise ValueError(
+            'Could not read equipment rows from this PDF. '
+            'Use the same form as Add Equipment.pdf.'
+        )
+    return rows
 
 
 def normalize_section_name(raw: str) -> str:
@@ -148,6 +298,7 @@ def ensure_section(db: Session, line: PlantLine, section_name: str) -> LineSecti
 
 
 def import_equipment_catalog(db: Session, rows: list[dict] | None = None, update_existing: bool = True) -> dict:
+    """Upsert equipment. Same Equipment code may exist on another plant/line; duplicate on same plant+line is skipped/updated."""
     catalog = rows if rows is not None else load_catalog()
     created = updated = skipped = 0
     errors = []
@@ -179,6 +330,7 @@ def import_equipment_catalog(db: Session, rows: list[dict] | None = None, update
                 'status': status,
                 'condition': _clean(row.get('condition'))[:50] or 'Good',
             }
+            # Unique within plant + line only (same code allowed on another line/plant).
             current = db.query(Equipment).filter_by(
                 equipment_id=equipment_id,
                 plant_id=plant.plant_id,
@@ -206,3 +358,18 @@ def import_equipment_catalog(db: Session, rows: list[dict] | None = None, update
         'errors': errors[:50],
         'error_count': len(errors),
     }
+
+
+def import_equipment_pdf_bytes(
+    db: Session,
+    pdf_bytes: bytes,
+    filename: str | None = None,
+    update_existing: bool = False,
+) -> dict:
+    """Import Add Equipment.pdf: add new machines; skip when same code already exists on that plant+line."""
+    rows = parse_add_equipment_pdf(pdf_bytes)
+    result = import_equipment_catalog(db, rows=rows, update_existing=update_existing)
+    result['filename'] = _clean(filename) or SOURCE_PDF_NOTE
+    result['source'] = SOURCE_PDF_NOTE
+    result['rows'] = len(rows)
+    return result

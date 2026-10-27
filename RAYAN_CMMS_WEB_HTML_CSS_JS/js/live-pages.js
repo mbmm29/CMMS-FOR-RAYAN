@@ -473,7 +473,7 @@ function setHeader(page) {
     draft.textContent = t('Save draft');
   }
   if (importFile) {
-    importFile.hidden = !(page === 'spare-parts' && canMaintain());
+    importFile.hidden = !((page === 'spare-parts' || page === 'equipment') && canMaintain());
     importFile.textContent = t('Import file');
   }
   if (page === 'daily-reports' && isTechnician()) {
@@ -5298,9 +5298,14 @@ function setSpareImportProgress(percent, phase) {
   if (fill) fill.style.width = `${pct}%`;
   if (value) value.textContent = `${pct}%`;
   if (label) {
-    if (phase === 'done') label.textContent = t('Updating spare parts list…');
-    else if (phase === 'processing') label.textContent = t('Reading the file and updating stock…');
-    else label.textContent = t('Reading the file…');
+    const equipmentMode = ui.page === 'equipment';
+    if (phase === 'done') {
+      label.textContent = t(equipmentMode ? 'Updating equipment list…' : 'Updating spare parts list…');
+    } else if (phase === 'processing') {
+      label.textContent = t(equipmentMode ? 'Reading the file and adding equipment…' : 'Reading the file and updating stock…');
+    } else {
+      label.textContent = t('Reading the file…');
+    }
   }
 }
 
@@ -5360,6 +5365,48 @@ async function uploadSpareStockPdf(file) {
   } catch (exception) {
     hideSpareImportOverlay();
     toast(t(exception.message) || t('Could not import the stock PDF.'));
+  }
+}
+
+async function uploadEquipmentCatalogPdf(file) {
+  if (!canMaintain()) return;
+  if (!file || !/\.pdf$/i.test(file.name || '')) {
+    toast(t('Upload a PDF file in the same form as Add Equipment.pdf.'));
+    return;
+  }
+  const body = new FormData();
+  body.append('file', file, file.name);
+  showSpareImportOverlay();
+  try {
+    const upload = typeof apiUploadWithProgress === 'function'
+      ? apiUploadWithProgress('/equipment/upload-catalog-pdf', body, setSpareImportProgress)
+      : apiRequest('/equipment/upload-catalog-pdf', { method: 'POST', body });
+    const result = await upload;
+    setSpareImportProgress(100, 'done');
+    const [equipment, plants, lines, sections, pending] = await Promise.all([
+      apiRequest('/equipment'),
+      apiRequest('/plants'),
+      apiRequest('/lines'),
+      apiRequest('/sections'),
+      canMaintain() ? apiRequest('/pending-equipment') : Promise.resolve(store.pending || []),
+    ]);
+    store.equipment = equipment;
+    store.plants = plants;
+    store.lines = lines;
+    store.sections = sections;
+    store.pending = pending;
+    drawEquipment();
+    hideSpareImportOverlay();
+    const created = Number(result?.created) || 0;
+    const skipped = Number(result?.skipped) || 0;
+    const errors = Number(result?.error_count) || 0;
+    toast(t('Equipment PDF imported: {created} new, {skipped} already on plant/line skipped, {errors} errors.')
+      .replace('{created}', String(created))
+      .replace('{skipped}', String(skipped))
+      .replace('{errors}', String(errors)));
+  } catch (exception) {
+    hideSpareImportOverlay();
+    toast(t(exception.message) || t('Could not import the equipment PDF.'));
   }
 }
 
@@ -5604,9 +5651,10 @@ document.getElementById('draft-action')?.addEventListener('click', (event) => {
 });
 
 document.getElementById('import-file-action')?.addEventListener('click', (event) => {
-  if (ui.page !== 'spare-parts' || !canMaintain()) return;
+  if (!canMaintain()) return;
   event.preventDefault();
-  document.getElementById('spare-upload-file')?.click();
+  if (ui.page === 'spare-parts') document.getElementById('spare-upload-file')?.click();
+  else if (ui.page === 'equipment') document.getElementById('equipment-upload-file')?.click();
 });
 
 document.getElementById('spare-upload-file')?.addEventListener('change', async (event) => {
@@ -5615,6 +5663,14 @@ document.getElementById('spare-upload-file')?.addEventListener('change', async (
   const file = input.files?.[0];
   input.value = '';
   if (file) await uploadSpareStockPdf(file);
+});
+
+document.getElementById('equipment-upload-file')?.addEventListener('change', async (event) => {
+  if (ui.page !== 'equipment' || !canMaintain()) return;
+  const input = event.currentTarget;
+  const file = input.files?.[0];
+  input.value = '';
+  if (file) await uploadEquipmentCatalogPdf(file);
 });
 
 render = function liveRender(page) {
