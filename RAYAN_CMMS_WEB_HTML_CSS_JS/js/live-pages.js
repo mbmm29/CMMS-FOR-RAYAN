@@ -5272,6 +5272,51 @@ function paintSparePartsList(parts) {
   bindDeletes();
 }
 
+function setSpareImportProgress(percent, phase) {
+  const overlay = document.getElementById('spare-import-overlay');
+  if (!overlay) return;
+  const pct = Math.max(0, Math.min(100, Math.round(Number(percent) || 0)));
+  const fill = overlay.querySelector('.spare-import-fill');
+  const value = overlay.querySelector('.spare-import-pct');
+  const label = overlay.querySelector('.spare-import-label');
+  if (fill) fill.style.width = `${pct}%`;
+  if (value) value.textContent = `${pct}%`;
+  if (label) {
+    if (phase === 'done') label.textContent = t('Updating spare parts list…');
+    else if (phase === 'processing') label.textContent = t('Reading the file and updating stock…');
+    else label.textContent = t('Reading the file…');
+  }
+}
+
+function showSpareImportOverlay() {
+  let overlay = document.getElementById('spare-import-overlay');
+  if (!overlay) {
+    overlay = document.createElement('div');
+    overlay.id = 'spare-import-overlay';
+    overlay.className = 'spare-import-overlay';
+    overlay.setAttribute('role', 'status');
+    overlay.setAttribute('aria-live', 'polite');
+    overlay.innerHTML = `<div class="spare-import-card">
+      <div class="spare-import-spinner" aria-hidden="true"></div>
+      <p class="spare-import-label">${esc(t('Reading the file…'))}</p>
+      <div class="spare-import-bar"><span class="spare-import-fill"></span></div>
+      <b class="spare-import-pct">0%</b>
+    </div>`;
+    document.body.appendChild(overlay);
+  }
+  overlay.hidden = false;
+  setSpareImportProgress(0, 'upload');
+  const importBtn = document.getElementById('import-file-action');
+  if (importBtn) importBtn.disabled = true;
+}
+
+function hideSpareImportOverlay() {
+  const overlay = document.getElementById('spare-import-overlay');
+  if (overlay) overlay.hidden = true;
+  const importBtn = document.getElementById('import-file-action');
+  if (importBtn) importBtn.disabled = false;
+}
+
 async function uploadSpareStockPdf(file) {
   if (!canMaintain()) return;
   if (!file || !/\.pdf$/i.test(file.name || '')) {
@@ -5280,9 +5325,15 @@ async function uploadSpareStockPdf(file) {
   }
   const body = new FormData();
   body.append('file', file, file.name);
+  showSpareImportOverlay();
   try {
-    toast(t('Reading stock PDF…'));
-    const result = await apiRequest('/spare-parts/upload-stock-pdf', { method: 'POST', body });
+    const upload = typeof apiUploadWithProgress === 'function'
+      ? apiUploadWithProgress('/spare-parts/upload-stock-pdf', body, setSpareImportProgress)
+      : apiRequest('/spare-parts/upload-stock-pdf', { method: 'POST', body });
+    const result = await upload;
+    setSpareImportProgress(100, 'done');
+    await drawSpareParts();
+    hideSpareImportOverlay();
     const created = Number(result?.created) || 0;
     const updated = Number(result?.updated) || 0;
     const linked = Number(result?.category_links?.links_added) || 0;
@@ -5290,8 +5341,8 @@ async function uploadSpareStockPdf(file) {
       .replace('{created}', String(created))
       .replace('{updated}', String(updated))
       .replace('{linked}', String(linked)));
-    await drawSpareParts();
   } catch (exception) {
+    hideSpareImportOverlay();
     toast(t(exception.message) || t('Could not import the stock PDF.'));
   }
 }

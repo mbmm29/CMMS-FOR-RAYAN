@@ -89,6 +89,81 @@ async function apiRequest(endpoint, options = {}) {
     return data;
 }
 
+/**
+ * POST multipart upload with upload + processing progress callbacks.
+ * onProgress(percent 0–100, phase: 'upload' | 'processing' | 'done')
+ */
+function apiUploadWithProgress(endpoint, formData, onProgress) {
+    return new Promise((resolve, reject) => {
+        const token = localStorage.getItem('access_token');
+        const xhr = new XMLHttpRequest();
+        let processingTimer = null;
+        let processingPct = 72;
+
+        const stopProcessingPulse = () => {
+            if (processingTimer) {
+                clearInterval(processingTimer);
+                processingTimer = null;
+            }
+        };
+
+        const startProcessingPulse = () => {
+            stopProcessingPulse();
+            processingPct = Math.max(processingPct, 72);
+            if (typeof onProgress === 'function') onProgress(processingPct, 'processing');
+            processingTimer = setInterval(() => {
+                if (processingPct < 92) {
+                    processingPct += 1;
+                    if (typeof onProgress === 'function') onProgress(processingPct, 'processing');
+                }
+            }, 450);
+        };
+
+        xhr.open('POST', `${API_BASE_URL}${endpoint}`);
+        if (token) xhr.setRequestHeader('Authorization', `Bearer ${token}`);
+
+        xhr.upload.onprogress = (event) => {
+            if (!event.lengthComputable) {
+                if (typeof onProgress === 'function') onProgress(15, 'upload');
+                return;
+            }
+            const ratio = event.total ? event.loaded / event.total : 0;
+            const pct = Math.min(70, Math.round(ratio * 70));
+            if (typeof onProgress === 'function') onProgress(pct, 'upload');
+        };
+
+        xhr.upload.onload = () => {
+            startProcessingPulse();
+        };
+
+        xhr.onerror = () => {
+            stopProcessingPulse();
+            reject(new Error(
+                'Cannot connect to the CMMS server. Open the system from http://localhost:8000 and try again.'
+            ));
+        };
+
+        xhr.onload = () => {
+            stopProcessingPulse();
+            let data = null;
+            try {
+                data = xhr.responseText ? JSON.parse(xhr.responseText) : null;
+            } catch (_) {
+                data = null;
+            }
+            if (xhr.status >= 200 && xhr.status < 300) {
+                if (typeof onProgress === 'function') onProgress(100, 'done');
+                resolve(data);
+                return;
+            }
+            reject(new Error(formatApiDetail(data?.detail, xhr.status)));
+        };
+
+        if (typeof onProgress === 'function') onProgress(2, 'upload');
+        xhr.send(formData);
+    });
+}
+
 
 async function login(username, password) {
 
