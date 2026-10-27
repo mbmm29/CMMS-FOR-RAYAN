@@ -23,9 +23,17 @@ FORM_MARKERS = (
     'Equipment code',
     'Category',
     'Plant',
+    'Feed Mill',
     'الاعلاف',
     'فالعالا',  # reversed الاعلاف from pdftotext -raw
 )
+# English one-line form (preferred): code name category Feed Mill N line … year
+EN_ROW_RE = re.compile(
+    r'^(\d{3,8})\s+(.+?)\s+([A-Za-z]{3,8})\s+(Feed\s*Mill\s*[12])\s+'
+    r'(Intake\s*\d+|Line\s*\d+|Line\d+|Line)(?:\s+(OTL))?\s+(.+)\s+(\d{4})$',
+    re.IGNORECASE,
+)
+# Legacy Arabic two-line form from older PDFs.
 LINE1_RE = re.compile(r'^(\d{3,8})\s+(.+?)\s+([A-Za-z]{3,8})\s+(\S+)$')
 LINE2_RE = re.compile(
     r'^(\S+)\s+(Intake\s*\d+|Line\s*\d+|Line\d+|Line)(?:\s+(OTL))?\s+(.+)\s+(\d{4})$',
@@ -41,14 +49,39 @@ KNOWN_SECTIONS = {
     'otl': 'OTL',
 }
 
+# Canonical plant names are always English.
 PLANT_MATCHERS = (
-    ('الاعلاف الاولى', ('الاعلاف الاولى', 'الاعلاف الأولى', 'اعلاف اولى', 'اعلاف أولى', 'first feed')),
-    ('الاعلاف الثانيه', ('الاعلاف الثانيه', 'الاعلاف الثانية', 'اعلاف ثانيه', 'اعلاف ثانية', 'second feed')),
+    (
+        'Feed Mill 1',
+        (
+            'feed mill 1',
+            'feedmill 1',
+            'first feed',
+            'الاعلاف الاولى',
+            'الاعلاف الأولى',
+            'اعلاف اولى',
+            'اعلاف أولى',
+            'فالعالا ىلوالا',
+        ),
+    ),
+    (
+        'Feed Mill 2',
+        (
+            'feed mill 2',
+            'feedmill 2',
+            'second feed',
+            'الاعلاف الثانيه',
+            'الاعلاف الثانية',
+            'اعلاف ثانيه',
+            'اعلاف ثانية',
+            'فالعالا هيناثلا',
+        ),
+    ),
 )
 
 PLANT_DEFAULTS = {
-    'الاعلاف الاولى': {'plant_id': 'FM01', 'order_code': 'FM1'},
-    'الاعلاف الثانيه': {'plant_id': 'FM02', 'order_code': 'FM2'},
+    'Feed Mill 1': {'plant_id': 'FM01', 'order_code': 'FM1'},
+    'Feed Mill 2': {'plant_id': 'FM02', 'order_code': 'FM2'},
 }
 
 
@@ -56,10 +89,32 @@ def _clean(value) -> str:
     return re.sub(r'\s+', ' ', str(value or '')).strip()
 
 
+def _english_text(value: str) -> str:
+    """Keep equipment fields in English (drop Arabic glyphs if present)."""
+    text = _clean(value)
+    text = ARABIC_RE.sub(' ', text)
+    return _clean(text)
+
+
 def _fold(value: str) -> str:
     text = _clean(value).casefold()
     text = text.replace('أ', 'ا').replace('إ', 'ا').replace('آ', 'ا').replace('ة', 'ه')
+    text = re.sub(r'\s+', ' ', text)
     return text
+
+
+def normalize_plant_name(plant_name: str) -> str:
+    """Always store plants as Feed Mill 1 / Feed Mill 2 (English)."""
+    key = match_plant_key(plant_name)
+    if key:
+        return key
+    folded = _fold(plant_name)
+    if '2' in folded or 'ثان' in folded or 'second' in folded:
+        return 'Feed Mill 2'
+    if '1' in folded or 'اول' in folded or 'first' in folded:
+        return 'Feed Mill 1'
+    english = _english_text(plant_name)
+    return english or 'Feed Mill 1'
 
 
 def load_catalog(path: Path | None = None) -> list[dict]:
@@ -140,30 +195,81 @@ def looks_like_add_equipment_form(text: str) -> bool:
     return any(marker in sample for marker in FORM_MARKERS) and len(re.findall(r'(?m)^\d{3,8}\s+', text)) >= 10
 
 
+def _row_dict(
+    *,
+    code: str,
+    name: str,
+    category: str,
+    plant: str,
+    line_name: str,
+    section_name: str,
+    area: str,
+    year: int,
+) -> dict:
+    return {
+        'equipment_id': code,
+        'source_code': code,
+        'name': _english_text(name) or code,
+        'category': _english_text(category).upper() or 'Equipment',
+        'plant_name': normalize_plant_name(plant),
+        'line_name': _english_text(line_name),
+        'section_name': _english_text(section_name),
+        'area': _english_text(area),
+        'year': year,
+        'serial_number': None,
+        'status': 'Running',
+        'condition': 'Good',
+    }
+
+
 def parse_add_equipment_pdf_text(text: str) -> list[dict]:
-    """Parse Add Equipment.pdf rows (same columns as the Excel/PDF catalog form)."""
+    """Parse Add Equipment.pdf rows (English one-line form, with Arabic two-line fallback)."""
     lines = [line.strip() for line in (text or '').splitlines() if line.strip()]
     rows: list[dict] = []
     index = 0
-    while index < len(lines) - 1:
-        first = lines[index]
-        second = lines[index + 1]
-        match1 = LINE1_RE.match(first)
-        match2 = LINE2_RE.match(second) if match1 else None
+    while index < len(lines):
+        en = EN_ROW_RE.match(lines[index])
+        if en:
+            try:
+                year = int(en.group(8))
+            except ValueError:
+                index += 1
+                continue
+            if year < 1990 or year > 2100:
+                index += 1
+                continue
+            line_name = _clean(en.group(5))
+            if en.group(6):
+                section_name, area = 'OTL', _clean(en.group(7))
+            else:
+                section_name, area = _split_section_area(en.group(7))
+            rows.append(_row_dict(
+                code=en.group(1),
+                name=en.group(2),
+                category=en.group(3),
+                plant=en.group(4),
+                line_name=line_name,
+                section_name=section_name,
+                area=area,
+                year=year,
+            ))
+            index += 1
+            continue
+
+        # Legacy Arabic two-line rows → still stored in English.
+        if index >= len(lines) - 1:
+            break
+        match1 = LINE1_RE.match(lines[index])
+        match2 = LINE2_RE.match(lines[index + 1]) if match1 else None
         if not match1 or not match2:
             index += 1
             continue
-        code = match1.group(1)
-        name = _clean(match1.group(2))
-        category = _clean(match1.group(3)).upper()
         plant = _clean(
             f'{_repair_plant_fragment(match1.group(4))} {_repair_plant_fragment(match2.group(1))}'
         )
         line_name = _clean(match2.group(2))
         if match2.group(3):
-            # "Line OTL" → line Line, section OTL
-            section_name = 'OTL'
-            area = _clean(match2.group(4))
+            section_name, area = 'OTL', _clean(match2.group(4))
         else:
             section_name, area = _split_section_area(match2.group(4))
         try:
@@ -174,20 +280,16 @@ def parse_add_equipment_pdf_text(text: str) -> list[dict]:
         if year < 1990 or year > 2100:
             index += 1
             continue
-        rows.append({
-            'equipment_id': code,
-            'source_code': code,
-            'name': name,
-            'category': category,
-            'plant_name': plant,
-            'line_name': line_name,
-            'section_name': section_name,
-            'area': area,
-            'year': year,
-            'serial_number': None,
-            'status': 'Running',
-            'condition': 'Good',
-        })
+        rows.append(_row_dict(
+            code=match1.group(1),
+            name=match1.group(2),
+            category=match1.group(3),
+            plant=plant,
+            line_name=line_name,
+            section_name=section_name,
+            area=area,
+            year=year,
+        ))
         index += 2
     return rows
 
@@ -232,15 +334,18 @@ def match_plant_key(plant_name: str) -> str | None:
 
 
 def ensure_plant(db: Session, plant_name: str) -> Plant:
-    key = match_plant_key(plant_name) or _clean(plant_name)
+    """Resolve plant; always persist English canonical name (Feed Mill 1/2)."""
+    key = normalize_plant_name(plant_name)
     defaults = PLANT_DEFAULTS.get(key, {})
-    wanted_names = {key, _clean(plant_name)}
     plants = db.query(Plant).all()
     for plant in plants:
-        if _fold(plant.name) in {_fold(name) for name in wanted_names}:
+        existing_key = match_plant_key(plant.name or '')
+        if existing_key == key or _fold(plant.name or '') == _fold(key):
+            if plant.name != key:
+                plant.name = key
             return plant
         if key in PLANT_DEFAULTS and plant.plant_id == defaults.get('plant_id'):
-            if _fold(plant.name) != _fold(key):
+            if plant.name != key:
                 plant.name = key
             return plant
     plant_id = defaults.get('plant_id') or f'PLANT-{abs(hash(key)) % 10000:04d}'
@@ -316,15 +421,15 @@ def import_equipment_catalog(db: Session, rows: list[dict] | None = None, update
             if status not in {'Running', 'Operational', 'Under Maintenance', 'Out of Service'}:
                 status = 'Running'
             payload = {
-                'name': _clean(row.get('name'))[:150] or equipment_id,
-                'equipment_type': _clean(row.get('category'))[:100] or 'Equipment',
+                'name': (_english_text(row.get('name'))[:150] or equipment_id),
+                'equipment_type': (_english_text(row.get('category'))[:100] or 'Equipment'),
                 'plant_id': plant.plant_id,
                 'line_id': line.line_id,
                 'section_id': section.section_id if section else None,
-                'area': _clean(row.get('area'))[:100] or None,
+                'area': (_english_text(row.get('area'))[:100] or None),
                 'manufacturer': None,
                 'commissioning_date': commissioning,
-                'model': _clean(row.get('category'))[:100] or None,
+                'model': (_english_text(row.get('category'))[:100] or None),
                 'serial_number': _clean(row.get('serial_number'))[:100] or None,
                 'criticality': 'Important',
                 'status': status,
