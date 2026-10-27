@@ -442,7 +442,11 @@ def import_spare_rows(
             name = name[:200]
         try:
             stock = row.get('stock_qty')
-            stock_qty = None if stock is None or stock == '' else round(float(stock), 3)
+            if stock is None or (isinstance(stock, str) and stock.strip() == ''):
+                stock_qty = None
+            else:
+                # 0 is a real warehouse balance (الرصيد النهائي) — never treat as empty.
+                stock_qty = round(float(stock), 3)
         except (TypeError, ValueError):
             skipped += 1
             continue

@@ -109,6 +109,7 @@ const CMMS_AR = {
   'Enter the part name': 'أدخل اسم القطعة',
   'Enter a warehouse balance': 'أدخل رصيد المخزن',
   'Leave empty when this part has no warehouse balance.': 'اتركه فارغاً إذا لم يكن للقطعة رصيد في المخزن.',
+  '0 is a valid stock. Leave empty only when this part has no warehouse balance.': 'الصفر رصيد صحيح. اترك الحقل فارغاً فقط إذا لم يكن للمادة رصيد في المخزن.',
   'A daily report quantity reduces this balance when the part number matches.': 'كمية التقرير اليومي تنقص هذا الرصيد عند تطابق رقم القطعة.',
   'Critical balance': 'الرصيد الحرج',
   'Enter a critical balance': 'أدخل الرصيد الحرج',

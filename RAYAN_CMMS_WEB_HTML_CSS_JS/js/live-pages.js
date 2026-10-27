@@ -4965,21 +4965,27 @@ const ISO_DOCUMENTS = [
 ];
 
 function stockAmount(value) {
+  if (value === null || value === undefined || value === '') return '';
   const amount = Number(value);
   if (!Number.isFinite(amount)) return '';
+  // Keep literal 0 (do not coerce to empty).
   return String(Math.round(amount * 1000) / 1000);
 }
 
+function hasStockBalance(part) {
+  return part != null && part.stock_qty !== null && part.stock_qty !== undefined && part.stock_qty !== '';
+}
+
 function stockClass(part) {
-  if (part?.stock_qty == null) return '';
+  if (!hasStockBalance(part)) return '';
   const stock = Number(part.stock_qty);
   if (stock <= 0) return 'stock-out';
-  if (part.critical_qty != null && stock <= Number(part.critical_qty)) return 'stock-critical';
+  if (part.critical_qty != null && part.critical_qty !== '' && stock <= Number(part.critical_qty)) return 'stock-critical';
   return '';
 }
 
 function isCriticalSpare(part) {
-  if (part?.stock_qty == null || part?.critical_qty == null) return false;
+  if (!hasStockBalance(part) || part?.critical_qty == null || part?.critical_qty === '') return false;
   return Number(part.stock_qty) <= Number(part.critical_qty);
 }
 
@@ -4993,7 +4999,7 @@ async function loadEquipmentParts(selected) {
     const parts = await apiRequest(`/spare-parts?equipment_id=${encodeURIComponent(selected.equipment_id)}`);
     if (token !== equipmentPartsToken || !box.isConnected) return;
     const rows = (parts || []).map((part) => {
-      const stock = part.stock_qty == null ? t('No warehouse balance') : stockAmount(part.stock_qty);
+      const stock = hasStockBalance(part) ? stockAmount(part.stock_qty) : t('No warehouse balance');
       const tone = stockClass(part);
       return `<li><b>${esc(part.part_number)}</b><span>${esc(part.name)}</span><em${tone ? ` class="${tone}"` : ''}>${esc(stock)}</em></li>`;
     }).join('');
@@ -5136,9 +5142,9 @@ function paintSpareEquipment(form) {
 
 function spareForm(part) {
   const ids = part?.equipment?.map((row) => row.equipment_id) || (ui.spareEquipment ? [ui.spareEquipment] : []);
-  const stock = part?.stock_qty == null ? '' : stockAmount(part.stock_qty);
-  const critical = part?.critical_qty == null ? '' : stockAmount(part.critical_qty);
-  return `<aside class="panel detail"><h2>${esc(t(part ? 'Spare parts' : '+ Add part'))}</h2><form id="spare-form" class="live-form spare-form"><label>${esc(t('Part No.'))}<input name="part_number" required maxlength="100" value="${esc(part?.part_number || '')}"></label><label>${esc(t('Part name'))}<input name="name" required maxlength="200" value="${esc(part?.name || '')}"></label><label>${esc(t('Stock'))}<input name="stock_qty" type="number" step="0.001" value="${esc(stock)}"></label><p class="live-note">${esc(t('Leave empty when this part has no warehouse balance.'))}</p><p class="live-note">${esc(t('A daily report quantity reduces this balance when the part number matches.'))}</p><label>${esc(t('Critical balance'))}<input name="critical_qty" type="number" min="0" step="0.001" value="${esc(critical)}"></label><p class="live-note">${esc(t('Leave empty when this part has no critical balance.'))}</p><p class="live-note">${esc(t('The maintenance engineer is notified when the warehouse balance reaches this level.'))}</p><label>${esc(t('Unit'))}<input name="unit" maxlength="30" value="${esc(part?.unit || 'pcs')}"></label><input type="hidden" name="equipment_ids" value="${esc(ids.join(','))}"><div id="spare-equipment-box"></div><button class="detail-button primary" type="submit">${esc(t('Save'))}</button>${part ? `<button type="button" class="detail-button danger" data-delete="/spare-parts" data-delete-id="${esc(part.part_id)}" data-delete-note="Delete this spare part?">${esc(t('Delete'))}</button>` : ''}<p id="spare-error" class="form-error"></p></form></aside>`;
+  const stock = part?.stock_qty == null || part?.stock_qty === '' ? '' : stockAmount(part.stock_qty);
+  const critical = part?.critical_qty == null || part?.critical_qty === '' ? '' : stockAmount(part.critical_qty);
+  return `<aside class="panel detail"><h2>${esc(t(part ? 'Spare parts' : '+ Add part'))}</h2><form id="spare-form" class="live-form spare-form"><label>${esc(t('Part No.'))}<input name="part_number" required maxlength="100" value="${esc(part?.part_number || '')}"></label><label>${esc(t('Part name'))}<input name="name" required maxlength="200" value="${esc(part?.name || '')}"></label><label>${esc(t('Stock'))}<input name="stock_qty" type="number" step="0.001" value="${esc(stock)}"></label><p class="live-note">${esc(t('0 is a valid stock. Leave empty only when this part has no warehouse balance.'))}</p><p class="live-note">${esc(t('A daily report quantity reduces this balance when the part number matches.'))}</p><label>${esc(t('Critical balance'))}<input name="critical_qty" type="number" min="0" step="0.001" value="${esc(critical)}"></label><p class="live-note">${esc(t('Leave empty when this part has no critical balance.'))}</p><p class="live-note">${esc(t('The maintenance engineer is notified when the warehouse balance reaches this level.'))}</p><label>${esc(t('Unit'))}<input name="unit" maxlength="30" value="${esc(part?.unit || 'pcs')}"></label><input type="hidden" name="equipment_ids" value="${esc(ids.join(','))}"><div id="spare-equipment-box"></div><button class="detail-button primary" type="submit">${esc(t('Save'))}</button>${part ? `<button type="button" class="detail-button danger" data-delete="/spare-parts" data-delete-id="${esc(part.part_id)}" data-delete-note="Delete this spare part?">${esc(t('Delete'))}</button>` : ''}<p id="spare-error" class="form-error"></p></form></aside>`;
 }
 
 async function saveSparePart(event, partId) {
@@ -5146,13 +5152,16 @@ async function saveSparePart(event, partId) {
   const form = event.currentTarget;
   const error = document.getElementById('spare-error');
   const data = new FormData(form);
-  const stockText = String(data.get('stock_qty') || '').trim().replace(',', '.');
+  // Read .value so stock 0 is kept (FormData/|| must not treat 0 as empty).
+  const stockRaw = form.elements.namedItem('stock_qty')?.value;
+  const stockText = String(stockRaw ?? '').trim().replace(',', '.');
   const stock = stockText === '' ? null : Number(stockText);
   if (stock !== null && !Number.isFinite(stock)) {
     if (error) error.textContent = t('Enter a warehouse balance');
     return;
   }
-  const criticalText = String(data.get('critical_qty') || '').trim().replace(',', '.');
+  const criticalRaw = form.elements.namedItem('critical_qty')?.value;
+  const criticalText = String(criticalRaw ?? '').trim().replace(',', '.');
   const critical = criticalText === '' ? null : Number(criticalText);
   if (critical !== null && (!Number.isFinite(critical) || critical < 0)) {
     if (error) error.textContent = t('Enter a critical balance');
@@ -5209,8 +5218,8 @@ function paintSparePartsList(parts) {
   const selected = ui.mode === 'create' ? null : (filtered.find((item) => item.part_id === ui.rowKey) || filtered[0] || null);
   if (selected) ui.rowKey = selected.part_id;
   else if (ui.mode !== 'create') ui.rowKey = '';
-  const tracked = matched.filter((item) => item.stock_qty != null).length;
-  const empty = matched.filter((item) => item.stock_qty != null && Number(item.stock_qty) <= 0).length;
+  const tracked = matched.filter((item) => hasStockBalance(item)).length;
+  const empty = matched.filter((item) => hasStockBalance(item) && Number(item.stock_qty) <= 0).length;
   const criticalCount = criticalAll.length;
   document.getElementById('metric-grid').innerHTML = metrics([
     ['Spare parts', String(matched.length), '□', 'blue', ui.spareQuery ? `${parts.length} ${t('total')}` : ''],
@@ -5230,7 +5239,7 @@ function paintSparePartsList(parts) {
     : (ui.spareQuery ? t('No spare parts match this search.') : t('No spare parts yet.'));
   const body = filtered.map((item) => {
     const machines = (item.equipment || []).map((row) => row.equipment_id).join(', ') || '—';
-    const stock = item.stock_qty == null ? t('No warehouse balance') : stockAmount(item.stock_qty);
+    const stock = hasStockBalance(item) ? stockAmount(item.stock_qty) : t('No warehouse balance');
     const tone = stockClass(item) || (isCriticalSpare(item) ? 'stock-critical' : '');
     const stockCell = tone ? `<span class="${tone}">${esc(stock)}</span>` : esc(stock);
     const critical = item.critical_qty == null ? '—' : stockAmount(item.critical_qty);

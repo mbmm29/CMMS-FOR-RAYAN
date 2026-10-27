@@ -1138,9 +1138,16 @@ def _clean_part_text(value, empty_message, limit):
     return text
 
 def _clean_stock(value):
+    """Parse warehouse stock. 0 is a valid balance; only blank/None means no balance."""
     if value is None:
         return None
-    number = float(value)
+    if isinstance(value, str):
+        text = value.strip().replace(',', '')
+        if text == '':
+            return None
+        number = float(text)
+    else:
+        number = float(value)
     if number != number or number in (float('inf'), float('-inf')) or number < -1000000 or number > 1000000:
         raise HTTPException(400, 'Enter a warehouse balance')
     return round(number, 3)
