@@ -20,9 +20,15 @@ ARABIC_RE = re.compile(
 )
 LATIN_TOKEN_RE = re.compile(r'[A-Za-z0-9][A-Za-z0-9./\-_*+%,:]*')
 PART_NO_RE = re.compile(r'^\d{4,8}$')
-UNIT_LINE_RE = re.compile(r'^\d+\s+\S')
-NAME_LINE_RE = re.compile(r'^0\s+')
-STOCK_LINE_RE = re.compile(r'^\d+(\.\d+)?$')
+UNIT_LINE_RE = re.compile(r'^\d+(?:[.,]\d+)?\s+\S')
+# Leading qty on the name line: "0 / name", "1 (كاتم)…", "19.75 (كغم)…"
+NAME_PREFIX_RE = re.compile(r'^(\d+(?:[.,]\d+)?)\s+(.+)$')
+STOCK_LINE_RE = re.compile(r'^\d{1,3}(?:,\d{3})*(?:\.\d+)?$|^\d+(?:\.\d+)?$')
+WAREHOUSE_LINE_RE = re.compile(
+    r'مخزن|استخلاص|ﻥﺰﺨﻣ|ﺹﻼﺨﺘﺳﻻﺍ|الادوات|ﺕﺍﻭﺩﻻﺍ',
+    re.IGNORECASE,
+)
+KG_UNIT_RE = re.compile(r'كغم|ﻛﻐﻢ|ﻢﻐﻛ|مغك|\bkg\b', re.IGNORECASE)
 FORM_MARKERS = (
     'أرصدة المواد',
     'الرصيد النهائي',
@@ -190,44 +196,98 @@ def looks_like_mekanik_stock_form(text: str) -> bool:
     return hits >= 20
 
 
+def _parse_stock_number(value: str) -> float | None:
+    """Parse final stock; accept thousands separators (1,075 → 1075)."""
+    text = _clean(value)
+    if not text or not STOCK_LINE_RE.fullmatch(text):
+        return None
+    try:
+        return float(text.replace(',', ''))
+    except ValueError:
+        return None
+
+
+def _next_nonempty(lines: list[str], start: int) -> int:
+    cursor = start
+    while cursor < len(lines) and not lines[cursor]:
+        cursor += 1
+    return cursor
+
+
+def _is_part_header(lines: list[str], index: int) -> bool:
+    """True when this line is رقم المادة followed by a unit line (قطعة/كغم)."""
+    if index >= len(lines) or not PART_NO_RE.fullmatch(lines[index]):
+        return False
+    nxt = _next_nonempty(lines, index + 1)
+    return nxt < len(lines) and bool(UNIT_LINE_RE.match(lines[nxt]))
+
+
+def _fix_name(name_lines: list[str]) -> str:
+    lines = list(name_lines)
+    if len(lines) > 1 and _parse_stock_number(lines[0]) is not None:
+        # Bare leading qty on its own line (0 / 1 / 5) before the real name.
+        lines = lines[1:]
+    if not lines:
+        return ''
+    first = lines[0]
+    match = NAME_PREFIX_RE.match(first)
+    if match:
+        # "0 / name", "1 (كاتم)…", "19.75 (كغم)…" → keep the name side.
+        lines[0] = match.group(2).strip()
+    name = ' '.join(part for part in lines if part).strip().lstrip('/').strip()
+    name = repair_bidi_name(name)
+    name = re.sub(r'\s+', ' ', name).strip().lstrip('/').strip()
+    name = name.replace('( ', '(').replace(' )', ')')
+    if len(name) > 200:
+        name = name[:200]
+    return name
+
+
 def parse_mekanik_stock_text(text: str) -> list[dict]:
-    """Parse أرصدة المواد rows: Part No. / name / final stock / unit."""
+    """Parse أرصدة المواد rows: Part No. (رقم المادة) / name / final stock / unit.
+
+    Handles newer warehouse PDF layout where:
+    - name may start with 0/1/qty (not only \"0 \")
+    - name may wrap onto extra lines
+    - final stock may use a thousands comma (1,075)
+    """
     lines = [line.strip() for line in (text or '').splitlines()]
     parts: list[dict] = []
     index = 0
     while index < len(lines):
-        line = lines[index]
-        if not PART_NO_RE.fullmatch(line):
+        if not _is_part_header(lines, index):
             index += 1
             continue
-        part_no = line
-        cursor = index + 1
-        while cursor < len(lines) and not lines[cursor]:
-            cursor += 1
-        if cursor >= len(lines) or not UNIT_LINE_RE.match(lines[cursor]):
-            index += 1
-            continue
+        part_no = lines[index]
+        cursor = _next_nonempty(lines, index + 1)
         unit_line = lines[cursor]
-        unit = 'kg' if re.search(r'ﻛﻐﻢ|كغم|KG|kg', unit_line, re.IGNORECASE) else 'pcs'
+        unit = 'kg' if KG_UNIT_RE.search(unit_line) else 'pcs'
         cursor += 1
-        while cursor < len(lines) and not lines[cursor]:
+
+        block: list[str] = []
+        while cursor < len(lines):
+            raw = lines[cursor]
+            if not raw:
+                cursor += 1
+                continue
+            if WAREHOUSE_LINE_RE.search(raw):
+                break
+            # Next material header (رقم المادة + unit) — stop before it.
+            if _is_part_header(lines, cursor) and block:
+                break
+            block.append(raw)
             cursor += 1
-        if cursor >= len(lines) or not NAME_LINE_RE.match(lines[cursor]):
+            if len(block) > 40:
+                break
+
+        if len(block) < 2:
             index += 1
             continue
-        name = NAME_LINE_RE.sub('', lines[cursor], count=1).strip().lstrip('/').strip()
-        cursor += 1
-        while cursor < len(lines) and not lines[cursor]:
-            cursor += 1
-        if cursor >= len(lines) or not STOCK_LINE_RE.fullmatch(lines[cursor]):
+        stock = _parse_stock_number(block[-1])
+        if stock is None:
             index += 1
             continue
-        stock = float(lines[cursor])
-        name_fixed = repair_bidi_name(name)
-        name_fixed = re.sub(r'\s+', ' ', name_fixed).strip().lstrip('/').strip()
-        name_fixed = name_fixed.replace('( ', '(').replace(' )', ')')
-        if len(name_fixed) > 200:
-            name_fixed = name_fixed[:200]
+        name_fixed = _fix_name(block[:-1])
         if name_fixed:
             parts.append({
                 'part_number': part_no,
@@ -235,7 +295,8 @@ def parse_mekanik_stock_text(text: str) -> list[dict]:
                 'stock_qty': stock,
                 'unit': unit,
             })
-        index = cursor + 1
+        # Continue from warehouse / next header (do not rescan inside this item).
+        index = cursor
 
     # Keep last row per part number (latest balance in the report).
     unique: dict[str, dict] = {}
