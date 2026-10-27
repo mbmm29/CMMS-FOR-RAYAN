@@ -81,6 +81,7 @@ const CMMS_AR = {
   'Stock': 'الرصيد',
   'No warehouse balance': 'بدون رصيد',
   'Out of stock': 'نفد الرصيد',
+  'Import file': 'استيراد ملف',
   'Upload stock PDF': 'رفع ملف الرصيد PDF',
   'Upload the mechanical stock PDF (same form as ميكانيك.pdf). Part No., name, and final stock are updated; new parts are added and linked by Category.': 'ارفع ملف أرصدة المواد الميكانيكية بنفس فورم ميكانيك.pdf. يُحدَّث رقم المادة والاسم والرصيد النهائي، وتُضاف المواد الجديدة وتُربط حسب Category.',
   'Upload a PDF file in the same form as ميكانيك.pdf.': 'ارفع ملف PDF بنفس فورم ميكانيك.pdf.',

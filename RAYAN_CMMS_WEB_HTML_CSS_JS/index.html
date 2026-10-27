@@ -16,7 +16,7 @@
   <link rel="stylesheet" href="css/accounts.css?v=3">
   <link rel="stylesheet" href="css/mobile-web-app.css?v=5">
   <link rel="stylesheet" href="css/kpi.css?v=15">
-  <link rel="stylesheet" href="css/theme.css?v=126">
+  <link rel="stylesheet" href="css/theme.css?v=127">
   <style>.logout-button{border:1px solid #ffffff38;background:#ffffff13;color:#fff;border-radius:5px;padding:7px 8px;font:11px Arial,sans-serif;cursor:pointer;white-space:nowrap}.profile .logout-button{margin-left:auto}.logout-button:hover{background:#ffffff25}</style>
 </head>
 <body>
@@ -47,6 +47,8 @@
         <div><h1 id="page-title">KPI Dashboard</h1><p id="page-subtitle">Overview of Maintenance Performance</p></div>
         <div class="header-actions">
           <button class="primary ghost" id="draft-action" type="button" hidden>Save draft</button>
+          <button class="primary ghost" id="import-file-action" type="button" hidden>Import file</button>
+          <input id="spare-upload-file" type="file" accept=".pdf,application/pdf" hidden>
           <button class="primary" id="primary-action">+ New Work Order</button>
         </div>
       </header>
@@ -55,12 +57,12 @@
     </main>
   </div>
   <div class="toast" id="toast" role="status"></div>
-  <script src="js/i18n.js?v=129"></script>
+  <script src="js/i18n.js?v=130"></script>
   <script src="js/pwa.js?v=9"></script>
   <script src="js/api.js?v=9"></script>
   <script src="js/cmms-app.js?v=26"></script>
   <script src="js/motor-condition.js?v=12"></script>
-  <script src="js/live-pages.js?v=174"></script>
+  <script src="js/live-pages.js?v=175"></script>
   <script src="js/technician-ui.js?v=10"></script>
   <script src="js/mobile-shell.js?v=3"></script>
 </body>
