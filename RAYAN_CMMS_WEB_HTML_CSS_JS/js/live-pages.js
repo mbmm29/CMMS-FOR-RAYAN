@@ -5196,11 +5196,18 @@ async function saveSparePart(event, partId) {
 
 let sparePartsCache = [];
 
+function spareSearchKey(value) {
+  // Ignore spaces between letters/words so "pipe265" matches "Protection Pipe 265".
+  return String(value || '')
+    .toLocaleLowerCase('ar')
+    .replace(/[\s\u00A0\u200B-\u200D\uFEFF]+/g, '');
+}
+
 function sparePartMatches(part, query) {
-  const needle = String(query || '').trim().toLocaleLowerCase('ar');
+  const needle = spareSearchKey(query);
   if (!needle) return true;
-  const number = String(part?.part_number || '').toLocaleLowerCase('ar');
-  const name = String(part?.name || '').toLocaleLowerCase('ar');
+  const number = spareSearchKey(part?.part_number);
+  const name = spareSearchKey(part?.name);
   return number.includes(needle) || name.includes(needle);
 }
 
