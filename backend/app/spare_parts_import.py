@@ -243,13 +243,20 @@ def _fix_name(name_lines: list[str]) -> str:
     return name
 
 
-def parse_mekanik_stock_text(text: str) -> list[dict]:
-    """Parse أرصدة المواد rows: Part No. (رقم المادة) / name / final stock / unit.
+def _is_location_code(value: str) -> bool:
+    """Shelf / column codes such as R174, C12, A1, H28, S1."""
+    text = _clean(value)
+    if not text or _parse_stock_number(text) is not None:
+        return False
+    return bool(re.fullmatch(r'[A-Za-z][A-Za-z0-9\-]{0,11}', text))
 
-    Handles newer warehouse PDF layout where:
-    - name may start with 0/1/qty (not only \"0 \")
-    - name may wrap onto extra lines
-    - final stock may use a thousands comma (1,075)
+
+def parse_mekanik_stock_text(text: str) -> list[dict]:
+    """Parse أرصدة المواد: رقم المادة / name / الرصيد النهائي / unit.
+
+    Text order from pdftotext -raw:
+      part no → unit → name → [optional nums] → مخزن → رف/عمود → columns → الرصيد النهائي
+    Stock is the last numeric field before the next material (column الرصيد النهائي).
     """
     lines = [line.strip() for line in (text or '').splitlines()]
     parts: list[dict] = []
@@ -264,46 +271,64 @@ def parse_mekanik_stock_text(text: str) -> list[dict]:
         unit = 'kg' if KG_UNIT_RE.search(unit_line) else 'pcs'
         cursor += 1
 
-        block: list[str] = []
+        name_lines: list[str] = []
+        pre_warehouse_numbers: list[str] = []
+        saw_warehouse = False
+        after_numbers: list[float] = []
+
         while cursor < len(lines):
             raw = lines[cursor]
             if not raw:
                 cursor += 1
                 continue
+            if _is_part_header(lines, cursor) and (name_lines or saw_warehouse or after_numbers):
+                break
             if WAREHOUSE_LINE_RE.search(raw):
-                break
-            # Next material header (رقم المادة + unit) — stop before it.
-            if _is_part_header(lines, cursor) and block:
-                break
-            block.append(raw)
-            cursor += 1
-            if len(block) > 40:
-                break
+                saw_warehouse = True
+                cursor += 1
+                continue
+            if not saw_warehouse:
+                stock_value = _parse_stock_number(raw)
+                if stock_value is not None and name_lines:
+                    pre_warehouse_numbers.append(raw)
+                else:
+                    if pre_warehouse_numbers:
+                        name_lines.extend(pre_warehouse_numbers)
+                        pre_warehouse_numbers = []
+                    name_lines.append(raw)
+                cursor += 1
+                continue
 
-        if len(block) < 2:
-            index += 1
-            continue
-        stock = _parse_stock_number(block[-1])
-        if stock is None:
-            index += 1
-            continue
-        name_fixed = _fix_name(block[:-1])
-        if name_fixed:
+            if _is_location_code(raw):
+                cursor += 1
+                continue
+            stock_value = _parse_stock_number(raw)
+            if stock_value is not None:
+                after_numbers.append(stock_value)
+                cursor += 1
+                continue
+            break
+
+        if after_numbers:
+            stock = after_numbers[-1]
+        elif pre_warehouse_numbers:
+            stock = _parse_stock_number(pre_warehouse_numbers[-1])
+        else:
+            stock = None
+        name_fixed = _format_name(name_lines)
+        if name_fixed and stock is not None:
             parts.append({
                 'part_number': part_no,
                 'name': name_fixed,
                 'stock_qty': stock,
                 'unit': unit,
             })
-        # Continue from warehouse / next header (do not rescan inside this item).
         index = cursor
 
-    # Keep last row per part number (latest balance in the report).
     unique: dict[str, dict] = {}
     for row in parts:
         unique[row['part_number']] = row
     return list(unique.values())
-
 
 def parse_mekanik_pdf(pdf_bytes: bytes) -> list[dict]:
     text = extract_pdf_raw_text(pdf_bytes)
