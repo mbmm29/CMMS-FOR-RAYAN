@@ -1134,7 +1134,10 @@ def watch_critical_stock(db, parts):
         if db.query(PushDelivery).filter_by(kind='critical_stock', ref=part.part_id).first():
             continue
         if engineers is None:
-            engineers = db.query(User).filter(User.role == 'MAINTENANCE_ENGINEER', User.is_active == True).all()
+            engineers = db.query(User).filter(
+                User.role.in_(tuple(ENGINEER)),
+                User.is_active == True,
+            ).all()
         if not engineers:
             continue
         unit = part.unit or 'pcs'
@@ -1321,6 +1324,9 @@ def list_spare_parts(equipment_id: str | None = None, db: Session = Depends(get_
             for row in db.query(SparePartEquipment).filter_by(equipment_id=equipment_id.strip()).all()
         }
         parts = [part for part in parts if part.part_id in linked]
+    # Catch already-critical parts (e.g. after import) and notify engineers once.
+    if watch_critical_stock(db, parts):
+        db.commit()
     return [spare_part_payload(db, part) for part in parts]
 
 @app.post('/spare-parts/import-mekanik')

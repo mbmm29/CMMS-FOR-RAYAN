@@ -912,6 +912,11 @@ body .equipment-motor .live-form input{width:100%;max-width:none;height:38px;mar
   body[data-live-page="spare-parts"] .workspace{grid-template-columns:minmax(0,1fr) minmax(320px,440px)}
 }
 .spare-toolbar{display:grid;grid-template-columns:minmax(0,1.4fr) minmax(0,1fr);gap:10px;margin:0 0 12px}
+.spare-critical-banner{display:flex;align-items:center;gap:8px;width:100%;margin:0 0 12px;padding:10px 14px;border:1px solid #7a4a12;border-radius:8px;background:linear-gradient(90deg,#3a2410,#2a1a0c);color:#ffd27a;font:13px Arial,sans-serif;cursor:pointer;text-align:start}
+.spare-critical-banner:hover{background:linear-gradient(90deg,#4a2e14,#342010)}
+.spare-critical-banner b{font-size:16px;color:#ffb347}
+body .data-table tr.spare-critical-row{background:#2a1a0c}
+body .data-table tr.spare-critical-row.selected{background:#3a2410}
 .spare-filter{display:grid;gap:6px;margin:0;color:#d5e4ff;font-size:12px;font-weight:700}
 body .spare-filter select,body .spare-filter input,body .spare-form input,body .spare-form select{width:100%;max-width:none;height:38px;margin:0;padding:0 10px;border:1px solid #8eabda;border-radius:8px;background:#fff;color:#102d60;color-scheme:light;font:14px Arial,sans-serif}
 @media (max-width:900px){.spare-toolbar{grid-template-columns:1fr}}

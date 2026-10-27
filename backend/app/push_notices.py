@@ -261,7 +261,10 @@ def _push_engineers(events):
 def _push_critical_stock(part_ids):
     db = SessionLocal()
     try:
-        engineers = db.query(User).filter(User.role == 'MAINTENANCE_ENGINEER', User.is_active == True).all()
+        engineers = db.query(User).filter(
+            User.role.in_(('MAINTENANCE_ENGINEER', 'SYSTEM_DEVELOPER')),
+            User.is_active == True,
+        ).all()
         if not engineers:
             return
         private_key, _public = vapid_material(db)

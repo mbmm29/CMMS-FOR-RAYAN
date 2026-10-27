@@ -12,7 +12,7 @@ const DEFAULT_TAB = {
   'daily-reports': 'My Reports',
   'motor-condition': 'Sheet',
   iso: 'All',
-  'spare-parts': 'All',
+  'spare-parts': 'All parts',
 };
 const shellRender = render;
 const ui = { page: 'dashboard', tab: 'All', rowKey: '', mode: 'view', plantId: '', plantIds: [], lineId: '', sectionId: '', equipmentId: '', equipmentQuery: '', spareEquipment: '', spareQuery: '', technicianId: '', dateFrom: '', dateTo: '', annualPlant: '', annualYear: new Date().getFullYear(), annualItems: [], annualWeek: '', annualCopy: null, weekTasks: [], lubeId: '', dailyId: '', dailyFilter: '' };
@@ -4973,6 +4973,11 @@ function stockClass(part) {
   return '';
 }
 
+function isCriticalSpare(part) {
+  if (part?.stock_qty == null || part?.critical_qty == null) return false;
+  return Number(part.stock_qty) <= Number(part.critical_qty);
+}
+
 let equipmentPartsToken = 0;
 
 async function loadEquipmentParts(selected) {
@@ -5190,19 +5195,24 @@ function paintSparePartsList(parts) {
   const caret = keepSearchFocus && typeof document.activeElement.selectionStart === 'number'
     ? document.activeElement.selectionStart
     : null;
-  const filtered = parts.filter((item) => sparePartMatches(item, ui.spareQuery));
+  if (!['All parts', 'Critical balance'].includes(ui.tab)) ui.tab = 'All parts';
+  const matched = parts.filter((item) => sparePartMatches(item, ui.spareQuery));
+  const criticalAll = matched.filter(isCriticalSpare)
+    .slice()
+    .sort((a, b) => Number(a.stock_qty) - Number(b.stock_qty) || String(a.part_number).localeCompare(String(b.part_number)));
+  const filtered = ui.tab === 'Critical balance' ? criticalAll : matched;
   const selected = ui.mode === 'create' ? null : (filtered.find((item) => item.part_id === ui.rowKey) || filtered[0] || null);
   if (selected) ui.rowKey = selected.part_id;
   else if (ui.mode !== 'create') ui.rowKey = '';
-  const tracked = filtered.filter((item) => item.stock_qty != null).length;
-  const empty = filtered.filter((item) => item.stock_qty != null && Number(item.stock_qty) <= 0).length;
-  const criticalCount = filtered.filter((item) => stockClass(item) === 'stock-critical' || (item.critical_qty != null && item.stock_qty != null && Number(item.stock_qty) <= Number(item.critical_qty))).length;
+  const tracked = matched.filter((item) => item.stock_qty != null).length;
+  const empty = matched.filter((item) => item.stock_qty != null && Number(item.stock_qty) <= 0).length;
+  const criticalCount = criticalAll.length;
   document.getElementById('metric-grid').innerHTML = metrics([
-    ['Spare parts', String(filtered.length), '□', 'blue', ui.spareQuery ? `${parts.length} ${t('total')}` : ''],
+    ['Spare parts', String(matched.length), '□', 'blue', ui.spareQuery ? `${parts.length} ${t('total')}` : ''],
     ['With a balance', String(tracked), '▣', 'green', ''],
     ['Out of stock', String(empty), '×', 'red', ''],
     ['Critical balance', String(criticalCount), '!', 'orange', ''],
-    ['Linked equipment', String(new Set(filtered.flatMap((item) => (item.equipment || []).map((row) => row.equipment_id))).size), '⚙', 'orange', ''],
+    ['Linked equipment', String(new Set(matched.flatMap((item) => (item.equipment || []).map((row) => row.equipment_id))).size), '⚙', 'orange', ''],
   ]);
   const equipmentOptions = [`<option value="">${esc(t('All equipment'))}</option>`].concat(
     (store.equipment || [])
@@ -5210,19 +5220,26 @@ function paintSparePartsList(parts) {
       .sort((a, b) => String(a.equipment_id).localeCompare(String(b.equipment_id)))
       .map((item) => `<option value="${esc(item.equipment_id)}"${item.equipment_id === ui.spareEquipment ? ' selected' : ''}>${esc(item.equipment_id)} — ${esc(item.name)}</option>`),
   );
-  const emptyMessage = ui.spareQuery
-    ? t('No spare parts match this search.')
-    : t('No spare parts yet.');
+  const emptyMessage = ui.tab === 'Critical balance'
+    ? (ui.spareQuery ? t('No critical spare parts match this search.') : t('No parts at critical balance.'))
+    : (ui.spareQuery ? t('No spare parts match this search.') : t('No spare parts yet.'));
   const body = filtered.map((item) => {
     const machines = (item.equipment || []).map((row) => row.equipment_id).join(', ') || '—';
     const stock = item.stock_qty == null ? t('No warehouse balance') : stockAmount(item.stock_qty);
-    const tone = stockClass(item);
+    const tone = stockClass(item) || (isCriticalSpare(item) ? 'stock-critical' : '');
     const stockCell = tone ? `<span class="${tone}">${esc(stock)}</span>` : esc(stock);
     const critical = item.critical_qty == null ? '—' : stockAmount(item.critical_qty);
-    return `<tr data-row="${esc(item.part_id)}" class="${selected && selected.part_id === item.part_id ? 'selected' : ''}">${cell(esc(item.part_number), true)}${cell(esc(item.name))}${cell(esc(machines))}${cell(stockCell)}${cell(esc(critical))}${cell(esc(item.unit || 'pcs'))}</tr>`;
+    const rowClass = [
+      selected && selected.part_id === item.part_id ? 'selected' : '',
+      isCriticalSpare(item) ? 'spare-critical-row' : '',
+    ].filter(Boolean).join(' ');
+    return `<tr data-row="${esc(item.part_id)}" class="${rowClass}">${cell(esc(item.part_number), true)}${cell(esc(item.name))}${cell(esc(machines))}${cell(stockCell)}${cell(esc(critical))}${cell(esc(item.unit || 'pcs'))}</tr>`;
   });
+  const criticalBanner = criticalCount && ui.tab !== 'Critical balance'
+    ? `<button type="button" class="spare-critical-banner" data-tab="Critical balance"><b>${esc(String(criticalCount))}</b> ${esc(t('parts at critical balance or below'))} — ${esc(t('Open critical list'))}</button>`
+    : '';
   document.getElementById('workspace').className = 'workspace';
-  document.getElementById('workspace').innerHTML = `<section class="panel"><div class="spare-toolbar"><label class="spare-filter spare-search">${esc(t('Search'))}<input id="spare-search" type="search" value="${esc(ui.spareQuery || '')}" placeholder="${esc(t('Part No. or part name'))}" autocomplete="off"></label><label class="spare-filter">${esc(t('Linked equipment'))}<select id="spare-equipment">${equipmentOptions.join('')}</select></label></div>${tableShell(['Part No.', 'Part name', 'Linked equipment', 'Stock', 'Critical balance', 'Unit'], body.length ? body : [`<tr><td colspan="6">${esc(emptyMessage)}</td></tr>`], shown(filtered.length, parts.length, 'parts'))}</section>${ui.mode === 'create' ? spareForm(null) : (selected ? spareForm(selected) : `<aside class="panel detail"><h2>${esc(t('Spare parts'))}</h2><p class="live-note">${esc(emptyMessage)}</p></aside>`)}`;
+  document.getElementById('workspace').innerHTML = `<section class="panel spare-board">${tabsHtml(['All parts', 'Critical balance'])}${criticalBanner}<div class="spare-toolbar"><label class="spare-filter spare-search">${esc(t('Search'))}<input id="spare-search" type="search" value="${esc(ui.spareQuery || '')}" placeholder="${esc(t('Part No. or part name'))}" autocomplete="off"></label><label class="spare-filter">${esc(t('Linked equipment'))}<select id="spare-equipment">${equipmentOptions.join('')}</select></label></div>${tableShell(['Part No.', 'Part name', 'Linked equipment', 'Stock', 'Critical balance', 'Unit'], body.length ? body : [`<tr><td colspan="6">${esc(emptyMessage)}</td></tr>`], shown(filtered.length, matched.length, 'parts'))}</section>${ui.mode === 'create' ? spareForm(null) : (selected ? spareForm(selected) : `<aside class="panel detail"><h2>${esc(t(ui.tab === 'Critical balance' ? 'Critical balance' : 'Spare parts'))}</h2><p class="live-note">${esc(emptyMessage)}</p></aside>`)}`;
   document.getElementById('spare-equipment')?.addEventListener('change', (event) => {
     ui.spareEquipment = event.target.value;
     ui.rowKey = '';
