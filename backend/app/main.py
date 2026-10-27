@@ -345,6 +345,29 @@ def maybe_import_equipment_catalog():
         db.close()
 
 
+def maybe_dedupe_spare_part_numbers():
+    """Merge duplicate Part No. / رقم المادة rows, then enforce one row per material number."""
+    db = SessionLocal()
+    try:
+        from .spare_parts_import import dedupe_spare_parts_by_part_number
+        dedupe_spare_parts_by_part_number(db)
+    except Exception:
+        try:
+            db.rollback()
+        except Exception:
+            pass
+    finally:
+        db.close()
+    try:
+        with engine.begin() as conn:
+            conn.execute(text(
+                'CREATE UNIQUE INDEX IF NOT EXISTS uq_spare_parts_part_number_lower '
+                'ON spare_parts (lower(btrim(part_number)))'
+            ))
+    except Exception:
+        pass
+
+
 def maybe_import_mekanik_spare_parts():
     """Load mechanical warehouse parts and link them to equipment by Category code."""
     db = SessionLocal()
@@ -366,6 +389,7 @@ def maybe_import_mekanik_spare_parts():
 
 maybe_normalize_equipment_ids()
 maybe_import_equipment_catalog()
+maybe_dedupe_spare_part_numbers()
 maybe_import_mekanik_spare_parts()
 start_phone_notices()
 
@@ -1392,7 +1416,10 @@ def link_spare_parts_by_category_endpoint(
 
 @app.post('/spare-parts')
 def create_spare_part(data: SparePartIn, db: Session = Depends(get_db), u=Depends(role(*ENGINEER))):
-    number = _clean_part_text(data.part_number, 'Enter the part number', 100)
+    from .spare_parts_import import normalize_part_number
+    number = normalize_part_number(_clean_part_text(data.part_number, 'Enter the part number', 100))
+    if not number:
+        raise HTTPException(400, 'Enter the part number')
     name = _clean_part_text(data.name, 'Enter the part name', 200)
     if db.query(SparePart).filter(func.lower(SparePart.part_number) == number.lower()).first():
         raise HTTPException(409, 'This part number is already in the store.')
@@ -1418,10 +1445,13 @@ def create_spare_part(data: SparePartIn, db: Session = Depends(get_db), u=Depend
 
 @app.put('/spare-parts/{part_id}')
 def update_spare_part(part_id: str, data: SparePartIn, db: Session = Depends(get_db), u=Depends(role(*ENGINEER))):
+    from .spare_parts_import import normalize_part_number
     part = db.query(SparePart).filter_by(part_id=part_id).first()
     if not part:
         raise HTTPException(404, 'Spare part not found')
-    number = _clean_part_text(data.part_number, 'Enter the part number', 100)
+    number = normalize_part_number(_clean_part_text(data.part_number, 'Enter the part number', 100))
+    if not number:
+        raise HTTPException(400, 'Enter the part number')
     name = _clean_part_text(data.name, 'Enter the part name', 200)
     taken = db.query(SparePart).filter(func.lower(SparePart.part_number) == number.lower(), SparePart.part_id != part.part_id).first()
     if taken:

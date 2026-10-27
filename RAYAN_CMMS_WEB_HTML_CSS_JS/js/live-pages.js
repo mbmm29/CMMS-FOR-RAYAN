@@ -5286,7 +5286,7 @@ async function uploadSpareStockPdf(file) {
     const created = Number(result?.created) || 0;
     const updated = Number(result?.updated) || 0;
     const linked = Number(result?.category_links?.links_added) || 0;
-    toast(t('Stock PDF imported: {created} new, {updated} updated, {linked} Category links.')
+    toast(t('Stock PDF imported: {created} new Part No., {updated} existing Part No. updated (no duplicates), {linked} Category links.')
       .replace('{created}', String(created))
       .replace('{updated}', String(updated))
       .replace('{linked}', String(linked)));

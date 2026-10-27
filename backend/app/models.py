@@ -640,7 +640,8 @@ class SparePart(Base):
     __tablename__ = 'spare_parts'
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     part_id: Mapped[str] = mapped_column(String(60), unique=True, index=True)
-    part_number: Mapped[str] = mapped_column(String(100), index=True)
+    # Warehouse رقم المادة / Part No. — one material number only (enforced by unique index).
+    part_number: Mapped[str] = mapped_column(String(100), unique=True, index=True)
     name: Mapped[str] = mapped_column(String(200))
     stock_qty: Mapped[float | None] = mapped_column(Float, nullable=True)
     critical_qty: Mapped[float | None] = mapped_column(Float, nullable=True)

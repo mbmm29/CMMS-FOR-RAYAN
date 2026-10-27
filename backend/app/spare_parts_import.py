@@ -38,6 +38,18 @@ def _clean(value) -> str:
     return re.sub(r'\s+', ' ', str(value or '')).strip()
 
 
+def normalize_part_number(value) -> str:
+    """Canonical warehouse Part No. / رقم المادة — uniqueness key for spare parts."""
+    text = _clean(value)
+    if not text:
+        return ''
+    # Drop spaces inside numeric warehouse codes (e.g. "12 345" → "12345").
+    compact = re.sub(r'\s+', '', text)
+    if compact.isdigit():
+        return compact
+    return text
+
+
 def _reverse_chars(text: str) -> str:
     return text[::-1]
 
@@ -248,6 +260,47 @@ def parse_mekanik_pdf(pdf_bytes: bytes) -> list[dict]:
     return rows
 
 
+def dedupe_spare_parts_by_part_number(db: Session, commit: bool = True) -> dict:
+    """Keep one row per رقم المادة / Part No.; merge equipment links then delete duplicates."""
+    groups: dict[str, list[SparePart]] = {}
+    for part in db.query(SparePart).order_by(SparePart.part_id).all():
+        key = normalize_part_number(part.part_number).lower()
+        if not key:
+            continue
+        groups.setdefault(key, []).append(part)
+
+    removed = 0
+    merged_links = 0
+    for key, parts in groups.items():
+        keeper = parts[0]
+        canonical = normalize_part_number(keeper.part_number)[:100]
+        if keeper.part_number != canonical:
+            keeper.part_number = canonical
+        if len(parts) == 1:
+            continue
+        existing_links = {
+            row.equipment_id
+            for row in db.query(SparePartEquipment).filter_by(part_id=keeper.part_id).all()
+        }
+        for duplicate in parts[1:]:
+            for row in db.query(SparePartEquipment).filter_by(part_id=duplicate.part_id).all():
+                if row.equipment_id not in existing_links:
+                    db.add(SparePartEquipment(part_id=keeper.part_id, equipment_id=row.equipment_id))
+                    existing_links.add(row.equipment_id)
+                    merged_links += 1
+            db.query(SparePartEquipment).filter_by(part_id=duplicate.part_id).delete(synchronize_session=False)
+            if keeper.critical_qty is None and duplicate.critical_qty is not None:
+                keeper.critical_qty = duplicate.critical_qty
+            db.delete(duplicate)
+            removed += 1
+
+    if commit:
+        db.commit()
+    else:
+        db.flush()
+    return {'duplicate_parts_removed': removed, 'links_merged': merged_links}
+
+
 def import_spare_rows(
     db: Session,
     rows: list[dict],
@@ -255,19 +308,26 @@ def import_spare_rows(
     source: str = SOURCE_NOTE,
     update_existing: bool = True,
 ) -> dict:
-    """Upsert Part No. / Part name / Stock, then link new/updated parts by Category."""
-    existing = {
-        (part.part_number or '').strip().lower(): part
-        for part in db.query(SparePart).all()
-    }
+    """Match only on Part No. / رقم المادة: update stock if present, add only when the number is new."""
+    dedupe = dedupe_spare_parts_by_part_number(db, commit=False)
+    existing: dict[str, SparePart] = {}
+    for part in db.query(SparePart).all():
+        key = normalize_part_number(part.part_number).lower()
+        if key and key not in existing:
+            existing[key] = part
+            canonical = normalize_part_number(part.part_number)[:100]
+            if part.part_number != canonical:
+                part.part_number = canonical
+
     seq = _next_part_seq(db)
     created = 0
     updated = 0
     skipped = 0
+    skipped_existing = 0
     touched: list[SparePart] = []
 
     for row in rows:
-        number = _clean(row.get('part_number'))
+        number = normalize_part_number(row.get('part_number'))
         name = _clean(row.get('name'))
         if not number or not name:
             skipped += 1
@@ -284,9 +344,12 @@ def import_spare_rows(
         key = number.lower()
         part = existing.get(key)
         if part:
+            # رقم المادة موجود مسبقاً → لا إضافة جديدة، فقط تحديث الرصيد/الاسم.
             if not update_existing:
                 skipped += 1
+                skipped_existing += 1
                 continue
+            part.part_number = number[:100]
             part.name = name
             part.stock_qty = stock_qty
             part.unit = unit
@@ -320,6 +383,8 @@ def import_spare_rows(
         'created': created,
         'updated': updated,
         'skipped': skipped,
+        'skipped_existing': skipped_existing,
+        'dedupe': dedupe,
         'category_links': links,
         'touched_ids': [part.part_id for part in touched if part.part_id],
     }

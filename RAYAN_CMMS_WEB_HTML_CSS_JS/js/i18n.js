@@ -86,7 +86,7 @@ const CMMS_AR = {
   'Upload the mechanical stock PDF (same form as ميكانيك.pdf). Part No., name, and final stock are updated; new parts are added and linked by Category.': 'ارفع ملف أرصدة المواد الميكانيكية بنفس فورم ميكانيك.pdf. يُحدَّث رقم المادة والاسم والرصيد النهائي، وتُضاف المواد الجديدة وتُربط حسب Category.',
   'Upload a PDF file in the same form as ميكانيك.pdf.': 'ارفع ملف PDF بنفس فورم ميكانيك.pdf.',
   'Reading stock PDF…': 'جارٍ قراءة ملف الرصيد…',
-  'Stock PDF imported: {created} new, {updated} updated, {linked} Category links.': 'تم استيراد ملف الرصيد: {created} جديدة، {updated} محدَّثة، {linked} ربط Category.',
+  'Stock PDF imported: {created} new Part No., {updated} existing Part No. updated (no duplicates), {linked} Category links.': 'تم الاستيراد حسب رقم المادة: {created} أرقام جديدة، {updated} أرقام موجودة حُدّث رصيدها (بدون تكرار)، {linked} ربط Category.',
   'Could not import the stock PDF.': 'تعذر استيراد ملف الرصيد.',
   'This PDF is not the mechanical stock form (أرصدة المواد). Upload a file with the same layout as ميكانيك.pdf.': 'هذا الملف ليس فورم أرصدة المواد الميكانيكية. ارفع ملفاً بنفس شكل ميكانيك.pdf.',
   'Could not read spare-part rows from this PDF. Use the same form as ميكانيك.pdf (Part No., name, final stock).': 'تعذر قراءة صفوف قطع الغيار من هذا الملف. استخدم نفس فورم ميكانيك.pdf (رقم المادة، الاسم، الرصيد النهائي).',
