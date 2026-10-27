@@ -1343,6 +1343,40 @@ def import_mekanik_spare_parts_endpoint(
     return result
 
 
+@app.post('/spare-parts/upload-stock-pdf')
+async def upload_spare_stock_pdf(
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db),
+    u=Depends(role(*ENGINEER)),
+):
+    """Upload أرصدة المواد PDF (same form as ميكانيك.pdf): update stock, add new parts, link by Category."""
+    from .spare_parts_import import import_mekanik_pdf_bytes
+    filename = (file.filename or '').strip()
+    if not filename.lower().endswith('.pdf'):
+        raise HTTPException(400, 'Upload a PDF file in the same form as ميكانيك.pdf.')
+    raw = await file.read()
+    if not raw:
+        raise HTTPException(400, 'Empty PDF file')
+    if len(raw) > 25 * 1024 * 1024:
+        raise HTTPException(400, 'PDF file is too large (max 25 MB).')
+    try:
+        result = import_mekanik_pdf_bytes(db, raw, filename=filename)
+    except ValueError as exc:
+        raise HTTPException(400, str(exc)) from exc
+    touched_ids = result.pop('touched_ids', [])
+    if touched_ids:
+        touched = db.query(SparePart).filter(SparePart.part_id.in_(touched_ids)).all()
+        watch_critical_stock(db, touched)
+    audit(db, u, 'UPLOAD', 'SparePart', filename or 'stock.pdf', new={
+        'rows': result.get('rows'),
+        'created': result.get('created'),
+        'updated': result.get('updated'),
+        'category_links': result.get('category_links'),
+    })
+    db.commit()
+    return result
+
+
 @app.post('/spare-parts/link-by-category')
 def link_spare_parts_by_category_endpoint(
     db: Session = Depends(get_db),

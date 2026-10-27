@@ -5238,8 +5238,11 @@ function paintSparePartsList(parts) {
   const criticalBanner = criticalCount && ui.tab !== 'Critical balance'
     ? `<button type="button" class="spare-critical-banner" data-tab="Critical balance"><b>${esc(String(criticalCount))}</b> ${esc(t('parts at critical balance or below'))} — ${esc(t('Open critical list'))}</button>`
     : '';
+  const uploadBar = canMaintain()
+    ? `<div class="spare-upload-bar"><button type="button" class="detail-button primary" id="spare-upload-pdf">${esc(t('Upload stock PDF'))}</button><input id="spare-upload-file" type="file" accept=".pdf,application/pdf" hidden><p class="live-note">${esc(t('Upload the mechanical stock PDF (same form as ميكانيك.pdf). Part No., name, and final stock are updated; new parts are added and linked by Category.'))}</p></div>`
+    : '';
   document.getElementById('workspace').className = 'workspace';
-  document.getElementById('workspace').innerHTML = `<section class="panel spare-board">${tabsHtml(['All parts', 'Critical balance'])}${criticalBanner}<div class="spare-toolbar"><label class="spare-filter spare-search">${esc(t('Search'))}<input id="spare-search" type="search" value="${esc(ui.spareQuery || '')}" placeholder="${esc(t('Part No. or part name'))}" autocomplete="off"></label><label class="spare-filter">${esc(t('Linked equipment'))}<select id="spare-equipment">${equipmentOptions.join('')}</select></label></div>${tableShell(['Part No.', 'Part name', 'Linked equipment', 'Stock', 'Critical balance', 'Unit'], body.length ? body : [`<tr><td colspan="6">${esc(emptyMessage)}</td></tr>`], shown(filtered.length, matched.length, 'parts'))}</section>${ui.mode === 'create' ? spareForm(null) : (selected ? spareForm(selected) : `<aside class="panel detail"><h2>${esc(t(ui.tab === 'Critical balance' ? 'Critical balance' : 'Spare parts'))}</h2><p class="live-note">${esc(emptyMessage)}</p></aside>`)}`;
+  document.getElementById('workspace').innerHTML = `<section class="panel spare-board">${tabsHtml(['All parts', 'Critical balance'])}${criticalBanner}${uploadBar}<div class="spare-toolbar"><label class="spare-filter spare-search">${esc(t('Search'))}<input id="spare-search" type="search" value="${esc(ui.spareQuery || '')}" placeholder="${esc(t('Part No. or part name'))}" autocomplete="off"></label><label class="spare-filter">${esc(t('Linked equipment'))}<select id="spare-equipment">${equipmentOptions.join('')}</select></label></div>${tableShell(['Part No.', 'Part name', 'Linked equipment', 'Stock', 'Critical balance', 'Unit'], body.length ? body : [`<tr><td colspan="6">${esc(emptyMessage)}</td></tr>`], shown(filtered.length, matched.length, 'parts'))}</section>${ui.mode === 'create' ? spareForm(null) : (selected ? spareForm(selected) : `<aside class="panel detail"><h2>${esc(t(ui.tab === 'Critical balance' ? 'Critical balance' : 'Spare parts'))}</h2><p class="live-note">${esc(emptyMessage)}</p></aside>`)}`;
   document.getElementById('spare-equipment')?.addEventListener('change', (event) => {
     ui.spareEquipment = event.target.value;
     ui.rowKey = '';
@@ -5258,6 +5261,15 @@ function paintSparePartsList(parts) {
     const pos = caret == null ? search.value.length : Math.min(caret, search.value.length);
     search.setSelectionRange(pos, pos);
   }
+  document.getElementById('spare-upload-pdf')?.addEventListener('click', () => {
+    document.getElementById('spare-upload-file')?.click();
+  });
+  document.getElementById('spare-upload-file')?.addEventListener('change', async (event) => {
+    const input = event.currentTarget;
+    const file = input.files?.[0];
+    input.value = '';
+    if (file) await uploadSpareStockPdf(file);
+  });
   const form = document.getElementById('spare-form');
   if (form) {
     paintSpareEquipment(form);
@@ -5265,6 +5277,30 @@ function paintSparePartsList(parts) {
   }
   bindRows();
   bindDeletes();
+}
+
+async function uploadSpareStockPdf(file) {
+  if (!canMaintain()) return;
+  if (!file || !/\.pdf$/i.test(file.name || '')) {
+    toast(t('Upload a PDF file in the same form as ميكانيك.pdf.'));
+    return;
+  }
+  const body = new FormData();
+  body.append('file', file, file.name);
+  try {
+    toast(t('Reading stock PDF…'));
+    const result = await apiRequest('/spare-parts/upload-stock-pdf', { method: 'POST', body });
+    const created = Number(result?.created) || 0;
+    const updated = Number(result?.updated) || 0;
+    const linked = Number(result?.category_links?.links_added) || 0;
+    toast(t('Stock PDF imported: {created} new, {updated} updated, {linked} Category links.')
+      .replace('{created}', String(created))
+      .replace('{updated}', String(updated))
+      .replace('{linked}', String(linked)));
+    await drawSpareParts();
+  } catch (exception) {
+    toast(t(exception.message) || t('Could not import the stock PDF.'));
+  }
 }
 
 async function drawSpareParts() {
