@@ -369,15 +369,13 @@ def maybe_dedupe_spare_part_numbers():
 
 
 def maybe_import_mekanik_spare_parts():
-    """Load mechanical warehouse parts and link them to equipment by Category code."""
+    """Load mechanical warehouse parts once; Category links run only during that import."""
     db = SessionLocal()
     try:
-        from .spare_parts_import import import_mekanik_spare_parts, link_spare_parts_by_category
+        from .spare_parts_import import import_mekanik_spare_parts
         loaded = db.query(SparePart).filter(SparePart.notes == 'ميكانيك.pdf').count()
         if loaded < 2500:
             import_mekanik_spare_parts(db, update_existing=True)
-        else:
-            link_spare_parts_by_category(db)
     except Exception:
         try:
             db.rollback()
@@ -387,10 +385,27 @@ def maybe_import_mekanik_spare_parts():
         db.close()
 
 
-maybe_normalize_equipment_ids()
-maybe_import_equipment_catalog()
-maybe_dedupe_spare_part_numbers()
-maybe_import_mekanik_spare_parts()
+def run_deferred_boot_jobs():
+    """Heavy one-time catalog work after the HTTP port is open (avoids Render 502)."""
+    try:
+        maybe_normalize_equipment_ids()
+    except Exception:
+        pass
+    try:
+        maybe_import_equipment_catalog()
+    except Exception:
+        pass
+    try:
+        maybe_dedupe_spare_part_numbers()
+    except Exception:
+        pass
+    try:
+        maybe_import_mekanik_spare_parts()
+    except Exception:
+        pass
+
+
+# Do not block process start with catalog imports — Render health checks need /health quickly.
 start_phone_notices()
 
 app=FastAPI(title='Mechanical Maintenance CMMS API',version='2.0.0')
@@ -588,6 +603,7 @@ def create_bootstrap_system():
     finally:
         db.close()
     start_corrective_release_worker()
+    threading.Thread(target=run_deferred_boot_jobs, name='boot-catalog', daemon=True).start()
 
 @app.get('/health')
 def health(): return {'status':'ok','version':'2.0.0'}
