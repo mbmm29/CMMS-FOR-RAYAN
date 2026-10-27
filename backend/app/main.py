@@ -978,8 +978,14 @@ async def upload_equipment_catalog_pdf(
             db.rollback()
         except Exception:
             pass
-        detail = str(exc).strip() or 'Could not import the equipment PDF.'
-        raise HTTPException(500, detail[:300]) from exc
+        message = str(exc).strip() or 'Could not import the equipment PDF.'
+        if 'uq_equipment_plant_line_code' in message or 'UniqueViolation' in message:
+            raise HTTPException(
+                409,
+                'Some equipment codes already exist on the same plant and line. '
+                'Those rows are skipped on import — try again after the latest update.',
+            ) from exc
+        raise HTTPException(500, message[:300]) from exc
     audit(
         db,
         u,

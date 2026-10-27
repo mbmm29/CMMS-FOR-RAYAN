@@ -9,6 +9,7 @@ import tempfile
 from datetime import date
 from pathlib import Path
 
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from .models import Equipment, LineSection, Plant, PlantLine
@@ -337,21 +338,25 @@ def ensure_plant(db: Session, plant_name: str) -> Plant:
     """Resolve plant; always persist English canonical name (Feed Mill 1/2)."""
     key = normalize_plant_name(plant_name)
     defaults = PLANT_DEFAULTS.get(key, {})
+    order_code = defaults.get('order_code')
+    default_plant_id = defaults.get('plant_id')
     plants = db.query(Plant).all()
     for plant in plants:
         existing_key = match_plant_key(plant.name or '')
-        if existing_key == key or _fold(plant.name or '') == _fold(key):
+        same_name = existing_key == key or _fold(plant.name or '') == _fold(key)
+        same_id = bool(default_plant_id) and plant.plant_id == default_plant_id
+        # Live DBs may use FM1 instead of FM01 — still the same Feed Mill.
+        same_order = bool(order_code) and (
+            _fold(plant.order_code or '') == _fold(order_code)
+            or _fold(plant.plant_id or '') == _fold(order_code)
+        )
+        if same_name or same_id or same_order:
             if plant.name != key:
                 plant.name = key
             return plant
-        if key in PLANT_DEFAULTS and plant.plant_id == defaults.get('plant_id'):
-            if plant.name != key:
-                plant.name = key
-            return plant
-    plant_id = defaults.get('plant_id') or f'PLANT-{abs(hash(key)) % 10000:04d}'
+    plant_id = default_plant_id or f'PLANT-{abs(hash(key)) % 10000:04d}'
     while db.query(Plant).filter_by(plant_id=plant_id).first():
         plant_id = f'{plant_id}X'
-    order_code = defaults.get('order_code')
     if order_code and db.query(Plant).filter(Plant.order_code == order_code).first():
         order_code = None
     plant = Plant(plant_id=plant_id, name=key, order_code=order_code, active=True)
@@ -407,13 +412,20 @@ def import_equipment_catalog(db: Session, rows: list[dict] | None = None, update
     catalog = rows if rows is not None else load_catalog()
     created = updated = skipped = 0
     errors = []
+    seen: set[tuple[str, str, str]] = set()
     for index, row in enumerate(catalog, 1):
+        nested = db.begin_nested()
         try:
             equipment_id = normalize_equipment_code(row.get('equipment_id') or row.get('source_code'))
             if not equipment_id:
                 raise ValueError('Missing equipment_id')
             plant = ensure_plant(db, row.get('plant_name') or '')
             line = ensure_line(db, plant, row.get('line_name') or '')
+            scope_key = (plant.plant_id, line.line_id, equipment_id)
+            if scope_key in seen:
+                nested.rollback()
+                skipped += 1
+                continue
             section = ensure_section(db, line, row.get('section_name') or '')
             year = row.get('year')
             commissioning = date(int(year), 1, 1) if year else None
@@ -442,16 +454,26 @@ def import_equipment_catalog(db: Session, rows: list[dict] | None = None, update
                 line_id=line.line_id,
             ).first()
             if current:
+                seen.add(scope_key)
                 if not update_existing:
+                    nested.commit()
                     skipped += 1
                     continue
                 for key, value in payload.items():
                     setattr(current, key, value)
+                nested.commit()
                 updated += 1
             else:
                 db.add(Equipment(equipment_id=equipment_id, **payload))
+                db.flush()
+                nested.commit()
+                seen.add(scope_key)
                 created += 1
+        except IntegrityError:
+            nested.rollback()
+            skipped += 1
         except Exception as exc:
+            nested.rollback()
             errors.append({'row': index, 'equipment_id': row.get('equipment_id'), 'error': str(exc)})
     db.commit()
     return {
