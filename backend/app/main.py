@@ -953,24 +953,26 @@ def import_equipment_catalog_endpoint(
 
 
 @app.post('/equipment/upload-catalog-pdf')
-async def upload_equipment_catalog_pdf(
+@app.post('/equipment/upload-catalog')
+async def upload_equipment_catalog_file(
     file: UploadFile = File(...),
     db: Session = Depends(get_db),
     u=Depends(role(*ENGINEER)),
 ):
-    """Upload Add Equipment.pdf: add new machines; skip when same code exists on that plant+line."""
-    from .equipment_catalog_import import import_equipment_pdf_bytes
+    """Upload Add Equipment.xlsx (preferred) or PDF: add new machines; skip duplicates on plant+line."""
+    from .equipment_catalog_import import import_equipment_file_bytes
     filename = (file.filename or '').strip()
-    if not filename.lower().endswith('.pdf'):
-        raise HTTPException(400, 'Upload a PDF file in the same form as Add Equipment.pdf.')
+    lower = filename.lower()
+    if not (lower.endswith('.xlsx') or lower.endswith('.pdf')):
+        raise HTTPException(400, 'Upload an Excel (.xlsx) file in the same form as Add Equipment.xlsx.')
     raw = await file.read()
     if not raw:
-        raise HTTPException(400, 'Empty PDF file')
+        raise HTTPException(400, 'Empty file')
     if len(raw) > 25 * 1024 * 1024:
-        raise HTTPException(400, 'PDF file is too large (max 25 MB).')
+        raise HTTPException(400, 'File is too large (max 25 MB).')
     try:
         # Do not update existing plant+line codes — only add missing equipment.
-        result = import_equipment_pdf_bytes(db, raw, filename=filename, update_existing=False)
+        result = import_equipment_file_bytes(db, raw, filename=filename, update_existing=False)
     except ValueError as exc:
         raise HTTPException(400, str(exc)) from exc
     except Exception as exc:
@@ -978,7 +980,7 @@ async def upload_equipment_catalog_pdf(
             db.rollback()
         except Exception:
             pass
-        message = str(exc).strip() or 'Could not import the equipment PDF.'
+        message = str(exc).strip() or 'Could not import the equipment file.'
         if 'uq_equipment_plant_line_code' in message or 'UniqueViolation' in message:
             raise HTTPException(
                 409,
@@ -991,7 +993,7 @@ async def upload_equipment_catalog_pdf(
         u,
         'UPLOAD',
         'Equipment',
-        filename or 'Add Equipment.pdf',
+        filename or 'Add Equipment.xlsx',
         new={
             'rows': result.get('rows'),
             'created': result.get('created'),
@@ -999,6 +1001,7 @@ async def upload_equipment_catalog_pdf(
             'updated': result.get('updated'),
             'error_count': result.get('error_count'),
             'rejected_count': result.get('rejected_count'),
+            'source': result.get('source'),
         },
     )
     db.commit()

@@ -1,11 +1,14 @@
-"""Import equipment rows from the Add Equipment catalog JSON / PDF form."""
+"""Import equipment rows from the Add Equipment catalog JSON / Excel / PDF form."""
 from __future__ import annotations
 
+import io
 import json
 import re
 import shutil
 import subprocess
 import tempfile
+import zipfile
+import xml.etree.ElementTree as ET
 from datetime import date
 from pathlib import Path
 
@@ -16,7 +19,9 @@ from .models import Equipment, LineSection, Plant, PlantLine
 from .equipment_code_normalize import normalize_equipment_code
 
 CATALOG_PATH = Path(__file__).resolve().parent / 'data' / 'add_equipment_catalog.json'
+SOURCE_XLSX_NOTE = 'Add Equipment.xlsx'
 SOURCE_PDF_NOTE = 'Add Equipment.pdf'
+_XLSX_NS = '{http://schemas.openxmlformats.org/spreadsheetml/2006/main}'
 ARABIC_RE = re.compile(
     r'[\u0600-\u06FF\u0750-\u077F\u08A0-\u08FF\uFB50-\uFDFF\uFE70-\uFEFF]+'
 )
@@ -596,7 +601,7 @@ def import_equipment_catalog(
                 'line_id': line.line_id,
                 'section_id': section.section_id if section else None,
                 'area': (_english_text(row.get('area'))[:100] or None),
-                'manufacturer': None,
+                'manufacturer': (_english_text(row.get('manufacturer'))[:100] or None),
                 'commissioning_date': commissioning,
                 'model': (_english_text(row.get('category'))[:100] or None),
                 'serial_number': _clean(row.get('serial_number'))[:100] or None,
@@ -672,6 +677,210 @@ def import_equipment_catalog(
     }
 
 
+def _xlsx_col_index(ref: str) -> int:
+    letters = ''.join(ch for ch in (ref or '') if ch.isalpha()).upper()
+    number = 0
+    for ch in letters:
+        number = number * 26 + (ord(ch) - 64)
+    return number
+
+
+def _xlsx_cell_text(cell, shared: list[str]) -> str:
+    kind = cell.attrib.get('t')
+    if kind == 'inlineStr':
+        return ''.join(node.text or '' for node in cell.iter(f'{_XLSX_NS}t')).strip()
+    if kind == 's':
+        value = cell.findtext(f'{_XLSX_NS}v')
+        try:
+            return str(shared[int(value)]).strip()
+        except (TypeError, ValueError, IndexError):
+            return ''
+    value = cell.findtext(f'{_XLSX_NS}v')
+    text = (value or '').strip()
+    if not text:
+        return ''
+    # Excel stores integers as 1062.0 sometimes.
+    if re.fullmatch(r'\d+\.0+', text):
+        return text.split('.', 1)[0]
+    return text
+
+
+def read_xlsx_rows(raw: bytes) -> list[dict[int, str]]:
+    """Return sparse column→text maps for each non-empty worksheet row (1-based columns)."""
+    if not raw:
+        raise ValueError('Empty Excel file')
+    try:
+        with zipfile.ZipFile(io.BytesIO(raw)) as archive:
+            names = set(archive.namelist())
+            shared: list[str] = []
+            if 'xl/sharedStrings.xml' in names:
+                root = ET.fromstring(archive.read('xl/sharedStrings.xml'))
+                for item in root.findall(f'{_XLSX_NS}si'):
+                    shared.append(''.join(node.text or '' for node in item.iter(f'{_XLSX_NS}t')).strip())
+            sheet_name = next(
+                (name for name in names if name.startswith('xl/worksheets/sheet') and name.endswith('.xml')),
+                None,
+            )
+            if not sheet_name:
+                raise ValueError('Excel sheet not found')
+            sheet = ET.fromstring(archive.read(sheet_name))
+    except ValueError:
+        raise
+    except Exception as exc:
+        raise ValueError('Could not read the Excel file.') from exc
+
+    rows: list[dict[int, str]] = []
+    for row in sheet.findall(f'{_XLSX_NS}sheetData/{_XLSX_NS}row'):
+        values: dict[int, str] = {}
+        for cell in row.findall(f'{_XLSX_NS}c'):
+            col = _xlsx_col_index(cell.attrib.get('r', ''))
+            if not col:
+                continue
+            text = _xlsx_cell_text(cell, shared)
+            if text:
+                values[col] = text
+        if values:
+            rows.append(values)
+    return rows
+
+
+def _header_key(text: str) -> str:
+    folded = _fold(text).replace('_', ' ')
+    folded = re.sub(r'[^a-z0-9\u0600-\u06ff ]+', ' ', folded)
+    folded = re.sub(r'\s+', ' ', folded).strip()
+    aliases = {
+        'equipment code': 'code',
+        'equipment id': 'code',
+        'code': 'code',
+        'name': 'name',
+        'equipment name': 'name',
+        'category': 'category',
+        'type': 'category',
+        'plant': 'plant',
+        'line': 'line',
+        'line number': 'line',
+        'section': 'section',
+        'area': 'area',
+        'manufacturer': 'manufacturer',
+        'serial number': 'serial',
+        'serial': 'serial',
+        'status': 'status',
+        'condition': 'condition',
+        'year': 'year',
+        'commissioning': 'year',
+        'commissioning year': 'year',
+    }
+    return aliases.get(folded, folded)
+
+
+def _as_year(value: str) -> int | None:
+    text = _clean(value)
+    if re.fullmatch(r'\d{4}', text):
+        year = int(text)
+        if 1990 <= year <= 2100:
+            return year
+    return None
+
+
+def parse_add_equipment_xlsx(raw: bytes) -> tuple[list[dict], list[dict]]:
+    """Parse Add Equipment.xlsx by column headers (stable when cell widths change)."""
+    matrix = read_xlsx_rows(raw)
+    if len(matrix) < 2:
+        raise ValueError(
+            'Could not read equipment rows from this Excel file. '
+            'Use the same form as Add Equipment.xlsx.'
+        )
+
+    header_map: dict[str, int] = {}
+    for col, text in matrix[0].items():
+        key = _header_key(text)
+        if key and key not in header_map:
+            header_map[key] = col
+
+    required = ('code', 'name', 'plant', 'line')
+    if not all(key in header_map for key in required):
+        raise ValueError(
+            'This Excel file is not the Add Equipment form. '
+            'Need columns: Equipment code, Name, Plant, Line.'
+        )
+
+    def cell(row: dict[int, str], key: str) -> str:
+        col = header_map.get(key)
+        if not col:
+            return ''
+        return _clean(row.get(col) or '')
+
+    rows: list[dict] = []
+    rejects: list[dict] = []
+    for index, raw_row in enumerate(matrix[1:], start=2):
+        code = cell(raw_row, 'code')
+        name = cell(raw_row, 'name')
+        category = cell(raw_row, 'category')
+        plant = cell(raw_row, 'plant')
+        line_name = cell(raw_row, 'line')
+        section_name = cell(raw_row, 'section')
+        area = cell(raw_row, 'area')
+        manufacturer = cell(raw_row, 'manufacturer')
+        serial = cell(raw_row, 'serial')
+        status = cell(raw_row, 'status') or 'Running'
+        condition = cell(raw_row, 'condition') or 'Good'
+        year = _as_year(cell(raw_row, 'year'))
+        # This workbook stores Year under the Manufacturer header.
+        if year is None:
+            year = _as_year(manufacturer)
+            if year is not None:
+                manufacturer = ''
+        if not code and not name and not plant:
+            continue
+        if not code or not name or not plant or not line_name:
+            rejects.append(_reject_item(
+                equipment_id=code,
+                name=name,
+                plant_name=plant,
+                line_name=line_name,
+                reason='Incomplete Excel row (need code, name, plant, and line)',
+                kind='parse',
+                row=index,
+            ))
+            continue
+        if year is None:
+            rejects.append(_reject_item(
+                equipment_id=code,
+                name=name,
+                plant_name=plant,
+                line_name=line_name,
+                reason='Missing or invalid year on this Excel row',
+                kind='parse',
+                row=index,
+            ))
+            continue
+        if section_name.casefold() == 'otl' and not area:
+            area = ''
+        item = _row_dict(
+            code=code,
+            name=name,
+            category=category or 'Equipment',
+            plant=plant,
+            line_name=line_name,
+            section_name=section_name,
+            area=area,
+            year=year,
+        )
+        item['serial_number'] = serial or None
+        item['status'] = status if status in {'Running', 'Operational', 'Under Maintenance', 'Out of Service'} else 'Running'
+        item['condition'] = condition or 'Good'
+        if manufacturer:
+            item['manufacturer'] = _english_text(manufacturer)[:100]
+        rows.append(item)
+
+    if len(rows) < 5:
+        raise ValueError(
+            'Could not read equipment rows from this Excel file. '
+            'Use the same form as Add Equipment.xlsx.'
+        )
+    return rows, rejects
+
+
 def import_equipment_pdf_bytes(
     db: Session,
     pdf_bytes: bytes,
@@ -691,3 +900,39 @@ def import_equipment_pdf_bytes(
     result['rows'] = len(rows)
     result['parse_rejects'] = len(parse_rejects)
     return result
+
+
+def import_equipment_xlsx_bytes(
+    db: Session,
+    xlsx_bytes: bytes,
+    filename: str | None = None,
+    update_existing: bool = False,
+) -> dict:
+    """Import Add Equipment.xlsx: preferred source (stable columns, ignores cell widths)."""
+    rows, parse_rejects = parse_add_equipment_xlsx(xlsx_bytes)
+    result = import_equipment_catalog(
+        db,
+        rows=rows,
+        update_existing=update_existing,
+        parse_rejects=parse_rejects,
+    )
+    result['filename'] = _clean(filename) or SOURCE_XLSX_NOTE
+    result['source'] = SOURCE_XLSX_NOTE
+    result['rows'] = len(rows)
+    result['parse_rejects'] = len(parse_rejects)
+    return result
+
+
+def import_equipment_file_bytes(
+    db: Session,
+    raw: bytes,
+    filename: str | None = None,
+    update_existing: bool = False,
+) -> dict:
+    """Import Add Equipment.xlsx (preferred) or legacy Add Equipment.pdf."""
+    name = _clean(filename).casefold()
+    if name.endswith('.xlsx'):
+        return import_equipment_xlsx_bytes(db, raw, filename=filename, update_existing=update_existing)
+    if name.endswith('.pdf'):
+        return import_equipment_pdf_bytes(db, raw, filename=filename, update_existing=update_existing)
+    raise ValueError('Upload an Excel (.xlsx) file in the same form as Add Equipment.xlsx.')

@@ -5438,8 +5438,8 @@ function showEquipmentImportReport(result) {
 
 async function uploadEquipmentCatalogPdf(file) {
   if (!canMaintain()) return;
-  if (!file || !/\.pdf$/i.test(file.name || '')) {
-    toast(t('Upload a PDF file in the same form as Add Equipment.pdf.'));
+  if (!file || !/\.(xlsx|pdf)$/i.test(file.name || '')) {
+    toast(t('Upload an Excel (.xlsx) file in the same form as Add Equipment.xlsx.'));
     return;
   }
   const body = new FormData();
@@ -5447,8 +5447,8 @@ async function uploadEquipmentCatalogPdf(file) {
   showSpareImportOverlay();
   try {
     const upload = typeof apiUploadWithProgress === 'function'
-      ? apiUploadWithProgress('/equipment/upload-catalog-pdf', body, setSpareImportProgress)
-      : apiRequest('/equipment/upload-catalog-pdf', { method: 'POST', body });
+      ? apiUploadWithProgress('/equipment/upload-catalog', body, setSpareImportProgress)
+      : apiRequest('/equipment/upload-catalog', { method: 'POST', body });
     const result = await upload;
     setSpareImportProgress(100, 'done');
     const [equipment, plants, lines, sections, pending] = await Promise.all([
