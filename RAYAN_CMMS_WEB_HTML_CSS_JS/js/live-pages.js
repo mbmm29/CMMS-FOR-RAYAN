@@ -1263,6 +1263,7 @@ function shown(count, total, noun) {
 function kpiSparkline(history, metric, title, goodWhenRising = true, digits = 1) {
   const rows = (Array.isArray(history) ? history : []).map((row) => ({
     date: row.date,
+    to: row.to,
     value: row[metric] == null || row[metric] === '' ? null : Number(row[metric]),
   }));
   const points = rows.map((row, index) => ({ ...row, index })).filter((row) => Number.isFinite(row.value));
@@ -1290,9 +1291,15 @@ function kpiSparkline(history, metric, title, goodWhenRising = true, digits = 1)
   const dots = points.map((point) => `<circle cx="${x(point.index).toFixed(1)}" cy="${y(point.value).toFixed(1)}" r="3.5"><title>${esc(fmtDate(point.date))}: ${esc(numberText(point.value, digits))}</title></circle>`).join('');
   const firstDate = fmtDate(rows[0]?.date);
   const lastDate = fmtDate(rows.at(-1)?.to);
+  const tickStep = rows.length <= 14 ? 1 : Math.max(1, Math.ceil(rows.length / 10));
+  const dateLabels = rows.map((row, index) => {
+    if (index % tickStep !== 0 && index !== rows.length - 1) return '';
+    const label = fmtDate(row.date).slice(0, 5);
+    return `<text class="kpi-spark-date" x="${x(index).toFixed(1)}" y="122" text-anchor="middle">${esc(label)}</text>`;
+  }).join('');
   const gradientId = `kpi-fill-${metric.replace(/[^a-z0-9-]/gi, '')}`;
   const areaPath = `${path} L${x(points.at(-1).index).toFixed(1)},104 L${x(points[0].index).toFixed(1)},104 Z`;
-  return `<svg class="kpi-sparkline" viewBox="0 0 480 130" role="img" aria-label="${esc(t(title))}: ${esc(firstDate)} — ${esc(lastDate)}"><defs><linearGradient id="${gradientId}" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="${color}" stop-opacity=".25"></stop><stop offset="100%" stop-color="${color}" stop-opacity="0"></stop></linearGradient></defs><g class="kpi-spark-grid"><line x1="26" y1="24" x2="458" y2="24"></line><line x1="26" y1="60" x2="458" y2="60"></line><line x1="26" y1="96" x2="458" y2="96"></line></g><text class="kpi-spark-scale" x="22" y="20" text-anchor="end">${esc(numberText(max, digits))}</text><text class="kpi-spark-scale" x="22" y="99" text-anchor="end">${esc(numberText(min, digits))}</text><path class="kpi-spark-area" d="${areaPath}" style="fill:url(#${gradientId})"></path><path class="kpi-spark-line" d="${path}" style="stroke:${color}"></path>${dots}<text x="28" y="122">${esc(firstDate)}</text><text x="458" y="122" text-anchor="end">${esc(lastDate)}</text><text class="kpi-spark-trend" x="458" y="17" text-anchor="end" style="fill:${color}">${improving ? '↑' : declining ? '↓' : '→'}</text></svg>`;
+  return `<svg class="kpi-sparkline" viewBox="0 0 480 130" role="img" aria-label="${esc(t(title))}: ${esc(firstDate)} — ${esc(lastDate)}"><defs><linearGradient id="${gradientId}" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="${color}" stop-opacity=".25"></stop><stop offset="100%" stop-color="${color}" stop-opacity="0"></stop></linearGradient></defs><g class="kpi-spark-grid"><line x1="26" y1="24" x2="458" y2="24"></line><line x1="26" y1="60" x2="458" y2="60"></line><line x1="26" y1="96" x2="458" y2="96"></line></g><text class="kpi-spark-scale" x="22" y="20" text-anchor="end">${esc(numberText(max, digits))}</text><text class="kpi-spark-scale" x="22" y="99" text-anchor="end">${esc(numberText(min, digits))}</text><path class="kpi-spark-area" d="${areaPath}" style="fill:url(#${gradientId})"></path><path class="kpi-spark-line" d="${path}" style="stroke:${color}"></path>${dots}${dateLabels}<text class="kpi-spark-trend" x="458" y="17" text-anchor="end" style="fill:${color}">${improving ? '↑' : declining ? '↓' : '→'}</text></svg>`;
 }
 
 async function drawDashboard() {

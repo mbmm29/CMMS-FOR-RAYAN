@@ -252,6 +252,9 @@ def compute_kpi(
     report_by_id = {row.id: row for row in reports}
     items = db.query(DailyReportItem).all() if reports else []
     items = [row for row in items if row.report_id in report_by_id]
+    items_by_report = {}
+    for item in items:
+        items_by_report.setdefault(item.report_id, []).append(item)
 
     orders = db.query(WorkOrder).all()
     if technician_id:
@@ -287,6 +290,19 @@ def compute_kpi(
     hours_by_date = load_work_day_hours(db, previous_start, end)
     # Days without an explicit row follow today's 16/24 choice so the KPI toggle recalculates the period.
     basis_hours = day_work_hours(hours_by_date, date.today(), DEFAULT_WORK_DAY_HOURS)
+    annual_due_end = min(end, today)
+    annual_occurrences_all = db.query(AnnualPMDayTask, AnnualPMPlan.plant_id).join(
+        AnnualPMPlan, AnnualPMPlan.id == AnnualPMDayTask.plan_id,
+    ).filter(
+        AnnualPMDayTask.maintenance_type == 'Preventive',
+        AnnualPMDayTask.work_date >= start,
+        AnnualPMDayTask.work_date <= annual_due_end,
+    ).all() if start <= annual_due_end else []
+    annual_ids_all = [task.id for task, _plant_id in annual_occurrences_all]
+    annual_dispatches_all = {
+        row.annual_task_id: row
+        for row in db.query(PreventiveDispatch).filter(PreventiveDispatch.annual_task_id.in_(annual_ids_all)).all()
+    } if annual_ids_all else {}
 
     def pack(window_start, window_end):
         window_items = [
@@ -335,7 +351,7 @@ def compute_kpi(
                 return False
             if not scoped:
                 return True
-            linked = [row for row in items if row.report_id == report.id]
+            linked = items_by_report.get(report.id, [])
             if any(equipment_ok(row.equipment_id, row.plant_id, row.line_id) for row in linked):
                 return True
             if line_id or equipment_id:
@@ -395,25 +411,18 @@ def compute_kpi(
             overdue_now = bool(plan.next_due_date and plan.next_due_date < today)
             if completed_in_window and plan.pm_id not in late_pm_ids and not overdue_now:
                 on_time += 1
-        annual_occurrences = db.query(AnnualPMDayTask, AnnualPMPlan.plant_id).join(
-            AnnualPMPlan, AnnualPMPlan.id == AnnualPMDayTask.plan_id,
-        ).filter(
-            AnnualPMDayTask.maintenance_type == 'Preventive',
-            AnnualPMDayTask.work_date >= window_start,
-            AnnualPMDayTask.work_date <= min(window_end, today),
-        ).all()
-        annual_ids = [task.id for task, _plant_id in annual_occurrences]
-        annual_dispatches = {
-            row.annual_task_id: row
-            for row in db.query(PreventiveDispatch).filter(PreventiveDispatch.annual_task_id.in_(annual_ids)).all()
-        } if annual_ids else {}
+        annual_occurrences = [
+            (task, task_plant_id)
+            for task, task_plant_id in annual_occurrences_all
+            if window_start <= task.work_date <= min(window_end, today)
+        ]
         for task, task_plant_id in annual_occurrences:
             if not equipment_ok(task.machine_code, task_plant_id):
                 continue
             if technician_id and task.technician_id != technician_id:
                 continue
             due_plans.append(task)
-            dispatch = annual_dispatches.get(task.id)
+            dispatch = annual_dispatches_all.get(task.id)
             if dispatch and dispatch.status == 'Accepted' and dispatch.accepted_at:
                 if dispatch.accepted_at.date() <= task.work_date:
                     on_time += 1
@@ -705,7 +714,7 @@ def compute_kpi(
 
     current = pack(start, end)
     history = []
-    bucket_count = min(12, days)
+    bucket_count = min(365, days)
     for index in range(bucket_count):
         offset_start = (days * index) // bucket_count
         offset_end = max(offset_start, (days * (index + 1)) // bucket_count - 1)
