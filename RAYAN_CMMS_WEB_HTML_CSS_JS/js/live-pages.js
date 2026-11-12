@@ -1295,20 +1295,20 @@ async function drawDashboard() {
   ]);
   dateLabel([kpi.period?.from, kpi.period?.to]);
   const hourParts = [
-    { name: 'Preventive', value: hours.Preventive || 0, color: '#1269f3' },
-    { name: 'Corrective', value: hours.Corrective || 0, color: '#ff710d' },
-    { name: 'Emergency', value: hours.Emergency || 0, color: '#fa3038' },
-    { name: 'Routine', value: hours.Routine || 0, color: '#7439f5' },
-    { name: 'Inspection', value: hours.Inspection || 0, color: '#009c63' },
+    { name: 'Preventive', value: hours.Preventive || 0, color: '#22c7f2' },
+    { name: 'Corrective', value: hours.Corrective || 0, color: '#3276ff' },
+    { name: 'Emergency', value: hours.Emergency || 0, color: '#ffb82e' },
+    { name: 'Routine', value: hours.Routine || 0, color: '#16d6a0' },
+    { name: 'Inspection', value: hours.Inspection || 0, color: '#ef4d83' },
   ];
   const counts = kpi.order_counts || {};
   const orderParts = [
-    { name: 'Preventive', value: counts.Preventive || 0, color: '#1269f3' },
-    { name: 'Corrective', value: counts.Corrective || 0, color: '#ff710d' },
-    { name: 'Emergency', value: counts.Emergency || 0, color: '#fa3038' },
-    { name: 'Routine', value: counts.Routine || 0, color: '#7439f5' },
-    { name: 'Inspection', value: counts.Inspection || 0, color: '#009c63' },
-    { name: 'Lubrication', value: counts.Lubrication || 0, color: '#008d9c' },
+    { name: 'Preventive', value: counts.Preventive || 0, color: '#22c7f2' },
+    { name: 'Corrective', value: counts.Corrective || 0, color: '#3276ff' },
+    { name: 'Emergency', value: counts.Emergency || 0, color: '#ffb82e' },
+    { name: 'Routine', value: counts.Routine || 0, color: '#16d6a0' },
+    { name: 'Inspection', value: counts.Inspection || 0, color: '#ef4d83' },
+    { name: 'Lubrication', value: counts.Lubrication || 0, color: '#8b75ff' },
   ];
   const orderTotal = orderParts.reduce((sum, part) => sum + part.value, 0);
   const technicianOptions = store.technicians.map((row) => `<option value="${esc(row.technician_id)}"${ui.technicianId === row.technician_id ? ' selected' : ''}>${esc(row.name)}</option>`).join('');

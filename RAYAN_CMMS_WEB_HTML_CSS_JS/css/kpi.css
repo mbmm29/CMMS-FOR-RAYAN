@@ -177,8 +177,56 @@ body .kpi-target select,
 body .kpi-target input{width:100%;min-width:0;color:#f4f8ff;background:#071428;border:1px solid #2c528c;border-radius:10px}
 body .detail-button.primary{width:100%}
 
+/* Dense dark KPI dashboard inspired by the supplied analytics reference. */
+body[data-live-page="dashboard"] .content{
+  background:
+    radial-gradient(ellipse 72% 36% at 50% 0%,#11295655,transparent 68%),
+    linear-gradient(180deg,#080d1d 0%,#0a1125 56%,#080d1b 100%);
+}
+body[data-live-page="dashboard"] .metric-grid{grid-template-columns:repeat(6,minmax(0,1fr));gap:8px}
+body[data-live-page="dashboard"] .metric{
+  min-height:96px;padding:10px 12px;grid-template-columns:minmax(0,1fr) 32px;column-gap:8px;
+  border-color:#252d46;border-radius:9px;background:#0d1429;box-shadow:none
+}
+body[data-live-page="dashboard"] .metric h3{color:#eef4ff;font-size:11px}
+body[data-live-page="dashboard"] .metric b{color:#25d9f2;font-size:clamp(19px,1.8vw,26px)}
+body[data-live-page="dashboard"] .metric .glyph{width:28px;height:28px;font-size:14px;box-shadow:none}
+body[data-live-page="dashboard"] .metric .trend{color:#95a9cf;font-size:10px}
+body[data-live-page="dashboard"] .kpi-layout{grid-template-columns:repeat(2,minmax(0,1fr));gap:9px}
+body[data-live-page="dashboard"] .chart-wide{grid-column:auto}
+body[data-live-page="dashboard"] .kpi-pair{grid-column:1/-1;gap:9px}
+body[data-live-page="dashboard"] .panel.chart-panel,
+body[data-live-page="dashboard"] .kpi-card{
+  border:1px solid #252d46;border-radius:8px;background:#0d1429;box-shadow:none
+}
+body[data-live-page="dashboard"] .panel.chart-panel{padding:13px;overflow:hidden}
+body[data-live-page="dashboard"] .chart-panel h2{color:#f1f5ff;font-size:13px}
+body[data-live-page="dashboard"] .kpi-card{padding:11px 12px}
+body[data-live-page="dashboard"] .kpi-card h3{color:#dbe6fb}
+body[data-live-page="dashboard"] .kpi-card b{color:#25d9f2}
+body[data-live-page="dashboard"] .pareto-chart{height:300px}
+body[data-live-page="dashboard"] .pareto-chart .pareto-bar{fill:#286bff;opacity:.95}
+body[data-live-page="dashboard"] .pareto-chart .pareto-line{stroke:#20d7f3;stroke-width:2.2}
+body[data-live-page="dashboard"] .pareto-chart .pareto-dot{fill:#20d7f3;stroke:#071225}
+body[data-live-page="dashboard"] .pareto-chart .pareto-pct{fill:#5ce6f8}
+body[data-live-page="dashboard"] .pareto-legend-bar{background:#286bff!important}
+body[data-live-page="dashboard"] .pareto-legend-line{background:#20d7f3!important}
+body[data-live-page="dashboard"] .bump-chart .bump-series:not(.focus) path{stroke:#286bff;opacity:.82}
+body[data-live-page="dashboard"] .bump-chart .bump-series:not(.focus) circle{fill:#20d7f3}
+body[data-live-page="dashboard"] .bump-chart .bump-series.focus path{stroke:#20d7f3;stroke-width:2.8}
+body[data-live-page="dashboard"] .bump-chart .bump-series.focus circle{fill:#20d7f3;stroke:#e7fbff}
+body[data-live-page="dashboard"] .bump-chart .bump-series.focus text{fill:#75eafa}
+body[data-live-page="dashboard"] .donut{box-shadow:0 0 0 1px #ffffff0a,0 8px 24px #02081766}
+body[data-live-page="dashboard"] .donut:after{background:#0d1429}
+body[data-live-page="dashboard"] .area-legend{color:#c7d4ee}
+body[data-live-page="dashboard"] .area-legend li{color:#c7d4ee}
+
 @media(max-width:760px){
-  body .kpi-pair{grid-template-columns:1fr}
+  body .kpi-pair,
+  body[data-live-page="dashboard"] .kpi-layout{grid-template-columns:1fr}
+  body[data-live-page="dashboard"] .metric-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
+  body[data-live-page="dashboard"] .kpi-pair{grid-column:1/-1}
+  body[data-live-page="dashboard"] .chart-wide{grid-column:1/-1}
   html body .shell .content,
   html[dir="rtl"] body .shell .content{margin-inline-start:0;padding:calc(68px + env(safe-area-inset-top)) 13px calc(28px + env(safe-area-inset-bottom))}
   body .metric{min-height:0}
