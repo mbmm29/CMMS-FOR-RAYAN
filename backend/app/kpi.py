@@ -704,6 +704,24 @@ def compute_kpi(
         }
 
     current = pack(start, end)
+    history = []
+    bucket_count = min(12, days)
+    for index in range(bucket_count):
+        offset_start = (days * index) // bucket_count
+        offset_end = max(offset_start, (days * (index + 1)) // bucket_count - 1)
+        bucket_start = start + timedelta(days=offset_start)
+        bucket_end = min(end, start + timedelta(days=offset_end))
+        bucket = pack(bucket_start, bucket_end)
+        history.append({
+            'date': bucket_start.isoformat(),
+            'to': bucket_end.isoformat(),
+            **{key: bucket.get(key) for key in (
+                'pm_overdue', 'planned_pm_pct', 'unplanned_pm_pct', 'corrective_pct',
+                'preventive_pct', 'utilization', 'reliability', 'emergency_to_routine',
+                'emergency_to_preventive', 'wo_schedule', 'wo_overdue', 'backlog',
+                'failures', 'failure_rate_1000h',
+            )},
+        })
     previous = pack(previous_start, previous_end)
     life = []
     for row in components:
@@ -720,6 +738,7 @@ def compute_kpi(
     life.sort(key=lambda row: row['life_days'], reverse=True)
     targets = _targets_for(db, single_plant, line_id, equipment_id)
     current.update({
+        'history': history,
         'period': {'from': start.isoformat(), 'to': end.isoformat(), 'days': days},
         'previous': {key: previous.get(key) for key in (
             'availability', 'mtbf', 'mttr', 'pm_compliance', 'downtime_h', 'failures',

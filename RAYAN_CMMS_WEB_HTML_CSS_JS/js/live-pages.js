@@ -1260,6 +1260,30 @@ function shown(count, total, noun) {
   return `${t('Showing')} ${count} ${t('of')} ${total} ${t(noun)}`;
 }
 
+function kpiSparkline(history, metric, title, goodWhenRising = true, digits = 1) {
+  const rows = (Array.isArray(history) ? history : []).map((row) => ({
+    date: row.date,
+    value: row[metric] == null || row[metric] === '' ? null : Number(row[metric]),
+  }));
+  const points = rows.map((row, index) => ({ ...row, index })).filter((row) => Number.isFinite(row.value));
+  if (!points.length) return `<div class="kpi-spark-empty">${esc(t('No trend data in this period'))}</div>`;
+  const min = Math.min(...points.map((point) => point.value));
+  const max = Math.max(...points.map((point) => point.value));
+  const span = max - min || Math.max(Math.abs(max) * 0.08, 1);
+  const x = (index) => 5 + (rows.length <= 1 ? 230 : (index / (rows.length - 1)) * 230);
+  const y = (value) => 37 - ((value - min) / span) * 29;
+  const path = points.map((point, index) => `${index ? 'L' : 'M'}${x(point.index).toFixed(1)},${y(point.value).toFixed(1)}`).join(' ');
+  const first = points[0].value;
+  const last = points.at(-1).value;
+  const improving = goodWhenRising ? last > first : last < first;
+  const declining = goodWhenRising ? last < first : last > first;
+  const color = improving ? '#22d3a6' : declining ? '#fb7185' : '#36c8f3';
+  const dots = points.map((point) => `<circle cx="${x(point.index).toFixed(1)}" cy="${y(point.value).toFixed(1)}" r="2.2"><title>${esc(fmtDate(point.date))}: ${esc(numberText(point.value, digits))}</title></circle>`).join('');
+  const firstDate = fmtDate(rows[0]?.date);
+  const lastDate = fmtDate(rows.at(-1)?.to);
+  return `<svg class="kpi-sparkline" viewBox="0 0 240 62" role="img" aria-label="${esc(t(title))}: ${esc(firstDate)} — ${esc(lastDate)}"><g class="kpi-spark-grid"><line x1="4" y1="8" x2="236" y2="8"></line><line x1="4" y1="22" x2="236" y2="22"></line><line x1="4" y1="37" x2="236" y2="37"></line></g><path d="${path}" style="stroke:${color}"></path>${dots}<text x="4" y="57">${esc(firstDate)}</text><text x="236" y="57" text-anchor="end">${esc(lastDate)}</text><text class="kpi-spark-trend" x="236" y="11" text-anchor="end" style="fill:${color}">${improving ? '↑' : declining ? '↓' : '→'}</text></svg>`;
+}
+
 async function drawDashboard() {
   const params = new URLSearchParams();
   const plants = selectedPlantIds();
@@ -1317,7 +1341,7 @@ async function drawDashboard() {
     ? `<label class="kpi-shift">${esc(t('Work day'))}<span class="kpi-shift-toggle" role="group" aria-label="${esc(t('Work day'))}"><button type="button" data-kpi-hours="24" class="${dayHours === 24 ? 'active' : ''}"${shiftLocked ? ' disabled' : ''}>24 ${esc(t('h'))}</button><button type="button" data-kpi-hours="16" class="${dayHours === 16 ? 'active' : ''}"${shiftLocked ? ' disabled' : ''}>16 ${esc(t('h'))}</button></span><small class="kpi-shift-note">${esc(shiftLocked ? t('Work day locked at 08:00. Opens again tomorrow before 08:00.') : t('Saved for today. Selection locks at 08:00.'))}</small></label>`
     : '';
   const extraFilters = `<label>${t('Technician')}<select data-filter="technician"><option value="">${esc(t('All technicians'))}</option>${technicianOptions}</select></label><label>${t('From')}<input data-filter="from" type="date" value="${esc(ui.dateFrom)}"></label><label>${t('To')}<input data-filter="to" type="date" value="${esc(ui.dateTo)}"></label>${shiftFilter}`;
-  const card = (title, value, detail, note) => `<article class="kpi-card"><h3>${esc(t(title))}</h3><b>${value}</b><small>${esc(detail)}</small><small>${esc(note)}</small></article>`;
+  const card = (title, value, detail, note, metric, goodWhenRising = true, digits = 1) => `<article class="kpi-card"><h3>${esc(t(title))}</h3><b>${value}</b><small>${esc(detail)}</small><small>${esc(note)}</small>${kpiSparkline(kpi.history, metric, title, goodWhenRising, digits)}</article>`;
   const metricOption = (value, label) => `<option value="${value}">${esc(t(label))}</option>`;
   const targetForm = canMaintain() && plants.length <= 1 ? `<form id="kpi-target" class="live-form kpi-target"><b>${esc(t('KPI target for this plant / line / equipment'))}</b><label>${t('Metric')}<select name="metric">${metricOption('availability', 'Availability %')}${metricOption('utilization', 'Utilization %')}${metricOption('reliability', 'Reliability %')}${metricOption('mtbf', 'MTBF %')}${metricOption('mttr', 'MTTR hours')}${metricOption('pm_compliance', 'PM compliance %')}${metricOption('downtime_h', 'Downtime hours')}${metricOption('planned_pm_pct', 'Planned PM %')}${metricOption('preventive_pct', 'Preventive %')}${metricOption('emergency_to_routine', 'Emergency to routine %')}${metricOption('emergency_to_preventive', 'Emergency to preventive %')}${metricOption('corrective_pct', 'Corrective %')}${metricOption('wo_schedule', 'Schedule compliance %')}${metricOption('wo_completion', 'WO completion %')}${metricOption('backlog', 'Backlog %')}${metricOption('failure_rate_1000h', 'Failures / 1,000 h')}</select></label><label>${t('Target')}<input name="target_value" type="number" min="0" step="0.1" required></label><button class="detail-button primary" type="submit">${esc(t('Save target'))}</button><p id="kpi-target-error" class="form-error"></p></form>` : '';
   const components = (kpi.components || []).map((row) => `<div class="summary-row"><span>${esc(row.component_id)} · ${esc(row.name)}</span><b>${row.life_days} ${t('days')}${row.in_service ? '' : ` ${t('removed')}`}</b></div>`).join('') || `<p class="chart-empty">${esc(t('No component installation dates yet'))}</p>`;
@@ -1326,20 +1350,20 @@ async function drawDashboard() {
   workspace.innerHTML = `${filtersHtml({ multiPlant: true, equipmentSearch: false, extra: extraFilters })}
     <p class="kpi-period">${esc(t('Period'))} ${esc(fmtDate(kpi.period?.from))} – ${esc(fmtDate(kpi.period?.to))} · ${kpi.period?.days || 0} ${esc(t('days'))} · ${kpi.equipment_count || 0} ${esc(t('equipment'))} · ${esc(t('Work day'))} ${kpi.hours_per_day || dayHours} ${esc(t('h'))} · ${esc(t('idle time is 0 because it is not recorded'))}</p>
     <section class="kpi-board">
-      ${card('PM overdue', String(kpi.pm_overdue ?? 0), kpiTargetText(kpi.pm_overdue_pct, null, false), `${kpiText(kpi.pm_overdue_pct, 1, '%')} ${t('of')} ${kpi.pm_due || 0} ${t('due PM plans')}`)}
-      ${card('Planned PM', kpiText(kpi.planned_pm_pct, 1, '%'), kpiTargetText(kpi.planned_pm_pct, targets.planned_pm_pct, true), `${kpi.planned_pm || 0} ${t('planned of')} ${kpi.pm_total || 0}`)}
-      ${card('Unplanned PM', kpiText(kpi.unplanned_pm_pct, 1, '%'), t('Added from an identified need'), `${kpi.unplanned_pm || 0} ${t('unplanned of')} ${kpi.pm_total || 0}`)}
-      ${card('Corrective maintenance', kpiText(kpi.corrective_pct, 1, '%'), kpiTargetText(kpi.corrective_pct, targets.corrective_pct, false), `${kpiText(hours.Corrective, 1)} ${t('h of')} ${kpiText(kpi.total_hours, 1)}`)}
-      ${card('Preventive maintenance', kpiText(kpi.preventive_pct, 1, '%'), kpiTargetText(kpi.preventive_pct, targets.preventive_pct, true), `${kpiText(hours.Preventive, 1)} ${t('h of')} ${kpiText(kpi.total_hours, 1)}`)}
-      ${card('Utilization', kpiText(kpi.utilization, 1, '%'), kpiTargetText(kpi.utilization, targets.utilization, true), `${kpiText(kpi.utilization_operating_h, 1)} ${t('h operating of')} ${kpiText(kpi.utilization_available_h, 1)} · ${kpi.utilization_reports || 0} ${t('reports × 8 h')}`)}
-      ${card('Reliability', kpiText(kpi.reliability, 1, '%'), kpiTargetText(kpi.reliability, targets.reliability, true), kpi.mtbf_h == null ? t('No failures in this operating time') : `e^(− ${kpiText(kpi.operating_h, 1)} / ${kpiText(kpi.mtbf_h, 1)})`)}
-      ${card('Emergency to routine', kpiText(kpi.emergency_to_routine, 1, '%'), kpiTargetText(kpi.emergency_to_routine, targets.emergency_to_routine, false), `${kpiText(hours.Emergency, 1)} ${t('h emergency /')} ${kpiText(hours.Routine, 1)} ${t('h routine')}`)}
-      ${card('Emergency to preventive', kpiText(kpi.emergency_to_preventive, 1, '%'), kpiTargetText(kpi.emergency_to_preventive, targets.emergency_to_preventive, false), `${kpiText(hours.Emergency, 1)} ${t('h emergency /')} ${kpiText(hours.Preventive, 1)} ${t('h preventive')}`)}
-      ${card('Schedule compliance', kpiText(kpi.wo_schedule, 1, '%'), kpiTargetText(kpi.wo_schedule, targets.wo_schedule, true), `${kpi.wo_scheduled_done || 0} ${t('completed of')} ${kpi.wo_scheduled || 0} ${t('scheduled')} · ${t('emergency excluded')}`)}
-      ${card('Overdue work orders', String(kpi.wo_overdue ?? 0), `${kpiText(kpi.wo_overdue_pct, 1, '%')} ${t('of issued orders')}`, `${t('Aging')} 1–7: ${kpi.wo_aging?.['1-7'] || 0} · 8–30: ${kpi.wo_aging?.['8-30'] || 0} · 31+: ${kpi.wo_aging?.['31+'] || 0}`)}
-      ${card('Backlog', kpiText(kpi.backlog, 1, '%'), kpiTargetText(kpi.backlog, targets.backlog, false), `${kpi.wo_open || 0} ${t('unexecuted of')} ${kpi.wo_issued || 0}`)}
-      ${card('Failure count', String(kpi.failures ?? 0), t('Corrective and emergency events only'), t('PM, inspection and lubrication are not counted'))}
-      ${card('Failure rate', kpiText(kpi.failure_rate_1000h, 2), kpiTargetText(kpi.failure_rate_1000h, targets.failure_rate_1000h, false), t('Failures per 1,000 operating hours'))}
+      ${card('PM overdue', String(kpi.pm_overdue ?? 0), kpiTargetText(kpi.pm_overdue_pct, null, false), `${kpiText(kpi.pm_overdue_pct, 1, '%')} ${t('of')} ${kpi.pm_due || 0} ${t('due PM plans')}`, 'pm_overdue', false, 0)}
+      ${card('Planned PM', kpiText(kpi.planned_pm_pct, 1, '%'), kpiTargetText(kpi.planned_pm_pct, targets.planned_pm_pct, true), `${kpi.planned_pm || 0} ${t('planned of')} ${kpi.pm_total || 0}`, 'planned_pm_pct')}
+      ${card('Unplanned PM', kpiText(kpi.unplanned_pm_pct, 1, '%'), t('Added from an identified need'), `${kpi.unplanned_pm || 0} ${t('unplanned of')} ${kpi.pm_total || 0}`, 'unplanned_pm_pct', false)}
+      ${card('Corrective maintenance', kpiText(kpi.corrective_pct, 1, '%'), kpiTargetText(kpi.corrective_pct, targets.corrective_pct, false), `${kpiText(hours.Corrective, 1)} ${t('h of')} ${kpiText(kpi.total_hours, 1)}`, 'corrective_pct', false)}
+      ${card('Preventive maintenance', kpiText(kpi.preventive_pct, 1, '%'), kpiTargetText(kpi.preventive_pct, targets.preventive_pct, true), `${kpiText(hours.Preventive, 1)} ${t('h of')} ${kpiText(kpi.total_hours, 1)}`, 'preventive_pct')}
+      ${card('Utilization', kpiText(kpi.utilization, 1, '%'), kpiTargetText(kpi.utilization, targets.utilization, true), `${kpiText(kpi.utilization_operating_h, 1)} ${t('h operating of')} ${kpiText(kpi.utilization_available_h, 1)} · ${kpi.utilization_reports || 0} ${t('reports × 8 h')}`, 'utilization')}
+      ${card('Reliability', kpiText(kpi.reliability, 1, '%'), kpiTargetText(kpi.reliability, targets.reliability, true), kpi.mtbf_h == null ? t('No failures in this operating time') : `e^(− ${kpiText(kpi.operating_h, 1)} / ${kpiText(kpi.mtbf_h, 1)})`, 'reliability')}
+      ${card('Emergency to routine', kpiText(kpi.emergency_to_routine, 1, '%'), kpiTargetText(kpi.emergency_to_routine, targets.emergency_to_routine, false), `${kpiText(hours.Emergency, 1)} ${t('h emergency /')} ${kpiText(hours.Routine, 1)} ${t('h routine')}`, 'emergency_to_routine', false)}
+      ${card('Emergency to preventive', kpiText(kpi.emergency_to_preventive, 1, '%'), kpiTargetText(kpi.emergency_to_preventive, targets.emergency_to_preventive, false), `${kpiText(hours.Emergency, 1)} ${t('h emergency /')} ${kpiText(hours.Preventive, 1)} ${t('h preventive')}`, 'emergency_to_preventive', false)}
+      ${card('Schedule compliance', kpiText(kpi.wo_schedule, 1, '%'), kpiTargetText(kpi.wo_schedule, targets.wo_schedule, true), `${kpi.wo_scheduled_done || 0} ${t('completed of')} ${kpi.wo_scheduled || 0} ${t('scheduled')} · ${t('emergency excluded')}`, 'wo_schedule')}
+      ${card('Overdue work orders', String(kpi.wo_overdue ?? 0), `${kpiText(kpi.wo_overdue_pct, 1, '%')} ${t('of issued orders')}`, `${t('Aging')} 1–7: ${kpi.wo_aging?.['1-7'] || 0} · 8–30: ${kpi.wo_aging?.['8-30'] || 0} · 31+: ${kpi.wo_aging?.['31+'] || 0}`, 'wo_overdue', false, 0)}
+      ${card('Backlog', kpiText(kpi.backlog, 1, '%'), kpiTargetText(kpi.backlog, targets.backlog, false), `${kpi.wo_open || 0} ${t('unexecuted of')} ${kpi.wo_issued || 0}`, 'backlog', false)}
+      ${card('Failure count', String(kpi.failures ?? 0), t('Corrective and emergency events only'), t('PM, inspection and lubrication are not counted'), 'failures', false, 0)}
+      ${card('Failure rate', kpiText(kpi.failure_rate_1000h, 2), kpiTargetText(kpi.failure_rate_1000h, targets.failure_rate_1000h, false), t('Failures per 1,000 operating hours'), 'failure_rate_1000h', false, 2)}
     </section>
     <div class="kpi-pair">
     <section class="panel chart-panel"><h2>${esc(t('Maintenance hours'))}</h2><p class="kpi-note">${esc(t('Total'))} ${kpiText(kpi.total_hours, 1)} ${esc(t('from daily reports and work orders.'))}</p>${kpi.total_hours ? donut(hourParts, kpi.total_hours) : `<p class="chart-empty">${esc(t('No maintenance hours yet'))}</p>`}</section>
