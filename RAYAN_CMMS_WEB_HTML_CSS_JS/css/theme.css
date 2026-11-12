@@ -169,10 +169,11 @@ body .workspace.due-board{grid-template-columns:minmax(0,1fr)}
 .plan-panel li span{display:block;margin-top:4px}
 .plan-donut .donut{width:148px;height:148px;margin-top:8px}
 .plan-donut .area-legend{margin-top:8px}
-.annual-plan{min-width:0;padding:12px}
+.annual-plan{position:relative;min-width:0;padding:12px}
 .annual-plan-expanded{position:fixed!important;inset:10px;z-index:1000;max-height:calc(100dvh - 20px);overflow:auto;box-shadow:0 24px 80px #000b;border:1px solid #4b79bd;border-radius:16px}
 .annual-plan-expanded .annual-scroll{max-height:calc(100dvh - 220px);overscroll-behavior:contain;scroll-behavior:smooth}
-.annual-zoom{display:inline-flex;align-items:center;justify-content:center;min-width:42px!important;padding:0 8px!important}
+.annual-heading{display:flex;align-items:center;justify-content:space-between;gap:12px}
+.annual-zoom{display:inline-flex;flex:0 0 auto;align-items:center;justify-content:center;min-width:42px!important;margin:0;padding:0 8px!important}
 .annual-zoom svg{width:26px;height:22px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
 .annual-plan-expanded .annual-zoom svg{transform:rotate(180deg)}
 @media(prefers-reduced-motion:no-preference){::view-transition-old(root),::view-transition-new(root){animation-duration:260ms;animation-timing-function:cubic-bezier(.2,.75,.25,1)}}

@@ -2010,12 +2010,11 @@ async function drawAnnualPlan() {
     <div class="annual-bar">
       <label>${esc(t('Plant'))}<select id="annual-plant"><option value="">${esc(t('Choose a plant'))}</option>${options}</select></label>
       <label>${esc(t('Year'))}<input id="annual-year" type="number" min="2000" max="2100" value="${esc(ui.annualYear)}"${locked ? ' disabled' : ''}></label>
-      <button type="button" id="annual-zoom" class="detail-button annual-zoom" aria-label="${esc(ui.annualExpanded ? t('Restore annual plan size') : t('Expand annual plan'))}" aria-pressed="${ui.annualExpanded ? 'true' : 'false'}" title="${esc(ui.annualExpanded ? t('Restore annual plan size') : t('Expand annual plan'))}"><svg viewBox="0 0 32 24" aria-hidden="true"><path d="M11 4 3 12l8 8M21 4l8 8-8 8M3 12h26"/></svg></button>
       ${locked ? '' : `<button type="button" id="annual-add" class="detail-button">${esc(t('Add task'))}</button><button type="button" id="annual-copy" class="detail-button">${esc(t('Copy plan'))}</button><button type="button" id="annual-paste" class="detail-button"${ui.annualCopy ? '' : ' disabled'}>${esc(ui.annualCopy ? `${t('Paste plan')} · ${ui.annualCopy.plantName}` : t('Paste plan'))}</button>`}
       <button type="button" id="annual-export" class="detail-button">${esc(t('Export'))}</button>
       ${locked ? '' : `<button type="button" id="annual-save" class="detail-button primary">${esc(t('Save plan'))}</button>`}
     </div>
-    <h2 class="annual-title">${esc(t('Annual preventive maintenance plan'))}${formNo('annual_plan') ? ` · ${esc(formNo('annual_plan'))}` : ''}</h2>
+    <h2 class="annual-title annual-heading"><span>${esc(t('Annual preventive maintenance plan'))}${formNo('annual_plan') ? ` · ${esc(formNo('annual_plan'))}` : ''}</span><button type="button" id="annual-zoom" class="detail-button annual-zoom" aria-label="${esc(ui.annualExpanded ? t('Restore annual plan size') : t('Expand annual plan'))}" aria-pressed="${ui.annualExpanded ? 'true' : 'false'}" title="${esc(ui.annualExpanded ? t('Restore annual plan size') : t('Expand annual plan'))}"><svg viewBox="0 0 32 24" aria-hidden="true"><path d="M11 4 3 12l8 8M21 4l8 8-8 8M3 12h26"/></svg></button></h2>
     <div class="annual-scroll"><table class="annual-sheet">
       <thead><tr><th rowspan="2">${esc(t('Machine name'))}</th><th rowspan="2">${esc(t('Line number'))}</th><th rowspan="2">${esc(t('Task description'))}</th><th rowspan="2">${esc(t('Maintenance type'))}</th><th colspan="2">${esc(t('Frequency'))}</th>${monthHead}<th rowspan="2"></th></tr>
       <tr><th>${esc(t('Every (days)'))}</th><th>${esc(t('By running hours'))}</th>${weekHead}</tr></thead>
