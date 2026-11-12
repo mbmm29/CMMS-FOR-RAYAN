@@ -2001,7 +2001,7 @@ async function drawAnnualPlan() {
     ? `<tr><td class="annual-empty" colspan="55">${esc(t('Choose a plant, then set the plan.'))}</td></tr>`
     : (items.length ? items.map((item) => annualRowHtml(item, locked)).join('') : `<tr><td class="annual-empty" colspan="55">${esc(t('No records yet'))}</td></tr>`);
   document.getElementById('workspace').className = 'workspace';
-  document.getElementById('workspace').innerHTML = `<section class="panel annual-plan${ui.annualWidth ? ' annual-plan-resized' : ''}"${ui.annualWidth ? ` style="--annual-plan-width:${ui.annualWidth}px"` : ''}>${tabsHtml(['Annual plan', 'Due tasks'])}
+  document.getElementById('workspace').innerHTML = `<section class="panel annual-plan${ui.annualWidth ? ' annual-plan-resized' : ''}"${ui.annualWidth ? ` style="--annual-plan-width:${ui.annualWidth}px"` : ''}><div class="annual-plan-header">${tabsHtml(['Annual plan', 'Due tasks'])}
     <div class="annual-bar">
       <label>${esc(t('Plant'))}<select id="annual-plant"><option value="">${esc(t('Choose a plant'))}</option>${options}</select></label>
       <label>${esc(t('Year'))}<input id="annual-year" type="number" min="2000" max="2100" value="${esc(ui.annualYear)}"${locked ? ' disabled' : ''}></label>
@@ -2009,7 +2009,7 @@ async function drawAnnualPlan() {
       <button type="button" id="annual-export" class="detail-button">${esc(t('Export'))}</button>
       ${locked ? '' : `<button type="button" id="annual-save" class="detail-button primary">${esc(t('Save plan'))}</button>`}
     </div>
-    <h2 class="annual-title">${esc(t('Annual preventive maintenance plan'))}${formNo('annual_plan') ? ` · ${esc(formNo('annual_plan'))}` : ''}</h2>
+    <h2 class="annual-title">${esc(t('Annual preventive maintenance plan'))}${formNo('annual_plan') ? ` · ${esc(formNo('annual_plan'))}` : ''}</h2></div>
     <div class="annual-scroll"><table class="annual-sheet">
       <thead><tr><th rowspan="2">${esc(t('Machine name'))}</th><th rowspan="2">${esc(t('Line number'))}</th><th rowspan="2">${esc(t('Task description'))}</th><th rowspan="2">${esc(t('Maintenance type'))}</th><th colspan="2">${esc(t('Frequency'))}</th>${monthHead}<th rowspan="2"></th></tr>
       <tr><th>${esc(t('Every (days)'))}</th><th>${esc(t('By running hours'))}</th>${weekHead}</tr></thead>
