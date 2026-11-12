@@ -3771,6 +3771,56 @@ EQUIPMENT_LOG_TYPES = {
 }
 
 
+def machine_log_spare_parts(db: Session, equipment_id: str, report_parts: str | None) -> str | None:
+    """Keep only catalog parts linked to this equipment in its maintenance log."""
+    if not equipment_id or not report_parts:
+        return None
+
+    from .spare_parts_import import normalize_part_number
+
+    linked_part_ids = {
+        row.part_id
+        for row in db.query(SparePartEquipment.part_id)
+        .filter(SparePartEquipment.equipment_id == equipment_id)
+        .all()
+    }
+    if not linked_part_ids:
+        return None
+
+    linked_parts = db.query(SparePart).filter(SparePart.part_id.in_(linked_part_ids)).all()
+    by_number = {
+        normalize_part_number(part.part_number).casefold(): part
+        for part in linked_parts
+        if normalize_part_number(part.part_number)
+    }
+    matched_lines = []
+    for raw_line in str(report_parts).splitlines():
+        fields = [field.strip() for field in raw_line.split('|')]
+        part_number = ''
+        quantity = ''
+        for field in fields:
+            key, separator, value = field.partition(':')
+            if not separator:
+                continue
+            if key.strip().casefold() == 'no':
+                part_number = value.strip()
+            elif key.strip().casefold() == 'qty':
+                quantity = value.strip()
+
+        normalized_number = normalize_part_number(part_number).casefold()
+        part = by_number.get(normalized_number) if normalized_number else None
+        if not part:
+            continue
+
+        safe_name = (part.name or '').replace('|', ' ').strip()
+        safe_number = (part.part_number or '').replace('|', ' ').strip()
+        safe_quantity = (quantity or '—').replace('|', ' ').strip()
+        matched_lines.append(
+            f'{len(matched_lines) + 1} | {safe_name} | No: {safe_number} | Qty: {safe_quantity}'
+        )
+    return '\n'.join(matched_lines) or None
+
+
 def upsert_machine_log_from_daily_item(db: Session, report, row):
     """Write one daily-report activity into the equipment maintenance log."""
     kind = (getattr(row, 'maintenance_type', None) or '').strip()
@@ -3830,7 +3880,9 @@ def upsert_machine_log_from_daily_item(db: Session, report, row):
     record.start_time = getattr(row, 'maintenance_start', None)
     record.end_time = getattr(row, 'maintenance_end', None)
     record.downtime_h = getattr(row, 'downtime_h', None)
-    record.spare_parts = getattr(row, 'spare_parts', None)
+    record.spare_parts = machine_log_spare_parts(
+        db, equipment_id, getattr(row, 'spare_parts', None)
+    )
     db.flush()
     if wo_id:
         record = merge_machine_records_for_wo(db, wo_id) or record

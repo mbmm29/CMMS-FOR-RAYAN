@@ -2731,18 +2731,22 @@ function logCode(kind) {
 function logParts(text) {
   const names = [];
   const numbers = [];
+  const quantities = [];
   String(text || '').split('\n').map((line) => line.trim()).filter(Boolean).forEach((line) => {
-    const match = line.match(/^\d+ \| (.*?) \| No: (.*)$/);
+    const match = line.match(/^\d+\s*\|\s*(.*?)\s*\|\s*No:\s*([^|]*?)(?:\s*\|\s*Qty:\s*(.*))?$/i);
     if (!match) {
       names.push(line);
       return;
     }
     if (match[1] && match[1] !== '—') names.push(match[1]);
     if (match[2] && match[2] !== '—') numbers.push(match[2]);
+    const quantity = String(match[3] || '').trim();
+    if (quantity && quantity !== '—' && quantity !== '-') quantities.push(quantity);
   });
   return {
     names: names.join('، ') || '—',
     numbers: numbers.join('، ') || '—',
+    quantity: quantities.join('، ') || '—',
   };
 }
 
@@ -2769,7 +2773,7 @@ function machinePlace(equipment) {
 function machineLogPaper(equipment, rows) {
   const body = rows.map((row, index) => {
     const kind = maintenanceKind(row);
-    const parts = kind === 'Oil change' ? oilChangeParts(row) : { ...logParts(row.spare_parts), quantity: '—', work: row.action || row.description || '—' };
+    const parts = kind === 'Oil change' ? oilChangeParts(row) : { ...logParts(row.spare_parts), work: row.action || row.description || '—' };
     const reason = kind === 'Oil change' ? t('Oil change') : (row.cause || '—');
     const downtime = row.downtime_h == null || row.downtime_h === '' ? '—' : numberText(row.downtime_h, 2);
     const remove = canMaintain() ? `<td class="no-print"><button type="button" class="detail-button danger log-delete" data-delete="/machine-records" data-delete-id="${esc(row.id)}" data-delete-keep="1">${esc(t('Delete'))}</button></td>` : '';
