@@ -2372,6 +2372,105 @@ function equipmentTabs() {
   }).join('')}</div>`;
 }
 
+function categoryEquipmentForPlan() {
+  const needle = String(ui.equipmentQuery || '').trim().toLowerCase();
+  if (!needle) return { categories: [], equipment: [] };
+  const scopedEquipment = visibleEquipment('');
+  const categories = [...new Set(scopedEquipment.map((item) => String(item.equipment_type || item.category || '').trim())
+    .filter((category) => category && category.toLowerCase().includes(needle)))];
+  const categoryKeys = new Set(categories.map((category) => category.toLowerCase()));
+  return {
+    categories,
+    equipment: scopedEquipment.filter((item) => categoryKeys.has(String(item.equipment_type || item.category || '').trim().toLowerCase())),
+  };
+}
+
+function openCategoryPmPlan(categories, equipment) {
+  const plantName = (item) => store.plants.find((plant) => plant.plant_id === item.plant_id)?.name || item.plant_id || t('No plant');
+  const options = equipment.map((item, index) => {
+    const line = lineText(store.lines.find((row) => row.line_id === item.line_id));
+    return `<label class="category-pm-equipment"><input type="checkbox" value="${index}" checked><span><b>${esc(item.equipment_id)} — ${esc(item.name)}</b><small>${esc(item.equipment_type || item.category || '')} · ${esc(plantName(item))}${line ? ` · ${esc(line)}` : ''}</small></span></label>`;
+  }).join('');
+  const overlay = document.createElement('div');
+  overlay.className = 'category-pm-overlay';
+  overlay.innerHTML = `<section class="category-pm-dialog" role="dialog" aria-modal="true" aria-labelledby="category-pm-title"><header><div><h2 id="category-pm-title">${esc(t('Create preventive plan for category'))}</h2><p>${esc(categories.join(' · '))} · ${equipment.length} ${esc(t('equipment'))}</p></div><button type="button" class="category-pm-close" aria-label="${esc(t('Close'))}">×</button></header><form id="category-pm-form" class="live-form"><div class="category-pm-fields"><label>${esc(t('Year'))}<input name="year" type="number" min="2000" max="2100" value="${new Date().getFullYear()}" required></label><label>${esc(t('Every (days)'))}<input name="frequency_time" type="number" min="1" max="366" required placeholder="30"></label><label>${esc(t('By running hours'))}<input name="frequency_hours" inputmode="decimal" maxlength="40" placeholder="500 h"></label></div><label class="category-pm-task">${esc(t('Task description'))}<textarea name="task" rows="3" required placeholder="${esc(t('Task description'))}"></textarea></label><div class="category-pm-list-head"><b>${esc(t('Equipment in this category'))}</b><button type="button" id="category-pm-toggle">${esc(t('Select none'))}</button></div><div class="category-pm-list">${options}</div><p id="category-pm-error" class="form-error"></p><footer><button type="button" class="detail-button" id="category-pm-cancel">${esc(t('Cancel'))}</button><button type="submit" class="detail-button primary" id="category-pm-save">${esc(t('Save to plant annual plans'))}</button></footer></form></section>`;
+  document.body.appendChild(overlay);
+  const close = () => overlay.remove();
+  overlay.querySelector('.category-pm-close')?.addEventListener('click', close);
+  overlay.querySelector('#category-pm-cancel')?.addEventListener('click', close);
+  overlay.addEventListener('click', (event) => { if (event.target === overlay) close(); });
+  overlay.querySelector('#category-pm-toggle')?.addEventListener('click', (event) => {
+    const boxes = [...overlay.querySelectorAll('.category-pm-list input[type="checkbox"]')];
+    const select = boxes.some((box) => !box.checked);
+    boxes.forEach((box) => { box.checked = select; });
+    event.currentTarget.textContent = t(select ? 'Select none' : 'Select all');
+  });
+  overlay.querySelector('#category-pm-form')?.addEventListener('submit', async (event) => {
+    event.preventDefault();
+    const form = event.currentTarget;
+    const error = overlay.querySelector('#category-pm-error');
+    const button = overlay.querySelector('#category-pm-save');
+    const data = new FormData(form);
+    const year = Number(data.get('year'));
+    const frequency = Number(data.get('frequency_time'));
+    const task = String(data.get('task') || '').trim();
+    const frequencyHours = String(data.get('frequency_hours') || '').trim();
+    const chosen = [...overlay.querySelectorAll('.category-pm-list input[type="checkbox"]:checked')]
+      .map((box) => equipment[Number(box.value)]).filter(Boolean);
+    if (!chosen.length) { error.textContent = t('Select at least one equipment.'); return; }
+    if (!Number.isInteger(year) || year < 2000 || year > 2100 || !Number.isInteger(frequency) || frequency < 1 || frequency > 366 || !task) {
+      error.textContent = t('Enter a task, a valid year, and a frequency between 1 and 366 days.');
+      return;
+    }
+    const grouped = new Map();
+    chosen.forEach((item) => {
+      if (!item.plant_id) return;
+      if (!grouped.has(item.plant_id)) grouped.set(item.plant_id, []);
+      grouped.get(item.plant_id).push(item);
+    });
+    if (!grouped.size) { error.textContent = t('The selected equipment must belong to a plant.'); return; }
+    button.disabled = true;
+    let added = 0;
+    try {
+      for (const [plantId, plantEquipment] of grouped) {
+        const existing = await apiRequest(`/annual-pm?plant_id=${encodeURIComponent(plantId)}&year=${year}`);
+        const items = [...(existing.items || [])];
+        let plantAdded = 0;
+        plantEquipment.forEach((item) => {
+          const duplicate = items.some((row) => row.machine_code === item.equipment_id
+            && String(row.task || '').trim().toLowerCase() === task.toLowerCase()
+            && row.frequency_time === String(frequency));
+          if (duplicate) return;
+          items.push({
+            machine_code: item.equipment_id,
+            machine_name: item.name,
+            task,
+            frequency_time: String(frequency),
+            frequency_hours: frequencyHours,
+            maintenance_type: 'Preventive',
+            line_id: item.line_id || '',
+            line_key: '',
+            weeks: '',
+            days: '',
+          });
+          plantAdded += 1;
+        });
+        if (plantAdded) {
+          await apiRequest('/annual-pm', { method: 'PUT', body: JSON.stringify({ plant_id: plantId, year, items }) });
+          added += plantAdded;
+        }
+      }
+      close();
+      store = null;
+      toast(added ? t('Preventive plan added to {count} equipment.').replace('{count}', String(added)) : t('These category tasks are already in the annual plan.'));
+      await paint('equipment');
+    } catch (exception) {
+      button.disabled = false;
+      error.textContent = added ? `${t(exception.message)} · ${t('Saved for')} ${added}` : t(exception.message);
+    }
+  });
+}
+
 function equipmentDetail(selected) {
   const capacity = selected?.capacity == null ? '—' : `${selected.capacity}${selected.capacity_unit ? ` ${selected.capacity_unit}` : ''}`;
   const actions = selected?.equipment_id && canMaintain()
@@ -2507,6 +2606,10 @@ function drawEquipment() {
     || rows.find((item) => item.equipment_id === ui.rowKey)
     || rows[0];
   const all = visibleEquipment();
+  const categoryPlan = categoryEquipmentForPlan();
+  const categoryAction = canMaintain() && categoryPlan.equipment.length
+    ? `<div class="category-plan-action"><div><b>${esc(t('Category preventive plan'))}</b><small>${esc(categoryPlan.categories.join(' · '))} · ${categoryPlan.equipment.length} ${esc(t('equipment'))}</small></div><button type="button" class="detail-button primary" id="category-pm-open">${esc(t('Set preventive plan'))}</button></div>`
+    : '';
   document.getElementById('metric-grid').innerHTML = metrics([
     ['Total Equipment', String(all.length), '▣', 'blue', ''],
     ['Operational', String(all.filter((item) => item.status === 'Running' || item.status === 'Operational').length), '✓', 'green', ''],
@@ -2522,7 +2625,8 @@ function drawEquipment() {
       ? equipmentForm(selected)
       : equipmentDetail(selected);
   document.getElementById('workspace').className = 'workspace';
-  document.getElementById('workspace').innerHTML = `<section class="panel">${filtersHtml()}${equipmentTabs()}${tableShell(['Equipment Code', 'Equipment Name', 'Category', 'Location (Plant / Line)', 'Status', 'Condition', 'Criticality'], body, shown(rows.length, all.length, 'equipment'))}</section>${detail}`;
+  document.getElementById('workspace').innerHTML = `<section class="panel">${filtersHtml()}${categoryAction}${equipmentTabs()}${tableShell(['Equipment Code', 'Equipment Name', 'Category', 'Location (Plant / Line)', 'Status', 'Condition', 'Criticality'], body, shown(rows.length, all.length, 'equipment'))}</section>${detail}`;
+  document.getElementById('category-pm-open')?.addEventListener('click', () => openCategoryPmPlan(categoryPlan.categories, categoryPlan.equipment));
   if (selected && ui.mode === 'view') {
     if (canMaintain()) {
       const sectionForm = lineSections(selected.line_id).length

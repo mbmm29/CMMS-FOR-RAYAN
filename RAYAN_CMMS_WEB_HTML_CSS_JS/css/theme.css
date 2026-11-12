@@ -1147,3 +1147,40 @@ body.technician-interface .workspace.sop-board .detail{display:none}
   .app .new-report-button{flex:1 1 160px}
   .annual-scroll,.sheet-scroll,.table-wrap,.table-container{max-width:100%}
 }
+
+body[data-live-page="equipment"] .category-plan-action{display:flex;align-items:center;justify-content:space-between;gap:12px;margin:12px;padding:12px 14px;border:1px solid #2a4f88;border-radius:12px;background:linear-gradient(135deg,#10284f,#0b1d3a)}
+body[data-live-page="equipment"] .category-plan-action>div{display:grid;gap:4px;min-width:0}
+body[data-live-page="equipment"] .category-plan-action b{color:#f4f8ff;font-size:13px}
+body[data-live-page="equipment"] .category-plan-action small{color:#b7c9e6;font-size:11px;overflow-wrap:anywhere}
+body[data-live-page="equipment"] .category-plan-action .detail-button{width:auto;flex:0 0 auto;margin:0}
+.category-pm-overlay{position:fixed;inset:0;z-index:1400;display:flex;align-items:center;justify-content:center;padding:18px;background:#020817b8}
+.category-pm-dialog{width:min(720px,100%);max-height:min(90vh,900px);display:flex;flex-direction:column;overflow:hidden;border:1px solid #315b97;border-radius:16px;background:#0b1c38;color:#e7eefc;box-shadow:0 24px 70px #0009}
+.category-pm-dialog>header{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;padding:16px 18px;border-bottom:1px solid #263f68;background:#10284f}
+.category-pm-dialog>header h2{margin:0;color:#f4f8ff;font-size:17px}
+.category-pm-dialog>header p{margin:5px 0 0;color:#afc4e4;font-size:12px}
+.category-pm-close{width:32px;height:32px;border:1px solid #375a8b;border-radius:8px;background:#0b1c38;color:#fff;font-size:22px;cursor:pointer}
+.category-pm-dialog .live-form{display:flex;flex-direction:column;gap:12px;min-height:0;padding:16px 18px;overflow:auto}
+.category-pm-fields{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}
+.category-pm-fields label,.category-pm-task{display:grid;gap:6px;min-width:0;color:#b7c9e6;font-size:12px}
+.category-pm-dialog .live-form input:not([type="checkbox"]),.category-pm-dialog .live-form textarea{width:100%;min-width:0;margin:0;padding:9px 10px;border:1px solid #2c528c;border-radius:9px;background:#071428;color:#f4f8ff;font:13px Arial,sans-serif}
+.category-pm-dialog .live-form input[type="number"]{height:38px}
+.category-pm-dialog .live-form textarea{resize:vertical}
+.category-pm-list-head{display:flex;justify-content:space-between;align-items:center;gap:10px;color:#f4f8ff;font-size:12px}
+.category-pm-list-head button{border:0;background:none;color:#7ec4ff;font:12px Arial,sans-serif;cursor:pointer}
+.category-pm-list{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:6px;max-height:260px;overflow:auto;padding:8px;border:1px solid #263f68;border-radius:10px;background:#08152b}
+.category-pm-equipment{display:flex;align-items:flex-start;gap:8px;min-width:0;padding:7px;border-radius:7px;color:#f4f8ff;cursor:pointer}
+.category-pm-equipment:hover{background:#10284f}
+.category-pm-equipment input{margin:2px 0 0;accent-color:#3b82f6;flex:0 0 auto}
+.category-pm-equipment span{display:grid;gap:3px;min-width:0}
+.category-pm-equipment b{font-size:11px;overflow-wrap:anywhere}
+.category-pm-equipment small{color:#9eb4d6;font-size:10px;overflow-wrap:anywhere}
+.category-pm-dialog .live-form footer{display:flex;justify-content:flex-end;gap:8px;position:sticky;bottom:-16px;margin:0 -18px -16px;padding:10px 18px;background:#0b1c38;border-top:1px solid #263f68}
+.category-pm-dialog .live-form footer .detail-button{width:auto;min-width:105px;margin:0}
+@media(max-width:680px){
+  .category-pm-fields{grid-template-columns:1fr}
+  .category-pm-list{grid-template-columns:1fr;max-height:38vh}
+  .category-pm-dialog .live-form footer{flex-wrap:wrap}
+  .category-pm-dialog .live-form footer .detail-button{flex:1 1 140px}
+  body[data-live-page="equipment"] .category-plan-action{align-items:stretch;flex-direction:column}
+  body[data-live-page="equipment"] .category-plan-action .detail-button{width:100%}
+}
