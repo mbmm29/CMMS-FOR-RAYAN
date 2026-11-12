@@ -387,6 +387,7 @@ function equipmentMatchesQuery(item, query = ui.equipmentQuery) {
     item?.equipment_id,
     item?.name,
     item?.equipment_type,
+    item?.category,
     item?.model,
     item?.serial_number,
   ];
@@ -616,7 +617,8 @@ function filtersHtml(options = {}) {
   const searchFilter = options.equipmentSearch === false
     ? ''
     : `<label class="equipment-query">${esc(t('Search'))}<span class="equipment-query-row"><input id="equipment-query" type="search" value="${esc(ui.equipmentQuery || '')}" placeholder="${esc(t('Number, name, or category'))}" autocomplete="off"><button type="button" class="detail-button" id="equipment-query-go">${esc(t('Search'))}</button></span></label>`;
-  return `<div class="live-filters">
+  const className = options.className ? ` ${esc(options.className)}` : '';
+  return `<div class="live-filters${className}">
     ${plantFilter}
     <label>${t('Line')}<select data-filter="line">${option('', t('All lines'), ui.lineId)}${scopedLines.map((line) => option(line.line_id, line.name, ui.lineId)).join('')}</select></label>
     <label>${t('Section')}<select data-filter="section">${option('', t('All sections'), ui.sectionId)}${sections.map((section) => option(section.section_id, section.name, ui.sectionId)).join('')}</select></label>
@@ -629,6 +631,23 @@ function filtersHtml(options = {}) {
 function applyEquipmentQuery(raw) {
   const query = String(raw || '').trim();
   ui.equipmentQuery = query;
+  if (ui.page === 'machine-records') {
+    ui.equipmentId = '';
+    if (query) {
+      const matches = visibleEquipment();
+      if (matches.length === 1) {
+        ui.equipmentId = matches[0].equipment_id;
+        ui.rowKey = matches[0].equipment_id;
+      } else {
+        ui.rowKey = '';
+        if (!matches.length) toast(t('No equipment found'));
+      }
+    } else {
+      ui.rowKey = '';
+    }
+    draw(ui.page);
+    return;
+  }
   if (!query) {
     ui.rowKey = ui.equipmentId || '';
     draw(ui.page);
@@ -1354,7 +1373,7 @@ function assetList(selectedCode, options = {}) {
     items.sort((a, b) => (order.get(a.equipment_id) ?? 9999) - (order.get(b.equipment_id) ?? 9999));
   }
   items = items.filter((item) => equipmentMatchesQuery(item));
-  return `<aside class="equipment-list"><h3>${esc(t(heading))}</h3><label class="mini-search">⌕ <input id="asset-search" placeholder="${esc(t('Search equipment...'))}"></label>${items.map((item) => {
+  return `<aside class="equipment-list">${options.recordFilters ? filtersHtml({ className: 'record-filters' }) : ''}<h3>${esc(t(heading))}</h3><label class="mini-search">⌕ <input id="asset-search" placeholder="${esc(t('Search equipment...'))}"></label>${items.map((item) => {
     const missing = markMissingSop && withSop && !withSop.has(item.equipment_id);
     const classes = `asset${item.equipment_id === selectedCode ? ' selected' : ''}${missing ? ' missing-sop' : ''}`;
     const title = missing ? ` title="${esc(t('No SOP file'))}"` : '';
@@ -2763,12 +2782,18 @@ function machineLogPaper(equipment, rows) {
 }
 
 function drawRecords() {
-  const top = topEquipmentByLogCount(10);
+  const ranked = topEquipmentByLogCount(Number.MAX_SAFE_INTEGER);
+  const top = ranked.slice(0, 10);
   const topIds = top.map((row) => row.item.equipment_id);
-  const countById = Object.fromEntries(top.map((row) => [row.item.equipment_id, row.count]));
+  const countById = Object.fromEntries(ranked.map((row) => [row.item.equipment_id, row.count]));
   let chosen = ui.equipmentId;
-  if (chosen && !topIds.includes(chosen)) {
-    chosen = topIds[0] || '';
+  const searching = Boolean(String(ui.equipmentQuery || '').trim());
+  const listItems = searching || (chosen && !topIds.includes(chosen))
+    ? visibleEquipment()
+    : top.map((row) => row.item);
+  const visibleIds = listItems.map((item) => item.equipment_id);
+  if (chosen && !visibleIds.includes(chosen)) {
+    chosen = visibleIds[0] || '';
     ui.equipmentId = chosen;
   }
   const equipment = store.equipment.find((item) => item.equipment_id === chosen) || null;
@@ -2787,13 +2812,15 @@ function drawRecords() {
   dateLabel(listed.map((row) => row.record_date));
   document.getElementById('workspace').className = 'workspace log-board';
   document.getElementById('workspace').innerHTML = `<section class="panel"><div class="split">${assetList(chosen, {
-    items: top.map((row) => row.item),
-    orderIds: topIds,
+    items: listItems,
+    orderIds: ranked.map((row) => row.item.equipment_id),
     counts: countById,
     heading: 'Top 10 by maintenance',
-    emptyNote: 'No equipment with maintenance actions yet.',
+    emptyNote: searching ? 'No equipment found' : 'No equipment with maintenance actions yet.',
+    recordFilters: true,
   })}<div class="asset-view">${tabsHtml(['All', 'Preventive', 'Corrective', 'Emergency', 'Routine', 'Inspection', 'Oil change'])}${chosen ? `${machineLogPaper(equipment, rows)}<div id="equipment-log-motor" class="equipment-motor log-temp-panel"></div>` : `<p class="live-note">${esc(t('Select a machine to open its maintenance log.'))}</p>`}</div></div></section>`;
   bindAssets();
+  bindFilters();
   bindRows();
   bindDeletes();
   if (chosen && equipment) loadEquipmentMotor(equipment, { boxId: 'equipment-log-motor', tempOnly: true });

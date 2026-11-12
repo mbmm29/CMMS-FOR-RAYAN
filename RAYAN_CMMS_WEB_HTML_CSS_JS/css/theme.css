@@ -421,6 +421,27 @@ body .daily-paper .lube-machine input[data-field="line"][data-resolved="1"]{back
 body .motor-paper.lube-paper .motor-table input[readonly]{font-weight:800;background:#f3f7ff}
 .nav-link.motor-nav[hidden]{display:none!important}
 body .workspace.log-board{display:block;width:100%;min-width:0;max-width:100%}
+body .workspace.log-board .record-filters{
+  display:grid;grid-template-columns:minmax(0,1fr);grid-column:auto;gap:8px;width:100%;min-width:0;
+  margin:0 0 14px;padding:12px;border:1px solid #2a4f88;border-radius:14px;
+  background:linear-gradient(180deg,#10284fcc,#0c1d3ccc);
+}
+body .workspace.log-board .record-filters label{min-width:0;color:#b7c9e6;font-size:11px;gap:6px}
+body .workspace.log-board .record-filters select,
+body .workspace.log-board .record-filters input[type="search"]{
+  width:100%;min-width:0;height:36px;padding:0 9px;border:1px solid #2c528c;border-radius:9px;
+  background:#071428;color:#f4f8ff;
+}
+body .workspace.log-board .record-filters .equipment-query{min-width:0}
+body .workspace.log-board .record-filters .equipment-query-row{display:flex;gap:6px;min-width:0}
+body .workspace.log-board .record-filters .equipment-query-row input[type="search"]{flex:1 1 auto}
+body .workspace.log-board .record-filters .equipment-query-row .detail-button{
+  flex:0 0 auto;width:auto;min-width:62px;height:36px;min-height:36px;margin:0;padding:0 10px;border-radius:9px;
+}
+body .workspace.log-board .record-filters ~ .mini-search{display:none}
+@media(max-width:760px){
+  .shell .workspace.log-board .equipment-list{display:block;max-height:45vh;overflow:auto;border-inline-end:0;border-bottom:1px solid #23406e}
+}
 .workspace.log-board .panel,
 .workspace.log-board .split,
 .workspace.log-board .asset-view,
