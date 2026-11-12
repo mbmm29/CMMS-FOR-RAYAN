@@ -2393,7 +2393,8 @@ function openCategoryPmPlan(categories, equipment) {
   }).join('');
   const overlay = document.createElement('div');
   overlay.className = 'category-pm-overlay';
-  overlay.innerHTML = `<section class="category-pm-dialog" role="dialog" aria-modal="true" aria-labelledby="category-pm-title"><header><div><h2 id="category-pm-title">${esc(t('Create preventive plan for category'))}</h2><p>${esc(categories.join(' · '))} · ${equipment.length} ${esc(t('equipment'))}</p></div><button type="button" class="category-pm-close" aria-label="${esc(t('Close'))}">×</button></header><form id="category-pm-form" class="live-form"><div class="category-pm-fields"><label>${esc(t('Year'))}<input name="year" type="number" min="2000" max="2100" value="${new Date().getFullYear()}" required></label><label>${esc(t('Every (days)'))}<input name="frequency_time" type="number" min="1" max="366" required placeholder="30"></label><label>${esc(t('By running hours'))}<input name="frequency_hours" inputmode="decimal" maxlength="40" placeholder="500 h"></label></div><label class="category-pm-task">${esc(t('Task description'))}<textarea name="task" rows="3" required placeholder="${esc(t('Task description'))}"></textarea></label><div class="category-pm-list-head"><b>${esc(t('Equipment in this category'))}</b><button type="button" id="category-pm-toggle">${esc(t('Select none'))}</button></div><div class="category-pm-list">${options}</div><p id="category-pm-error" class="form-error"></p><footer><button type="button" class="detail-button" id="category-pm-cancel">${esc(t('Cancel'))}</button><button type="submit" class="detail-button primary" id="category-pm-save">${esc(t('Save to plant annual plans'))}</button></footer></form></section>`;
+  const maintenanceTypeOptions = DAY_MAINTENANCE_TYPES.map((type) => `<option value="${esc(type)}"${type === 'Preventive' ? ' selected' : ''}>${esc(t(type))}</option>`).join('');
+  overlay.innerHTML = `<section class="category-pm-dialog" role="dialog" aria-modal="true" aria-labelledby="category-pm-title"><header><div><h2 id="category-pm-title">${esc(t('Create maintenance plan for category'))}</h2><p>${esc(categories.join(' · '))} · ${equipment.length} ${esc(t('equipment'))}</p></div><button type="button" class="category-pm-close" aria-label="${esc(t('Close'))}">×</button></header><form id="category-pm-form" class="live-form"><div class="category-pm-fields"><label>${esc(t('Year'))}<input name="year" type="number" min="2000" max="2100" value="${new Date().getFullYear()}" required></label><label>${esc(t('Maintenance type'))}<select name="maintenance_type" required>${maintenanceTypeOptions}</select></label><label>${esc(t('Every (days)'))}<input name="frequency_time" type="number" min="1" max="366" required placeholder="30"></label><label>${esc(t('By running hours'))}<input name="frequency_hours" inputmode="decimal" maxlength="40" placeholder="500 h"></label></div><label class="category-pm-task">${esc(t('Task description'))}<textarea name="task" rows="3" required placeholder="${esc(t('Task description'))}"></textarea></label><div class="category-pm-list-head"><b>${esc(t('Equipment in this category'))}</b><button type="button" id="category-pm-toggle">${esc(t('Select none'))}</button></div><div class="category-pm-list">${options}</div><p id="category-pm-error" class="form-error"></p><footer><button type="button" class="detail-button" id="category-pm-cancel">${esc(t('Cancel'))}</button><button type="submit" class="detail-button primary" id="category-pm-save">${esc(t('Save to plant annual plans'))}</button></footer></form></section>`;
   document.body.appendChild(overlay);
   const close = () => overlay.remove();
   overlay.querySelector('.category-pm-close')?.addEventListener('click', close);
@@ -2415,6 +2416,7 @@ function openCategoryPmPlan(categories, equipment) {
     const frequency = Number(data.get('frequency_time'));
     const task = String(data.get('task') || '').trim();
     const frequencyHours = String(data.get('frequency_hours') || '').trim();
+    const maintenanceType = String(data.get('maintenance_type') || 'Preventive');
     const chosen = [...overlay.querySelectorAll('.category-pm-list input[type="checkbox"]:checked')]
       .map((box) => equipment[Number(box.value)]).filter(Boolean);
     if (!chosen.length) { error.textContent = t('Select at least one equipment.'); return; }
@@ -2439,7 +2441,8 @@ function openCategoryPmPlan(categories, equipment) {
         plantEquipment.forEach((item) => {
           const duplicate = items.some((row) => row.machine_code === item.equipment_id
             && String(row.task || '').trim().toLowerCase() === task.toLowerCase()
-            && row.frequency_time === String(frequency));
+            && row.frequency_time === String(frequency)
+            && (row.maintenance_type || 'Preventive') === maintenanceType);
           if (duplicate) return;
           items.push({
             machine_code: item.equipment_id,
@@ -2447,7 +2450,7 @@ function openCategoryPmPlan(categories, equipment) {
             task,
             frequency_time: String(frequency),
             frequency_hours: frequencyHours,
-            maintenance_type: 'Preventive',
+            maintenance_type: maintenanceType,
             line_id: item.line_id || '',
             line_key: '',
             weeks: '',
@@ -2462,7 +2465,7 @@ function openCategoryPmPlan(categories, equipment) {
       }
       close();
       store = null;
-      toast(added ? t('Preventive plan added to {count} equipment.').replace('{count}', String(added)) : t('These category tasks are already in the annual plan.'));
+      toast(added ? t('Category plan added to {count} equipment.').replace('{count}', String(added)) : t('These category tasks are already in the annual plan.'));
       await paint('equipment');
     } catch (exception) {
       button.disabled = false;

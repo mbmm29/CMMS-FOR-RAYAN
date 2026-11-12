@@ -1162,8 +1162,9 @@ body[data-live-page="equipment"] .category-plan-action .detail-button{width:auto
 .category-pm-dialog .live-form{display:flex;flex-direction:column;gap:12px;min-height:0;padding:16px 18px;overflow:auto}
 .category-pm-fields{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}
 .category-pm-fields label,.category-pm-task{display:grid;gap:6px;min-width:0;color:#b7c9e6;font-size:12px}
-.category-pm-dialog .live-form input:not([type="checkbox"]),.category-pm-dialog .live-form textarea{width:100%;min-width:0;margin:0;padding:9px 10px;border:1px solid #2c528c;border-radius:9px;background:#071428;color:#f4f8ff;font:13px Arial,sans-serif}
+.category-pm-dialog .live-form input:not([type="checkbox"]),.category-pm-dialog .live-form select,.category-pm-dialog .live-form textarea{width:100%;min-width:0;margin:0;padding:9px 10px;border:1px solid #2c528c;border-radius:9px;background:#071428;color:#f4f8ff;font:13px Arial,sans-serif}
 .category-pm-dialog .live-form input[type="number"]{height:38px}
+.category-pm-dialog .live-form select{height:38px}
 .category-pm-dialog .live-form textarea{resize:vertical}
 .category-pm-list-head{display:flex;justify-content:space-between;align-items:center;gap:10px;color:#f4f8ff;font-size:12px}
 .category-pm-list-head button{border:0;background:none;color:#7ec4ff;font:12px Arial,sans-serif;cursor:pointer}
