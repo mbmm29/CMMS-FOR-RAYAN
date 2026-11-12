@@ -433,6 +433,9 @@ body .workspace.work-orders-board .pm-dispatch-detail{min-width:0}
 body .workspace.work-orders-board .pm-dispatch-detail .detail-list span{max-width:65%;white-space:normal;overflow-wrap:anywhere}
 body .workspace.work-orders-board .pm-dispatch-technicians{padding:12px 0;border-top:1px solid #23406e}
 body .workspace.work-orders-board .pm-dispatch-technicians>b{display:block;margin-bottom:8px;color:#f4f8ff}
+body .workspace.work-orders-board .pm-dispatch-technicians .assignee-list{border-color:#2a4f88;background:#0e2346;color:#f4f8ff}
+body .workspace.work-orders-board .pm-dispatch-technicians .assignee-list label{color:#f4f8ff;cursor:pointer}
+body .workspace.work-orders-board .pm-dispatch-technicians .assignee-list input{accent-color:#3b82f6}
 body .workspace.pm-dispatch-board{grid-template-columns:minmax(0,1fr) minmax(280px,360px)}
 body .workspace.log-board .record-filters{
   display:grid;grid-template-columns:minmax(0,1fr);grid-column:auto;gap:8px;width:100%;min-width:0;
