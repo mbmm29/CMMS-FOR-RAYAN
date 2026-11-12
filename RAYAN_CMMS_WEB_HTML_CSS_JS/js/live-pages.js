@@ -2001,7 +2001,7 @@ async function drawAnnualPlan() {
     ? `<tr><td class="annual-empty" colspan="55">${esc(t('Choose a plant, then set the plan.'))}</td></tr>`
     : (items.length ? items.map((item) => annualRowHtml(item, locked)).join('') : `<tr><td class="annual-empty" colspan="55">${esc(t('No records yet'))}</td></tr>`);
   document.getElementById('workspace').className = 'workspace';
-  document.getElementById('workspace').innerHTML = `<section class="panel annual-plan${ui.annualWidth ? ' annual-plan-resized' : ''}"${ui.annualWidth ? ` style="--annual-plan-width:${ui.annualWidth}px"` : ''}><div class="annual-plan-header">${tabsHtml(['Annual plan', 'Due tasks'])}
+  document.getElementById('workspace').innerHTML = `<section class="panel annual-plan"><div class="annual-plan-header">${tabsHtml(['Annual plan', 'Due tasks'])}
     <div class="annual-bar">
       <label>${esc(t('Plant'))}<select id="annual-plant"><option value="">${esc(t('Choose a plant'))}</option>${options}</select></label>
       <label>${esc(t('Year'))}<input id="annual-year" type="number" min="2000" max="2100" value="${esc(ui.annualYear)}"${locked ? ' disabled' : ''}></label>
@@ -2017,7 +2017,6 @@ async function drawAnnualPlan() {
     </table></div>
     <p class="kpi-note">${esc(t('Enter how many days between each repeat. The task is placed on those dates with its maintenance type.'))}</p>
     <p id="annual-error" class="form-error"></p>
-    <div class="annual-resize-handle" role="separator" aria-orientation="vertical" aria-label="Resize annual plan width" tabindex="0" title="Drag to widen or narrow the annual plan"><span aria-hidden="true">↔</span></div>
   </section>`;
   document.querySelectorAll('[data-tab]').forEach((button) => button.addEventListener('click', () => {
     captureAnnual();
@@ -2059,45 +2058,6 @@ async function drawAnnualPlan() {
   document.getElementById('annual-paste')?.addEventListener('click', () => { pasteAnnualPlan(); });
   document.getElementById('annual-export')?.addEventListener('click', () => { exportAnnualPlan(); });
   document.getElementById('annual-save')?.addEventListener('click', () => { saveAnnualPlan(); });
-  const annualPanel = document.querySelector('.annual-plan');
-  const resizeHandle = document.querySelector('.annual-resize-handle');
-  resizeHandle?.addEventListener('pointerdown', (event) => {
-    if (event.button !== 0) return;
-    event.preventDefault();
-    const workspace = document.getElementById('workspace');
-    const startX = event.clientX;
-    const startWidth = annualPanel.getBoundingClientRect().width;
-    const maxWidth = workspace.getBoundingClientRect().width;
-    resizeHandle.setPointerCapture(event.pointerId);
-    annualPanel.classList.add('annual-plan-resizing');
-    annualPanel.classList.add('annual-plan-resized');
-    annualPanel.style.setProperty('--annual-plan-width', `${startWidth}px`);
-    const resize = (moveEvent) => {
-      const width = Math.max(320, Math.min(maxWidth, startWidth + moveEvent.clientX - startX));
-      annualPanel.style.setProperty('--annual-plan-width', `${width}px`);
-      ui.annualWidth = Math.round(width);
-    };
-    const finish = () => {
-      annualPanel.classList.remove('annual-plan-resizing');
-      resizeHandle.removeEventListener('pointermove', resize);
-      resizeHandle.removeEventListener('pointerup', finish);
-      resizeHandle.removeEventListener('pointercancel', finish);
-    };
-    resizeHandle.addEventListener('pointermove', resize);
-    resizeHandle.addEventListener('pointerup', finish);
-    resizeHandle.addEventListener('pointercancel', finish);
-  });
-  resizeHandle?.addEventListener('keydown', (event) => {
-    if (!['ArrowLeft', 'ArrowRight'].includes(event.key)) return;
-    event.preventDefault();
-    const workspace = document.getElementById('workspace');
-    const maxWidth = workspace.getBoundingClientRect().width;
-    const currentWidth = annualPanel.getBoundingClientRect().width;
-    const direction = event.key === 'ArrowRight' ? 1 : -1;
-    ui.annualWidth = Math.round(Math.max(320, Math.min(maxWidth, currentWidth + direction * 40)));
-    annualPanel.classList.add('annual-plan-resized');
-    annualPanel.style.setProperty('--annual-plan-width', `${ui.annualWidth}px`);
-  });
   document.querySelectorAll('#annual-rows tr[data-line]').forEach((row) => {
     applyRowRepeat(row);
     row.querySelector('[data-field="frequency_time"]')?.addEventListener('input', () => applyRowRepeat(row));
