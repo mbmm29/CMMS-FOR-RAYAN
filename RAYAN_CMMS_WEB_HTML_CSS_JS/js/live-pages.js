@@ -1260,35 +1260,54 @@ function shown(count, total, noun) {
   return `${t('Showing')} ${count} ${t('of')} ${total} ${t(noun)}`;
 }
 
-function kpiSparkline(history, metric, title, goodWhenRising = true, digits = 1) {
+function kpiSparkline(history, metric, title, goodWhenRising = true, digits = 1, paired = null) {
   const rows = (Array.isArray(history) ? history : []).map((row) => ({
     date: row.date,
     to: row.to,
     value: row[metric] == null || row[metric] === '' ? null : Number(row[metric]),
+    source: row,
   }));
   const points = rows.map((row, index) => ({ ...row, index })).filter((row) => Number.isFinite(row.value));
-  if (!points.length) return `<div class="kpi-spark-empty">${esc(t('No trend data in this period'))}</div>`;
-  const min = Math.min(...points.map((point) => point.value));
-  const max = Math.max(...points.map((point) => point.value));
+  const pairedSeries = Array.isArray(paired) ? paired.map((item) => ({
+    ...item,
+    points: rows.map((row, index) => ({
+      index,
+      date: row.date,
+      value: row.source[item.metric] == null ? null : Number(row.source[item.metric]),
+    })).filter((point) => Number.isFinite(point.value)),
+  })) : [];
+  const allValues = pairedSeries.length ? pairedSeries.flatMap((series) => series.points.map((point) => point.value)) : points.map((point) => point.value);
+  if (!allValues.length) return `<div class="kpi-spark-empty">${esc(t('No trend data in this period'))}</div>`;
+  const min = pairedSeries.length ? Math.min(0, ...allValues) : Math.min(...allValues);
+  const max = Math.max(...allValues);
   const span = max - min || Math.max(Math.abs(max) * 0.08, 1);
   const x = (index) => 30 + (rows.length <= 1 ? 420 : (index / (rows.length - 1)) * 420);
   const y = (value) => 96 - ((value - min) / span) * 72;
-  const path = points.reduce((curve, point, index) => {
-    const px = x(point.index);
-    const py = y(point.value);
-    if (!index) return `M${px.toFixed(1)},${py.toFixed(1)}`;
-    const previous = points[index - 1];
-    const previousX = x(previous.index);
-    const previousY = y(previous.value);
-    const middleX = (previousX + px) / 2;
-    return `${curve} C${middleX.toFixed(1)},${previousY.toFixed(1)} ${middleX.toFixed(1)},${py.toFixed(1)} ${px.toFixed(1)},${py.toFixed(1)}`;
-  }, '');
-  const first = points[0].value;
-  const last = points.at(-1).value;
-  const improving = goodWhenRising ? last > first : last < first;
-  const declining = goodWhenRising ? last < first : last > first;
+  const first = points[0]?.value;
+  const last = points.at(-1)?.value;
+  const improving = first == null || last == null ? false : goodWhenRising ? last > first : last < first;
+  const declining = first == null || last == null ? false : goodWhenRising ? last < first : last > first;
   const color = improving ? '#22d3a6' : declining ? '#fb7185' : '#36c8f3';
-  const dots = points.map((point) => `<circle cx="${x(point.index).toFixed(1)}" cy="${y(point.value).toFixed(1)}" r="3.5"><title>${esc(fmtDate(point.date))}: ${esc(numberText(point.value, digits))}</title></circle>`).join('');
+  const chartSeries = pairedSeries.length ? pairedSeries : [{ name: title, metric, points, color }];
+  const gradients = chartSeries.map((series, index) => {
+    const gradientId = `kpi-fill-${metric.replace(/[^a-z0-9-]/gi, '')}-${index}`;
+    return `<linearGradient id="${gradientId}" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="${series.color || color}" stop-opacity=".16"></stop><stop offset="100%" stop-color="${series.color || color}" stop-opacity="0"></stop></linearGradient>`;
+  }).join('');
+  const shapes = chartSeries.map((series, seriesIndex) => {
+    const seriesColor = series.color || color;
+    const path = series.points.reduce((curve, point, index) => {
+      const px = x(point.index);
+      const py = y(point.value);
+      if (!index) return `M${px.toFixed(1)},${py.toFixed(1)}`;
+      const previous = series.points[index - 1];
+      const middleX = (x(previous.index) + px) / 2;
+      return `${curve} C${middleX.toFixed(1)},${y(previous.value).toFixed(1)} ${middleX.toFixed(1)},${py.toFixed(1)} ${px.toFixed(1)},${py.toFixed(1)}`;
+    }, '');
+    const gradientId = `kpi-fill-${metric.replace(/[^a-z0-9-]/gi, '')}-${seriesIndex}`;
+    const areaPath = series.points.length ? `${path} L${x(series.points.at(-1).index).toFixed(1)},104 L${x(series.points[0].index).toFixed(1)},104 Z` : '';
+    const dots = series.points.map((point) => `<circle cx="${x(point.index).toFixed(1)}" cy="${y(point.value).toFixed(1)}" r="3.5" style="fill:${seriesColor}"><title>${esc(t(series.name))} · ${esc(fmtDate(point.date))}: ${esc(numberText(point.value, digits))} ${pairedSeries.length ? esc(t('h')) : ''}</title></circle>`).join('');
+    return `${areaPath ? `<path class="kpi-spark-area" d="${areaPath}" style="fill:url(#${gradientId})"></path>` : ''}<path class="kpi-spark-line" d="${path}" style="stroke:${seriesColor}"></path>${dots}`;
+  }).join('');
   const firstDate = fmtDate(rows[0]?.date);
   const lastDate = fmtDate(rows.at(-1)?.to);
   const tickStep = rows.length <= 14 ? 1 : Math.max(1, Math.ceil(rows.length / 10));
@@ -1297,9 +1316,8 @@ function kpiSparkline(history, metric, title, goodWhenRising = true, digits = 1)
     const label = fmtDate(row.date).slice(0, 5);
     return `<text class="kpi-spark-date" x="${x(index).toFixed(1)}" y="122" text-anchor="middle">${esc(label)}</text>`;
   }).join('');
-  const gradientId = `kpi-fill-${metric.replace(/[^a-z0-9-]/gi, '')}`;
-  const areaPath = `${path} L${x(points.at(-1).index).toFixed(1)},104 L${x(points[0].index).toFixed(1)},104 Z`;
-  return `<svg class="kpi-sparkline" viewBox="0 0 480 130" role="img" aria-label="${esc(t(title))}: ${esc(firstDate)} — ${esc(lastDate)}"><defs><linearGradient id="${gradientId}" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="${color}" stop-opacity=".25"></stop><stop offset="100%" stop-color="${color}" stop-opacity="0"></stop></linearGradient></defs><g class="kpi-spark-grid"><line x1="26" y1="24" x2="458" y2="24"></line><line x1="26" y1="60" x2="458" y2="60"></line><line x1="26" y1="96" x2="458" y2="96"></line></g><text class="kpi-spark-scale" x="22" y="20" text-anchor="end">${esc(numberText(max, digits))}</text><text class="kpi-spark-scale" x="22" y="99" text-anchor="end">${esc(numberText(min, digits))}</text><path class="kpi-spark-area" d="${areaPath}" style="fill:url(#${gradientId})"></path><path class="kpi-spark-line" d="${path}" style="stroke:${color}"></path>${dots}${dateLabels}<text class="kpi-spark-trend" x="458" y="17" text-anchor="end" style="fill:${color}">${improving ? '↑' : declining ? '↓' : '→'}</text></svg>`;
+  const pairedLegend = pairedSeries.length ? `<div class="kpi-spark-legend">${pairedSeries.map((series) => `<span><i style="--series-color:${series.color}"></i><b>${esc(t(series.name))}</b><em>${esc(numberText(series.total, digits))} ${esc(t('h'))}</em></span>`).join('')}</div>` : '';
+  return `<svg class="kpi-sparkline" viewBox="0 0 480 130" role="img" aria-label="${esc(t(title))}: ${esc(firstDate)} — ${esc(lastDate)}"><defs>${gradients}</defs><g class="kpi-spark-grid"><line x1="26" y1="24" x2="458" y2="24"></line><line x1="26" y1="60" x2="458" y2="60"></line><line x1="26" y1="96" x2="458" y2="96"></line></g><text class="kpi-spark-scale" x="22" y="20" text-anchor="end">${esc(numberText(max, digits))}</text><text class="kpi-spark-scale" x="22" y="99" text-anchor="end">${esc(numberText(min, digits))}</text>${shapes}${dateLabels}${pairedSeries.length ? '' : `<text class="kpi-spark-trend" x="458" y="17" text-anchor="end" style="fill:${color}">${improving ? '↑' : declining ? '↓' : '→'}</text>`}</svg>${pairedLegend}`;
 }
 
 async function drawDashboard() {
@@ -1359,7 +1377,7 @@ async function drawDashboard() {
     ? `<label class="kpi-shift">${esc(t('Work day'))}<span class="kpi-shift-toggle" role="group" aria-label="${esc(t('Work day'))}"><button type="button" data-kpi-hours="24" class="${dayHours === 24 ? 'active' : ''}"${shiftLocked ? ' disabled' : ''}>24 ${esc(t('h'))}</button><button type="button" data-kpi-hours="16" class="${dayHours === 16 ? 'active' : ''}"${shiftLocked ? ' disabled' : ''}>16 ${esc(t('h'))}</button></span><small class="kpi-shift-note">${esc(shiftLocked ? t('Work day locked at 08:00. Opens again tomorrow before 08:00.') : t('Saved for today. Selection locks at 08:00.'))}</small></label>`
     : '';
   const extraFilters = `<label>${t('Technician')}<select data-filter="technician"><option value="">${esc(t('All technicians'))}</option>${technicianOptions}</select></label><label>${t('From')}<input data-filter="from" type="date" value="${esc(ui.dateFrom)}"></label><label>${t('To')}<input data-filter="to" type="date" value="${esc(ui.dateTo)}"></label>${shiftFilter}`;
-  const card = (title, value, detail, note, metric, goodWhenRising = true, digits = 1) => `<article class="kpi-card"><h3>${esc(t(title))}</h3><b>${value}</b><small>${esc(detail)}</small><small>${esc(note)}</small>${kpiSparkline(kpi.history, metric, title, goodWhenRising, digits)}</article>`;
+  const card = (title, value, detail, note, metric, goodWhenRising = true, digits = 1, paired = null) => `<article class="kpi-card"><h3>${esc(t(title))}</h3><b>${value}</b><small>${esc(detail)}</small><small>${esc(note)}</small>${kpiSparkline(kpi.history, metric, title, goodWhenRising, digits, paired)}</article>`;
   const metricOption = (value, label) => `<option value="${value}">${esc(t(label))}</option>`;
   const targetForm = canMaintain() && plants.length <= 1 ? `<form id="kpi-target" class="live-form kpi-target"><b>${esc(t('KPI target for this plant / line / equipment'))}</b><label>${t('Metric')}<select name="metric">${metricOption('availability', 'Availability %')}${metricOption('utilization', 'Utilization %')}${metricOption('reliability', 'Reliability %')}${metricOption('mtbf', 'MTBF %')}${metricOption('mttr', 'MTTR hours')}${metricOption('pm_compliance', 'PM compliance %')}${metricOption('downtime_h', 'Downtime hours')}${metricOption('planned_pm_pct', 'Planned PM %')}${metricOption('preventive_pct', 'Preventive %')}${metricOption('emergency_to_routine', 'Emergency to routine %')}${metricOption('emergency_to_preventive', 'Emergency to preventive %')}${metricOption('corrective_pct', 'Corrective %')}${metricOption('wo_schedule', 'Schedule compliance %')}${metricOption('wo_completion', 'WO completion %')}${metricOption('backlog', 'Backlog %')}${metricOption('failure_rate_1000h', 'Failures / 1,000 h')}</select></label><label>${t('Target')}<input name="target_value" type="number" min="0" step="0.1" required></label><button class="detail-button primary" type="submit">${esc(t('Save target'))}</button><p id="kpi-target-error" class="form-error"></p></form>` : '';
   const components = (kpi.components || []).map((row) => `<div class="summary-row"><span>${esc(row.component_id)} · ${esc(row.name)}</span><b>${row.life_days} ${t('days')}${row.in_service ? '' : ` ${t('removed')}`}</b></div>`).join('') || `<p class="chart-empty">${esc(t('No component installation dates yet'))}</p>`;
@@ -1375,8 +1393,8 @@ async function drawDashboard() {
       ${card('Preventive maintenance', kpiText(kpi.preventive_pct, 1, '%'), kpiTargetText(kpi.preventive_pct, targets.preventive_pct, true), `${kpiText(hours.Preventive, 1)} ${t('h of')} ${kpiText(kpi.total_hours, 1)}`, 'preventive_pct')}
       ${card('Utilization', kpiText(kpi.utilization, 1, '%'), kpiTargetText(kpi.utilization, targets.utilization, true), `${kpiText(kpi.utilization_operating_h, 1)} ${t('h operating of')} ${kpiText(kpi.utilization_available_h, 1)} · ${kpi.utilization_reports || 0} ${t('reports × 8 h')}`, 'utilization')}
       ${card('Reliability', kpiText(kpi.reliability, 1, '%'), kpiTargetText(kpi.reliability, targets.reliability, true), kpi.mtbf_h == null ? t('No failures in this operating time') : `e^(− ${kpiText(kpi.operating_h, 1)} / ${kpiText(kpi.mtbf_h, 1)})`, 'reliability')}
-      ${card('Emergency to routine', kpiText(kpi.emergency_to_routine, 1, '%'), kpiTargetText(kpi.emergency_to_routine, targets.emergency_to_routine, false), `${kpiText(hours.Emergency, 1)} ${t('h emergency /')} ${kpiText(hours.Routine, 1)} ${t('h routine')}`, 'emergency_to_routine', false)}
-      ${card('Emergency to preventive', kpiText(kpi.emergency_to_preventive, 1, '%'), kpiTargetText(kpi.emergency_to_preventive, targets.emergency_to_preventive, false), `${kpiText(hours.Emergency, 1)} ${t('h emergency /')} ${kpiText(hours.Preventive, 1)} ${t('h preventive')}`, 'emergency_to_preventive', false)}
+      ${card('Emergency to routine', kpiText(kpi.emergency_to_routine, 1, '%'), kpiTargetText(kpi.emergency_to_routine, targets.emergency_to_routine, false), `${kpiText(hours.Emergency, 1)} ${t('h emergency /')} ${kpiText(hours.Routine, 1)} ${t('h routine')}`, 'emergency_to_routine', false, 1, [{ name: 'Emergency', metric: 'emergency_hours', total: hours.Emergency || 0, color: '#fb7185' }, { name: 'Routine', metric: 'routine_hours', total: hours.Routine || 0, color: '#22c7f2' }])}
+      ${card('Emergency to preventive', kpiText(kpi.emergency_to_preventive, 1, '%'), kpiTargetText(kpi.emergency_to_preventive, targets.emergency_to_preventive, false), `${kpiText(hours.Emergency, 1)} ${t('h emergency /')} ${kpiText(hours.Preventive, 1)} ${t('h preventive')}`, 'emergency_to_preventive', false, 1, [{ name: 'Emergency', metric: 'emergency_hours', total: hours.Emergency || 0, color: '#fb7185' }, { name: 'Preventive', metric: 'preventive_hours', total: hours.Preventive || 0, color: '#22d3a6' }])}
       ${card('Schedule compliance', kpiText(kpi.wo_schedule, 1, '%'), kpiTargetText(kpi.wo_schedule, targets.wo_schedule, true), `${kpi.wo_scheduled_done || 0} ${t('completed of')} ${kpi.wo_scheduled || 0} ${t('scheduled')} · ${t('emergency excluded')}`, 'wo_schedule')}
       ${card('Overdue work orders', String(kpi.wo_overdue ?? 0), `${kpiText(kpi.wo_overdue_pct, 1, '%')} ${t('of issued orders')}`, `${t('Aging')} 1–7: ${kpi.wo_aging?.['1-7'] || 0} · 8–30: ${kpi.wo_aging?.['8-30'] || 0} · 31+: ${kpi.wo_aging?.['31+'] || 0}`, 'wo_overdue', false, 0)}
       ${card('Backlog', kpiText(kpi.backlog, 1, '%'), kpiTargetText(kpi.backlog, targets.backlog, false), `${kpi.wo_open || 0} ${t('unexecuted of')} ${kpi.wo_issued || 0}`, 'backlog', false)}

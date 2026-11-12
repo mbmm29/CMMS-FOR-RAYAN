@@ -730,6 +730,9 @@ def compute_kpi(
                 'emergency_to_preventive', 'wo_schedule', 'wo_overdue', 'backlog',
                 'failures', 'failure_rate_1000h',
             )},
+            'emergency_hours': (bucket.get('hours') or {}).get('Emergency', 0),
+            'routine_hours': (bucket.get('hours') or {}).get('Routine', 0),
+            'preventive_hours': (bucket.get('hours') or {}).get('Preventive', 0),
         })
     previous = pack(previous_start, previous_end)
     life = []
