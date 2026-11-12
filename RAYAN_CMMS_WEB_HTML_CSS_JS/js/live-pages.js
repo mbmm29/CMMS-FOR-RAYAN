@@ -1972,11 +1972,6 @@ async function drawTechnicianSchedule() {
   workspace.hidden = true;
 }
 
-function collapseAnnualOnEscape(event) {
-  if (event.key !== 'Escape' || !ui.annualExpanded) return;
-  document.getElementById('annual-zoom')?.click();
-}
-
 async function drawAnnualPlan() {
   if (isTechnician()) return drawTechnicianSchedule();
   if (ui.annualPlant && store?.plants && !store.plants.some((plant) => plant.plant_id === ui.annualPlant && plant.active !== false)) {
@@ -2006,7 +2001,7 @@ async function drawAnnualPlan() {
     ? `<tr><td class="annual-empty" colspan="55">${esc(t('Choose a plant, then set the plan.'))}</td></tr>`
     : (items.length ? items.map((item) => annualRowHtml(item, locked)).join('') : `<tr><td class="annual-empty" colspan="55">${esc(t('No records yet'))}</td></tr>`);
   document.getElementById('workspace').className = 'workspace';
-  document.getElementById('workspace').innerHTML = `<section class="panel annual-plan${ui.annualExpanded ? ' annual-plan-expanded' : ''}">${tabsHtml(['Annual plan', 'Due tasks'])}
+  document.getElementById('workspace').innerHTML = `<section class="panel annual-plan${ui.annualWidth ? ' annual-plan-resized' : ''}"${ui.annualWidth ? ` style="--annual-plan-width:${ui.annualWidth}px"` : ''}>${tabsHtml(['Annual plan', 'Due tasks'])}
     <div class="annual-bar">
       <label>${esc(t('Plant'))}<select id="annual-plant"><option value="">${esc(t('Choose a plant'))}</option>${options}</select></label>
       <label>${esc(t('Year'))}<input id="annual-year" type="number" min="2000" max="2100" value="${esc(ui.annualYear)}"${locked ? ' disabled' : ''}></label>
@@ -2014,7 +2009,7 @@ async function drawAnnualPlan() {
       <button type="button" id="annual-export" class="detail-button">${esc(t('Export'))}</button>
       ${locked ? '' : `<button type="button" id="annual-save" class="detail-button primary">${esc(t('Save plan'))}</button>`}
     </div>
-    <h2 class="annual-title annual-heading"><span>${esc(t('Annual preventive maintenance plan'))}${formNo('annual_plan') ? ` · ${esc(formNo('annual_plan'))}` : ''}</span><button type="button" id="annual-zoom" class="detail-button annual-zoom" aria-label="${esc(ui.annualExpanded ? t('Restore annual plan size') : t('Expand annual plan'))}" aria-pressed="${ui.annualExpanded ? 'true' : 'false'}" title="${esc(ui.annualExpanded ? t('Restore annual plan size') : t('Expand annual plan'))}"><svg viewBox="0 0 32 24" aria-hidden="true"><path d="M11 4 3 12l8 8M21 4l8 8-8 8M3 12h26"/></svg></button></h2>
+    <h2 class="annual-title">${esc(t('Annual preventive maintenance plan'))}${formNo('annual_plan') ? ` · ${esc(formNo('annual_plan'))}` : ''}</h2>
     <div class="annual-scroll"><table class="annual-sheet">
       <thead><tr><th rowspan="2">${esc(t('Machine name'))}</th><th rowspan="2">${esc(t('Line number'))}</th><th rowspan="2">${esc(t('Task description'))}</th><th rowspan="2">${esc(t('Maintenance type'))}</th><th colspan="2">${esc(t('Frequency'))}</th>${monthHead}<th rowspan="2"></th></tr>
       <tr><th>${esc(t('Every (days)'))}</th><th>${esc(t('By running hours'))}</th>${weekHead}</tr></thead>
@@ -2022,6 +2017,7 @@ async function drawAnnualPlan() {
     </table></div>
     <p class="kpi-note">${esc(t('Enter how many days between each repeat. The task is placed on those dates with its maintenance type.'))}</p>
     <p id="annual-error" class="form-error"></p>
+    <div class="annual-resize-handle" role="separator" aria-orientation="vertical" aria-label="Resize annual plan width" tabindex="0" title="Drag to widen or narrow the annual plan"><span aria-hidden="true">↔</span></div>
   </section>`;
   document.querySelectorAll('[data-tab]').forEach((button) => button.addEventListener('click', () => {
     captureAnnual();
@@ -2063,22 +2059,44 @@ async function drawAnnualPlan() {
   document.getElementById('annual-paste')?.addEventListener('click', () => { pasteAnnualPlan(); });
   document.getElementById('annual-export')?.addEventListener('click', () => { exportAnnualPlan(); });
   document.getElementById('annual-save')?.addEventListener('click', () => { saveAnnualPlan(); });
-  document.getElementById('annual-zoom')?.addEventListener('click', () => {
-    const panel = document.querySelector('.annual-plan');
-    const button = document.getElementById('annual-zoom');
-    if (!panel || !button) return;
-    const toggle = () => {
-      ui.annualExpanded = !ui.annualExpanded;
-      panel.classList.toggle('annual-plan-expanded', ui.annualExpanded);
-      button.setAttribute('aria-pressed', String(ui.annualExpanded));
-      const label = t(ui.annualExpanded ? 'Restore annual plan size' : 'Expand annual plan');
-      button.setAttribute('aria-label', label);
-      button.title = label;
-      if (ui.annualExpanded) document.addEventListener('keydown', collapseAnnualOnEscape);
-      else document.removeEventListener('keydown', collapseAnnualOnEscape);
+  const annualPanel = document.querySelector('.annual-plan');
+  const resizeHandle = document.querySelector('.annual-resize-handle');
+  resizeHandle?.addEventListener('pointerdown', (event) => {
+    if (event.button !== 0) return;
+    event.preventDefault();
+    const workspace = document.getElementById('workspace');
+    const startX = event.clientX;
+    const startWidth = annualPanel.getBoundingClientRect().width;
+    const maxWidth = workspace.getBoundingClientRect().width;
+    resizeHandle.setPointerCapture(event.pointerId);
+    annualPanel.classList.add('annual-plan-resizing');
+    annualPanel.classList.add('annual-plan-resized');
+    annualPanel.style.setProperty('--annual-plan-width', `${startWidth}px`);
+    const resize = (moveEvent) => {
+      const width = Math.max(320, Math.min(maxWidth, startWidth + moveEvent.clientX - startX));
+      annualPanel.style.setProperty('--annual-plan-width', `${width}px`);
+      ui.annualWidth = Math.round(width);
     };
-    if (document.startViewTransition) document.startViewTransition(toggle);
-    else toggle();
+    const finish = () => {
+      annualPanel.classList.remove('annual-plan-resizing');
+      resizeHandle.removeEventListener('pointermove', resize);
+      resizeHandle.removeEventListener('pointerup', finish);
+      resizeHandle.removeEventListener('pointercancel', finish);
+    };
+    resizeHandle.addEventListener('pointermove', resize);
+    resizeHandle.addEventListener('pointerup', finish);
+    resizeHandle.addEventListener('pointercancel', finish);
+  });
+  resizeHandle?.addEventListener('keydown', (event) => {
+    if (!['ArrowLeft', 'ArrowRight'].includes(event.key)) return;
+    event.preventDefault();
+    const workspace = document.getElementById('workspace');
+    const maxWidth = workspace.getBoundingClientRect().width;
+    const currentWidth = annualPanel.getBoundingClientRect().width;
+    const direction = event.key === 'ArrowRight' ? 1 : -1;
+    ui.annualWidth = Math.round(Math.max(320, Math.min(maxWidth, currentWidth + direction * 40)));
+    annualPanel.classList.add('annual-plan-resized');
+    annualPanel.style.setProperty('--annual-plan-width', `${ui.annualWidth}px`);
   });
   document.querySelectorAll('#annual-rows tr[data-line]').forEach((row) => {
     applyRowRepeat(row);
