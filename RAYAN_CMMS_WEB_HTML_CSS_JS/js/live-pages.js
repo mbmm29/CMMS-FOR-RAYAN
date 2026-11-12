@@ -1972,6 +1972,11 @@ async function drawTechnicianSchedule() {
   workspace.hidden = true;
 }
 
+function collapseAnnualOnEscape(event) {
+  if (event.key !== 'Escape' || !ui.annualExpanded) return;
+  document.getElementById('annual-zoom')?.click();
+}
+
 async function drawAnnualPlan() {
   if (isTechnician()) return drawTechnicianSchedule();
   if (ui.annualPlant && store?.plants && !store.plants.some((plant) => plant.plant_id === ui.annualPlant && plant.active !== false)) {
@@ -2001,10 +2006,11 @@ async function drawAnnualPlan() {
     ? `<tr><td class="annual-empty" colspan="55">${esc(t('Choose a plant, then set the plan.'))}</td></tr>`
     : (items.length ? items.map((item) => annualRowHtml(item, locked)).join('') : `<tr><td class="annual-empty" colspan="55">${esc(t('No records yet'))}</td></tr>`);
   document.getElementById('workspace').className = 'workspace';
-  document.getElementById('workspace').innerHTML = `<section class="panel annual-plan">${tabsHtml(['Annual plan', 'Due tasks'])}
+  document.getElementById('workspace').innerHTML = `<section class="panel annual-plan${ui.annualExpanded ? ' annual-plan-expanded' : ''}">${tabsHtml(['Annual plan', 'Due tasks'])}
     <div class="annual-bar">
       <label>${esc(t('Plant'))}<select id="annual-plant"><option value="">${esc(t('Choose a plant'))}</option>${options}</select></label>
       <label>${esc(t('Year'))}<input id="annual-year" type="number" min="2000" max="2100" value="${esc(ui.annualYear)}"${locked ? ' disabled' : ''}></label>
+      <button type="button" id="annual-zoom" class="detail-button annual-zoom" aria-label="${esc(ui.annualExpanded ? t('Restore annual plan size') : t('Expand annual plan'))}" aria-pressed="${ui.annualExpanded ? 'true' : 'false'}" title="${esc(ui.annualExpanded ? t('Restore annual plan size') : t('Expand annual plan'))}"><svg viewBox="0 0 32 24" aria-hidden="true"><path d="M11 4 3 12l8 8M21 4l8 8-8 8M3 12h26"/></svg></button>
       ${locked ? '' : `<button type="button" id="annual-add" class="detail-button">${esc(t('Add task'))}</button><button type="button" id="annual-copy" class="detail-button">${esc(t('Copy plan'))}</button><button type="button" id="annual-paste" class="detail-button"${ui.annualCopy ? '' : ' disabled'}>${esc(ui.annualCopy ? `${t('Paste plan')} · ${ui.annualCopy.plantName}` : t('Paste plan'))}</button>`}
       <button type="button" id="annual-export" class="detail-button">${esc(t('Export'))}</button>
       ${locked ? '' : `<button type="button" id="annual-save" class="detail-button primary">${esc(t('Save plan'))}</button>`}
@@ -2058,6 +2064,23 @@ async function drawAnnualPlan() {
   document.getElementById('annual-paste')?.addEventListener('click', () => { pasteAnnualPlan(); });
   document.getElementById('annual-export')?.addEventListener('click', () => { exportAnnualPlan(); });
   document.getElementById('annual-save')?.addEventListener('click', () => { saveAnnualPlan(); });
+  document.getElementById('annual-zoom')?.addEventListener('click', () => {
+    const panel = document.querySelector('.annual-plan');
+    const button = document.getElementById('annual-zoom');
+    if (!panel || !button) return;
+    const toggle = () => {
+      ui.annualExpanded = !ui.annualExpanded;
+      panel.classList.toggle('annual-plan-expanded', ui.annualExpanded);
+      button.setAttribute('aria-pressed', String(ui.annualExpanded));
+      const label = t(ui.annualExpanded ? 'Restore annual plan size' : 'Expand annual plan');
+      button.setAttribute('aria-label', label);
+      button.title = label;
+      if (ui.annualExpanded) document.addEventListener('keydown', collapseAnnualOnEscape);
+      else document.removeEventListener('keydown', collapseAnnualOnEscape);
+    };
+    if (document.startViewTransition) document.startViewTransition(toggle);
+    else toggle();
+  });
   document.querySelectorAll('#annual-rows tr[data-line]').forEach((row) => {
     applyRowRepeat(row);
     row.querySelector('[data-field="frequency_time"]')?.addEventListener('input', () => applyRowRepeat(row));
