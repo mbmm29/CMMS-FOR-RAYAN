@@ -231,6 +231,8 @@ const CMMS_AR = {
   'Add one or more tasks for each day: equipment number, equipment name, and the work to be done.': 'أضف مهمة أو أكثر لكل يوم: رقم المعدة واسمها ووصف العمل المراد تحقيقه.',
   'Add one or more tasks for each day: equipment number, equipment name, maintenance type, and the work to be done.': 'أضف مهمة أو أكثر لكل يوم: رقم المعدة واسمها ونوع الصيانة ووصف العمل المراد تحقيقه.',
   'Maintenance type': 'نوع الصيانة',
+  'Pending acceptance': 'بانتظار موافقة الفني',
+  'Number issued after technician acceptance': 'يصدر الرقم بعد موافقة الفني',
   'Sent to all technicians': 'أُرسل إلى كل الفنيين',
   'Sends to all technicians on': 'يُرسل إلى كل الفنيين في',
   'Saving creates the work order and sends it to all technicians one day before this date.': 'عند الحفظ يُنشأ أمر الصيانة ويُرسل إلى كل الفنيين قبل يوم من هذا الموعد.',

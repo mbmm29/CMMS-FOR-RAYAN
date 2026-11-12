@@ -106,7 +106,7 @@ document.addEventListener('DOMContentLoaded', async () => {
       const report = detail.report;
       const items = detail.items || [];
       const first = items[0] || {};
-      const workOrders = [...new Set(items.map(item => item.wo_id).filter(Boolean))];
+      const workOrders = [...new Set(items.map(item => item.work_order_number || item.wo_id).filter(Boolean))];
       const plantLine = [...new Set(items.map((item) => plantName(item.plant_id)).filter(Boolean))].join(' · ')
         || plantName(report.plant_id)
         || '-';
@@ -282,7 +282,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     const activityRows = items.map((item, index) => `<tr>
       <td class="lube-no">${index + 1}</td>
       <td class="lube-machine"><input value="${escapeHtml(item.equipment_code || item.equipment_id || '')}" readonly><input value="${escapeHtml(item.equipment_name || '')}" readonly><input value="${escapeHtml(plantName(item.plant_id) || '')}" readonly><input value="${escapeHtml(lineNameOf(item, report.plantId) || item.entered_line_number || '')}" readonly></td>
-      <td><input value="${escapeHtml(t(item.maintenance_type || ''))}" readonly>${item.wo_id ? `<small class="lube-order">${escapeHtml(item.wo_id)}</small>` : ''}</td>
+      <td><input value="${escapeHtml(t(item.maintenance_type || ''))}" readonly>${item.wo_id ? `<small class="lube-order">${escapeHtml(item.work_order_number || t('Pending acceptance'))}</small>` : ''}</td>
       <td class="daily-work"><input value="${escapeHtml(item.failure_reason || '')}" readonly><input value="${escapeHtml(item.action_taken || '')}" readonly></td>
       <td><input value="${escapeHtml(formatTime12(reviewValue(item.maintenance_start)))}" readonly></td>
       <td><input value="${escapeHtml(formatTime12(reviewValue(item.maintenance_end)))}" readonly></td>

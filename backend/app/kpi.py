@@ -256,7 +256,9 @@ def compute_kpi(
     for item in items:
         items_by_report.setdefault(item.report_id, []).append(item)
 
-    orders = db.query(WorkOrder).all()
+    # Drafts awaiting technician acceptance have no issued number and do not
+    # enter work-order KPIs. Daily-report orders are committed at creation.
+    orders = db.query(WorkOrder).filter(WorkOrder.work_order_number.isnot(None)).all()
     if technician_id:
         assigned = {
             row.work_order_id

@@ -311,7 +311,9 @@ def _push_work_orders(technician_ids, work_order_id, equipment_id, manual_name):
     try:
         equipment = db.query(Equipment).filter_by(equipment_id=equipment_id).first() if equipment_id else None
         name = (equipment.name if equipment else '') or manual_name or ''
-        detail = f'{work_order_id} — {name}' if name else work_order_id
+        order = db.query(WorkOrder).filter_by(work_order_id=work_order_id).first()
+        reference = (order.work_order_number if order else None) or 'أمر صيانة بانتظار الموافقة'
+        detail = f'{reference} — {name}' if name else reference
         body = f'{detail}. أُرسل إليك، اقبله خلال 24 ساعة.'
         private_key, _public = vapid_material(db)
         for technician_id in technician_ids:

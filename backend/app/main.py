@@ -174,6 +174,19 @@ def ensure_additive_columns():
             if 'records_committed' not in existing:
                 with engine.begin() as conn:
                     conn.execute(text('ALTER TABLE work_orders ADD COLUMN records_committed BOOLEAN DEFAULT FALSE'))
+            with engine.begin() as conn:
+                if 'work_order_number' not in existing:
+                    conn.execute(text('ALTER TABLE work_orders ADD COLUMN work_order_number VARCHAR(60)'))
+                conn.execute(text(
+                    "UPDATE work_orders SET work_order_number = work_order_id "
+                    "WHERE work_order_number IS NULL AND "
+                    "(COALESCE(records_committed, FALSE) = TRUE OR status IN ('In Progress', 'Completed', 'Closed'))"
+                ))
+                conn.execute(text(
+                    "UPDATE work_orders SET records_committed = TRUE "
+                    "WHERE work_order_number IS NOT NULL AND status IN ('In Progress', 'Completed', 'Closed')"
+                ))
+                conn.execute(text('CREATE UNIQUE INDEX IF NOT EXISTS ix_work_orders_work_order_number ON work_orders (work_order_number)'))
             if 'crew_type' not in existing:
                 with engine.begin() as conn:
                     conn.execute(text('ALTER TABLE work_orders ADD COLUMN crew_type VARCHAR(30)'))
@@ -2262,7 +2275,9 @@ def sync_corrective_work_order(db, user, plant_id, task):
         return
     if order is None:
         order = WorkOrder(
-            work_order_id=next_work_order_id(db, plant_id, task.work_date.year),
+            work_order_id=draft_work_order_id(),
+            work_order_number=None,
+            records_committed=False,
             work_order_type='Corrective',
             priority='Medium',
             status='Open',
@@ -2523,8 +2538,10 @@ def respond_preventive_dispatch(dispatch_id: int, data: PreventiveDispatchRespon
         raise HTTPException(404, 'The annual maintenance task no longer exists')
     plan_item = db.query(AnnualPMItem).filter_by(plan_id=plan.id, line_key=task.source_key).first() if task.source_key else None
     equipment = equipment_for_day_task(db, plan.plant_id, task.machine_code)
+    work_order_number = next_work_order_id(db, plan.plant_id, task.work_date.year)
     order = WorkOrder(
-        work_order_id=next_work_order_id(db, plan.plant_id, task.work_date.year),
+        work_order_id=work_order_number,
+        work_order_number=work_order_number,
         work_order_type=task.maintenance_type if task.maintenance_type in MAINT_TYPES else 'Preventive',
         priority='Medium',
         status='In Progress',
@@ -3425,7 +3442,7 @@ def deliver_to_technician(db, actor, work_order, technician_id):
     audit(db, actor, 'ASSIGN', 'DailyReport', report.report_id, new={'work_order_id': work_order.work_order_id, 'technician_id': technician_id})
     account = db.query(User).filter(User.technician_id == technician_id, User.is_active == True).first()
     if account:
-        notify(db, account.id, 'Work Order Assigned', f'{work_order.work_order_id} was added to your daily report. Enter the repair actions.', 'work_order', work_order.work_order_id)
+        notify(db, account.id, 'Work Order Assigned', f'{work_order.work_order_number or "Work order"} was added to your daily report. Enter the repair actions.', 'work_order', work_order.work_order_id)
 
 def retract_assignment(db, work_order, technician_id):
     """Remove the work order from a technician's open report when they are unselected."""
@@ -3485,7 +3502,7 @@ def release_other_technicians(db, work_order, technician_id):
         retract_assignment(db, work_order, row.technician_id)
         account = db.query(User).filter(User.technician_id == row.technician_id, User.is_active == True).first()
         if account:
-            notify(db, account.id, 'Work Order Accepted', f'{work_order.work_order_id} was accepted by another technician and removed from your account.', 'work_order', work_order.work_order_id)
+            notify(db, account.id, 'Work Order Accepted', 'This work order was accepted by another technician and removed from your account.', 'work_order', work_order.work_order_id)
         db.delete(row)
     if work_order.assigned_technician_id and work_order.assigned_technician_id != technician_id:
         retract_assignment(db, work_order, work_order.assigned_technician_id)
@@ -3493,6 +3510,7 @@ def release_other_technicians(db, work_order, technician_id):
 
 def commit_accepted_work(db, actor, work_order, technician_id):
     """Write the accepted order into the technician report and the shared records."""
+    issue_work_order_number(db, work_order)
     deliver_to_technician(db, actor, work_order, technician_id)
     if not work_order.records_committed:
         consume_annual_plan(db, work_order, date.today())
@@ -3509,7 +3527,8 @@ def apply_assignment(db, actor, work_order, technician_ids, had_assignees):
     for technician_id in added:
         account = db.query(User).filter(User.technician_id == technician_id, User.is_active == True).first()
         if account:
-            notify(db, account.id, 'Work Order Assigned', f'{work_order.work_order_id} is waiting for your acceptance. It becomes overdue if it is not accepted within 24 hours.', 'work_order', work_order.work_order_id)
+            reference = work_order.work_order_number or 'An unnumbered work order'
+            notify(db, account.id, 'Work Order Assigned', f'{reference} is waiting for your acceptance. It becomes overdue if it is not accepted within 24 hours.', 'work_order', work_order.work_order_id)
     refresh_work_order_response(db, work_order)
     return added
 
@@ -3545,9 +3564,9 @@ def create_work_order(data:WOCreate,db:Session=Depends(get_db),u=Depends(role(*E
     plant_id = equipment.plant_id if equipment else payload.get('manual_plant_id')
     year = (data.planned_date or date.today()).year
     payload.pop('closing_date', None)
-    wid = next_work_order_id(db, plant_id, year)
-    if db.query(WorkOrder).filter_by(work_order_id=wid).first(): raise HTTPException(409,'Work Order ID exists')
-    o=WorkOrder(work_order_id=wid,created_by=u.username,**payload); db.add(o); db.flush()
+    payload['status'] = 'Open'
+    wid = draft_work_order_id()
+    o=WorkOrder(work_order_id=wid,work_order_number=None,created_by=u.username,records_committed=False,**payload); db.add(o); db.flush()
     ids = list(data.assigned_technician_ids or [])
     if not ids and data.assigned_technician_id:
         ids = [data.assigned_technician_id]
@@ -3716,6 +3735,8 @@ def update_work_order(wo_id:str,data:WOUpdate,db:Session=Depends(get_db),u=Depen
         if set(payload)-allowed: raise HTTPException(403,'Technician cannot modify this field')
         if payload.get('status')=='Closed': raise HTTPException(403,'Technician cannot close Work Order')
     elif u.role not in ENGINEER: raise HTTPException(403,'Read only account')
+    if not o.work_order_number and not is_technician_account(u) and payload.get('status') in ('In Progress', 'On Hold', 'Completed', 'Closed'):
+        raise HTTPException(409, 'The technician must accept this work order before it can be completed')
     had_assignees = bool(current_assignees(db, o))
     wanted = None
     if 'assigned_technician_ids' in payload or 'assigned_technician_id' in payload:
@@ -3852,16 +3873,32 @@ def next_work_order_id(db, plant_id, year):
         raise HTTPException(400, 'Set the work order code for this plant.')
     stem = f'{code}{int(year)}-'
     highest = 0
-    for (work_order_id,) in db.query(WorkOrder.work_order_id).filter(WorkOrder.work_order_id.like(stem + '%')).all():
+    for (work_order_id,) in db.query(WorkOrder.work_order_number).filter(WorkOrder.work_order_number.like(stem + '%')).all():
+        if not work_order_id:
+            continue
         tail = work_order_id[len(stem):]
         if tail.isdigit():
             highest = max(highest, int(tail))
     number = highest + 1
     while True:
         work_order_id = f'{stem}{number:03d}'
-        if not db.query(WorkOrder).filter_by(work_order_id=work_order_id).first():
+        if not db.query(WorkOrder).filter(or_(WorkOrder.work_order_number == work_order_id, WorkOrder.work_order_id == work_order_id)).first():
             return work_order_id
         number += 1
+
+def draft_work_order_id():
+    """Create an internal work-order key without reserving a visible serial number."""
+    return f'DRAFT-{secrets.token_hex(12)}'
+
+def issue_work_order_number(db, order):
+    """Assign a plant sequence number only when a technician accepts the order."""
+    if order.work_order_number:
+        return order.work_order_number
+    equipment = db.query(Equipment).filter_by(equipment_id=order.equipment_id).first() if order.equipment_id else None
+    plant_id = (equipment.plant_id if equipment else None) or order.manual_plant_id
+    year = (order.planned_date or order.request_date or date.today()).year
+    order.work_order_number = next_work_order_id(db, plant_id, year)
+    return order.work_order_number
 
 def issue_technician_work_order(db, actor, item, report):
     """Register a unique High work order for corrective or emergency work and write the related records."""
@@ -3874,6 +3911,7 @@ def issue_technician_work_order(db, actor, item, report):
     now = datetime.utcnow()
     work_order = WorkOrder(
         work_order_id=work_order_id,
+        work_order_number=work_order_id,
         work_order_type=item.maintenance_type,
         equipment_id=None if item.is_manual_entry else item.equipment_id,
         manual_equipment_code=item.equipment_code if item.is_manual_entry else None,
@@ -3913,6 +3951,12 @@ def issue_technician_work_order(db, actor, item, report):
     return work_order
 
 def get_or_create_wo(db,u,item,report):
+    def report_committed(order):
+        if not order.work_order_number:
+            issue_work_order_number(db, order)
+        order.records_committed = True
+        return order
+
     # A report may be linked to an already-issued WO. It is linked but never
     # recreated, regardless of the maintenance type.
     if item.wo_id:
@@ -3925,6 +3969,7 @@ def get_or_create_wo(db,u,item,report):
         expected_equipment_code = item.equipment_code if item.is_manual_entry else item.equipment_id
         if linked_equipment_code != expected_equipment_code:
             raise HTTPException(400, 'Work Order does not belong to this equipment')
+        report_committed(w)
         return w, 'linked'
 
     # A technician's corrective or emergency entry is a High work order with its own number.
@@ -3938,10 +3983,10 @@ def get_or_create_wo(db,u,item,report):
     if item.maintenance_type=='Preventive':
         ensure_preventive_pm(db, u, item, report)
         w=db.query(WorkOrder).filter(WorkOrder.pm_id==item.pm_id,WorkOrder.status.notin_(['Closed','Cancelled'])).first()
-        if w:return w,'matched'
+        if w:return report_committed(w),'matched'
     if item.maintenance_type=='Corrective':
         matches=corrective_matches(db,item)
-        if len(matches)==1:return matches[0],'matched'
+        if len(matches)==1:return report_committed(matches[0]),'matched'
         if len(matches)>1:return None,'review'
     plant_id = item.plant_id
     if not item.is_manual_entry and item.equipment_id:
@@ -3949,7 +3994,7 @@ def get_or_create_wo(db,u,item,report):
         if found and found.plant_id:
             plant_id = found.plant_id
     wid = next_work_order_id(db, plant_id, report.report_date.year)
-    w=WorkOrder(work_order_id=wid,work_order_type=item.maintenance_type,equipment_id=None if item.is_manual_entry else item.equipment_id,manual_equipment_code=item.equipment_code if item.is_manual_entry else None,manual_equipment_name=item.equipment_name if item.is_manual_entry else None,manual_plant_id=item.plant_id if item.is_manual_entry else None,manual_line_id=item.line_id if item.is_manual_entry else None,component_id=item.component_id,pm_id=item.pm_id,priority='Medium',status='Open',problem_description=item.failure_reason,work_description=item.action_taken,planned_date=report.report_date,created_by='SYSTEM')
+    w=WorkOrder(work_order_id=wid,work_order_number=wid,records_committed=True,work_order_type=item.maintenance_type,equipment_id=None if item.is_manual_entry else item.equipment_id,manual_equipment_code=item.equipment_code if item.is_manual_entry else None,manual_equipment_name=item.equipment_name if item.is_manual_entry else None,manual_plant_id=item.plant_id if item.is_manual_entry else None,manual_line_id=item.line_id if item.is_manual_entry else None,component_id=item.component_id,pm_id=item.pm_id,priority='Medium',status='Open',problem_description=item.failure_reason,work_description=item.action_taken,planned_date=report.report_date,created_by='SYSTEM')
     db.add(w); db.flush(); audit(db,u,'AUTO_CREATE','WorkOrder',wid,new={'source':'Daily Report','report_id':report.report_id})
     return w,'created'
 
@@ -4291,12 +4336,22 @@ def report_to_dict(r, items, db: Session):
     report['technician_code'] = r.technician_id
     report['technician_name'] = technician.name if technician else None
     report['technician_id'] = technician.name if technician else None
+    linked_ids = list({item.wo_id for item in items if item.wo_id})
+    numbered_orders = {
+        order.work_order_id: order.work_order_number
+        for order in db.query(WorkOrder).filter(WorkOrder.work_order_id.in_(linked_ids)).all()
+    } if linked_ids else {}
+    item_data = []
+    for item in items:
+        row = as_dict(item)
+        row['work_order_number'] = numbered_orders.get(item.wo_id)
+        item_data.append(row)
     photos = db.query(DailyReportPhoto.id, DailyReportPhoto.position).filter_by(
         report_id=r.id
     ).order_by(DailyReportPhoto.position, DailyReportPhoto.id).all()
     return {
         'report': report,
-        'items': items,
+        'items': item_data,
         'photos': [{'id': photo.id, 'position': photo.position} for photo in photos],
     }
 
@@ -5353,10 +5408,11 @@ def run_pm_automation(db:Session=Depends(get_db),u=Depends(role(*ENGINEER))):
         existing=db.query(WorkOrder).filter(WorkOrder.pm_id==p.pm_id,WorkOrder.status.notin_(['Closed','Cancelled'])).first()
         if existing: continue
         equipment = db.query(Equipment).filter_by(equipment_id=p.equipment_id).first()
-        wid = next_work_order_id(db, equipment.plant_id if equipment else None, target.year)
-        w=WorkOrder(work_order_id=wid,work_order_type='Preventive',equipment_id=p.equipment_id,component_id=p.component_id,pm_id=p.pm_id,priority=p.priority,status='Open',problem_description='Scheduled PM',work_description=p.task,planned_date=p.next_due_date,created_by='SYSTEM')
+        wid = draft_work_order_id()
+        w=WorkOrder(work_order_id=wid,work_order_number=None,records_committed=False,work_order_type='Preventive',equipment_id=p.equipment_id,component_id=p.component_id,pm_id=p.pm_id,priority=p.priority,status='Open',problem_description='Scheduled PM',work_description=p.task,planned_date=p.next_due_date,created_by='SYSTEM')
         db.add(w); db.flush(); created.append(wid)
-        for tech in db.query(User).filter(User.role.in_(tuple(TECHNICIAN)), User.is_active==True).all(): notify(db,tech.id,'PM Work Order Created',f'{wid} for {p.equipment_id} is due tomorrow','pm',wid)
+        added = apply_assignment(db, None, w, active_technician_ids(db), had_assignees=False)
+        queue_work_order_pushes(added, w)
     db.commit(); return {'created':created,'due_date':str(target)}
 
 LUBE_SHIFTS = {
@@ -5532,6 +5588,7 @@ def record_oil_change(db, user, report, technician_id, equipment, code, name, co
         done_at = datetime.combine(report.report_date, datetime.min.time())
         order = WorkOrder(
             work_order_id=work_order_id,
+            work_order_number=work_order_id,
             work_order_type='Lubrication',
             equipment_id=equipment.equipment_id if equipment else None,
             manual_equipment_code=None if equipment else code,
@@ -6485,8 +6542,8 @@ def delete_motor_sheet(report_id: str, db: Session = Depends(get_db), u=Depends(
 
 @app.get('/dashboard')
 def dashboard(db:Session=Depends(get_db),u=Depends(auth)):
-    today=date.today(); wo_total=db.query(func.count(WorkOrder.id)).scalar() or 0; open_wo=db.query(func.count(WorkOrder.id)).filter(WorkOrder.status.notin_(['Closed','Cancelled'])).scalar() or 0
-    overdue=db.query(func.count(WorkOrder.id)).filter(WorkOrder.planned_date<today,WorkOrder.status.notin_(['Closed','Cancelled'])).scalar() or 0
+    today=date.today(); wo_total=db.query(func.count(WorkOrder.id)).filter(WorkOrder.work_order_number.isnot(None)).scalar() or 0; open_wo=db.query(func.count(WorkOrder.id)).filter(WorkOrder.work_order_number.isnot(None),WorkOrder.status.notin_(['Closed','Cancelled'])).scalar() or 0
+    overdue=db.query(func.count(WorkOrder.id)).filter(WorkOrder.work_order_number.isnot(None),WorkOrder.planned_date<today,WorkOrder.status.notin_(['Closed','Cancelled'])).scalar() or 0
     pm_due=db.query(func.count(PMPlan.id)).filter(PMPlan.active==True,PMPlan.next_due_date<=today+timedelta(days=1)).scalar() or 0
     pm_over=db.query(func.count(PMPlan.id)).filter(PMPlan.active==True,PMPlan.next_due_date<today).scalar() or 0
     eq={s:db.query(func.count(Equipment.id)).filter(Equipment.status==s).scalar() or 0 for s in EQUIPMENT_STATUSES}

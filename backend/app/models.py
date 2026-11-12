@@ -221,6 +221,7 @@ class WorkOrder(Base):
     __tablename__='work_orders'
     id: Mapped[int]=mapped_column(Integer,primary_key=True)
     work_order_id: Mapped[str]=mapped_column(String(60),unique=True,index=True)
+    work_order_number: Mapped[str|None]=mapped_column(String(60),unique=True,index=True,nullable=True)
     work_order_type: Mapped[str]=mapped_column(String(50))
     equipment_id: Mapped[str|None]=mapped_column(String(50),nullable=True,index=True)
     manual_equipment_code: Mapped[str|None]=mapped_column(String(50),nullable=True,index=True)

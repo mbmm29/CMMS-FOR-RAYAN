@@ -1516,6 +1516,7 @@ function drawPreventiveDispatchApprovals(dispatches) {
 async function drawWorkOrders() {
   const pmDispatches = (canMaintain() || isTechnician()) ? await apiRequest('/preventive-dispatches') : [];
   const scopeOrders = scopedWorkOrders(store.orders);
+  const issuedOrders = scopeOrders.filter((order) => order.work_order_number);
   const queryOrders = scopeOrders.filter((order) => workOrderSearchMatches(order));
   const rows = queryOrders.filter((order) => {
     if (ui.tab === 'Overdue') return overdue(order);
@@ -1526,14 +1527,14 @@ async function drawWorkOrders() {
   });
   const selected = rows.find((order) => order.work_order_id === ui.rowKey) || rows[0];
   document.getElementById('metric-grid').innerHTML = metrics([
-    ['Total Work Orders', String(scoped(store.orders).length), '▤', 'blue', ''],
-    ['Completed', String(scoped(store.orders).filter(closed).length), '✓', 'green', ''],
-    ['In Progress', String(scoped(store.orders).filter((order) => order.status === 'In Progress').length), '◷', 'orange', ''],
-    ['On Hold', String(scoped(store.orders).filter((order) => order.status === 'On Hold').length), 'Ⅱ', 'blue', ''],
-    ['Overdue', String(scoped(store.orders).filter(overdue).length), '◉', 'red', ''],
-    ['Avg. Labor (hrs)', numberText(scoped(store.orders).length ? sum(scoped(store.orders), 'labor_hours') / scoped(store.orders).length : 0, 1), '◷', 'green', ''],
+    ['Total Work Orders', String(issuedOrders.length), '▤', 'blue', ''],
+    ['Completed', String(issuedOrders.filter(closed).length), '✓', 'green', ''],
+    ['In Progress', String(issuedOrders.filter((order) => order.status === 'In Progress').length), '◷', 'orange', ''],
+    ['On Hold', String(issuedOrders.filter((order) => order.status === 'On Hold').length), 'Ⅱ', 'blue', ''],
+    ['Overdue', String(issuedOrders.filter(overdue).length), '◉', 'red', ''],
+    ['Avg. Labor (hrs)', numberText(issuedOrders.length ? sum(issuedOrders, 'labor_hours') / issuedOrders.length : 0, 1), '◷', 'green', ''],
   ]);
-  dateLabel(store.orders.map((order) => order.request_date));
+  dateLabel(issuedOrders.map((order) => order.request_date));
   if (ui.mode === 'create' && canMaintain()) {
     document.getElementById('workspace').className = 'workspace';
     document.getElementById('workspace').innerHTML = workOrderForm();
@@ -1566,8 +1567,8 @@ async function drawWorkOrders() {
   }
   const myPmDispatch = isTechnician() ? pmDispatches.find((item) => item.id === Number(ui.pmDispatchId)) : null;
   if (ui.pmDispatchId && !myPmDispatch) ui.pmDispatchId = '';
-  const body = rows.map((order) => `<tr data-row="${esc(order.work_order_id)}" class="${selected && selected.work_order_id === order.work_order_id ? 'selected' : ''}">${cell(esc(order.work_order_id), true)}${cell(liveBadge(order.work_order_type))}${cell(esc(equipmentText(order)))}${cell(esc(order.problem_description || order.work_description || '—'))}${cell(liveBadge(order.priority))}${cell(isTechnician() ? `<button type="button" class="badge blue job-open" data-open="${esc(order.work_order_id)}">${esc(t(order.status || 'Open'))}</button>` : liveBadge(order.status))}${cell(esc(assigneeNames(order)))}${cell(fmtDate(order.planned_date))}${cell(fmtDate(order.request_date))}</tr>`);
-  const detail = myPmDispatch ? preventiveDispatchDetails(myPmDispatch, false) : ui.mode === 'create' ? workOrderForm() : detailPanel('Work Order Details', selected?.status || '—', selected?.work_order_id || '—', equipmentText(selected || {}), [
+  const body = rows.map((order) => `<tr data-row="${esc(order.work_order_id)}" class="${selected && selected.work_order_id === order.work_order_id ? 'selected' : ''}">${cell(esc(order.work_order_number || t('Pending acceptance')), true)}${cell(liveBadge(order.work_order_type))}${cell(esc(equipmentText(order)))}${cell(esc(order.problem_description || order.work_description || '—'))}${cell(liveBadge(order.priority))}${cell(isTechnician() ? `<button type="button" class="badge blue job-open" data-open="${esc(order.work_order_id)}">${esc(t(order.status || 'Open'))}</button>` : liveBadge(order.status))}${cell(esc(assigneeNames(order)))}${cell(fmtDate(order.planned_date))}${cell(fmtDate(order.request_date))}</tr>`);
+  const detail = myPmDispatch ? preventiveDispatchDetails(myPmDispatch, false) : ui.mode === 'create' ? workOrderForm() : detailPanel('Work Order Details', selected?.status || '—', selected?.work_order_number || t('Pending acceptance'), equipmentText(selected || {}), [
     ['Type', selected?.work_order_type], ['Priority', selected?.priority], ['Equipment', equipmentText(selected || {})],
     ['Problem', selected?.problem_description], ['Work', selected?.work_description], ['PM details', selected?.pm_details], ['Technicians', assigneeNames(selected)],
     ['Planned', fmtDate(selected?.planned_date)], ['Downtime (h)', selected?.downtime_h ?? '—'], ['Parts', selected?.parts_used],
@@ -1617,7 +1618,8 @@ async function drawWorkOrders() {
       store = null;
       ui.pmDispatchId = '';
       ui.rowKey = result.work_order_id;
-      toast(`${t('Preventive work order accepted.')}${result.work_order_id ? ` ${result.work_order_id}` : ''}`);
+      const issuedNumber = result.work_order_number || result.work_order_id;
+      toast(`${t('Preventive work order accepted.')}${issuedNumber ? ` ${issuedNumber}` : ''}`);
       await paint('work-orders');
     } catch (exception) {
       if (error) error.textContent = t(exception.message);
@@ -3310,7 +3312,7 @@ function exportJobOrderPdf(order) {
     field.replaceWith(block);
   });
   const previousTitle = document.title;
-  document.title = `job-order-${order.work_order_id}`;
+  document.title = `job-order-${order.work_order_number || 'pending-acceptance'}`;
   document.body.classList.add('job-printing');
   const cleanup = () => {
     document.body.classList.remove('job-printing');
@@ -3342,7 +3344,7 @@ function workOrderForm(order) {
       jobField('Section', `<input value="${esc(place.section)}" readonly>`),
       jobField('Maintenance type', `<input value="${esc(jobTypeLabel(order.work_order_type))}" readonly>`),
       jobField('Machine name', `<input class="job-code" value="${esc(equipmentText(order))}" readonly>`, 'job-wide'),
-      jobField('Repair order no.', `<input class="job-code" value="${esc(order.work_order_id)}" readonly>`),
+      jobField('Repair order no.', `<input class="job-code" value="${esc(order.work_order_number || t('Pending acceptance'))}" readonly>`),
       jobField('Date', `<input type="date" value="${esc(String(order.planned_date || '').slice(0, 10))}" readonly>`),
       ...(order.pm_details ? [jobField('PM details', `<input class="job-code" value="${esc(order.pm_details)}" readonly>`, 'job-wide')] : []),
     ].join('');
@@ -3355,7 +3357,7 @@ function workOrderForm(order) {
     jobField('Section', `<select name="section_id" id="job-section"><option value="">${esc(t('Select a line first'))}</option></select>`),
     jobField('Maintenance type', `<select name="work_order_type" required>${jobTypeOptions('Corrective')}</select>`),
     jobField('Machine name', `<input class="job-code" name="machine_name" id="job-equipment" list="job-equipment-list" required autocomplete="off" placeholder="${esc(t('Equipment name or number'))}"><datalist id="job-equipment-list"></datalist>`, 'job-wide'),
-    jobField('Repair order no.', `<input id="job-number" class="job-code" value="${esc(t('Created when saved'))}" readonly>`),
+    jobField('Repair order no.', `<input id="job-number" class="job-code" value="${esc(t('Number issued after technician acceptance'))}" readonly>`),
     jobField('Date', `<input name="planned_date" type="date" value="${today}" required>`),
   ].join('');
   return `<form id="live-form" class="lube-paper job-order">${jobHead()}<div class="job-fields">${fields}</div><div class="job-crew"><label><input type="radio" name="crew_type" value="Company" checked> ${esc(t('Company maintenance team'))}</label><label><input type="radio" name="crew_type" value="External"> ${esc(t('External maintenance team'))}</label></div><label class="job-block"><span>${esc(t('Fault'))}</span><textarea name="problem_description" required></textarea></label><label class="job-block"><span>${esc(t('Action taken'))}</span><textarea name="corrective_action"></textarea></label><div class="job-block"><span>${esc(t('Technician signature'))}</span>${technicianChecks([])}</div>${parts}<label class="job-block"><span>${esc(t('Result'))}</span><textarea name="verification"></textarea></label>${approvalDateField()}${actions}</form>`;
@@ -4678,7 +4680,7 @@ function showDailyLineName(row) {
 
 function dailyRow(item = {}, index = 0) {
   const options = [`<option value="">${esc(t('Select'))}</option>`, ...DAILY_TYPES.map((type) => `<option value="${esc(type)}"${item.maintenance_type === type ? ' selected' : ''}>${esc(t(type))}</option>`)];
-  const order = item.wo_id ? `<small class="lube-order">${esc(item.wo_id)}</small>` : '';
+  const order = item.wo_id ? `<small class="lube-order">${esc(item.work_order_number || t('Pending acceptance'))}</small>` : '';
   const plantId = item.plant_id || '';
   const line = store.lines.find((row) => row.line_id === item.line_id)
     || store.lines.find((row) => String(row.line_number) === String(item.entered_line_number || '') && (!plantId || row.plant_id === plantId));
@@ -5930,7 +5932,7 @@ function announceLiveWorkOrders(orders, previousMark) {
   }
   const first = fresh[0];
   const title = fresh.length === 1
-    ? `${t('New work order')}: ${first.work_order_id}`
+    ? `${t('New work order')}: ${first.work_order_number || t('Pending acceptance')}`
     : `${fresh.length} ${t('new work orders')}`;
   const detail = first.problem_description || first.work_description || equipmentText(first) || '';
   screenNotice(detail ? `${title} — ${detail}` : title, 'ok');

@@ -348,6 +348,7 @@ class ActivityWorkOrderCreate(BaseModel):
 
 class WOOut(WOCreate):
     id: int
+    work_order_number: str | None = None
     request_date: date
     start_time: datetime | None = None
     end_time: datetime | None = None
