@@ -161,6 +161,27 @@ class AnnualPMDayTask(Base):
     work_order_id: Mapped[str|None]=mapped_column(String(60),nullable=True,index=True)
     released_at: Mapped[datetime|None]=mapped_column(DateTime,nullable=True)
 
+class PreventiveDispatch(Base):
+    __tablename__='preventive_dispatches'
+    id: Mapped[int]=mapped_column(Integer,primary_key=True)
+    annual_task_id: Mapped[int]=mapped_column(Integer,ForeignKey('annual_pm_day_tasks.id'),unique=True,index=True)
+    status: Mapped[str]=mapped_column(String(30),default='Needs Approval',index=True)
+    created_at: Mapped[datetime]=mapped_column(DateTime,default=datetime.utcnow)
+    expires_at: Mapped[datetime]=mapped_column(DateTime,index=True)
+    sent_at: Mapped[datetime|None]=mapped_column(DateTime,nullable=True)
+    accepted_at: Mapped[datetime|None]=mapped_column(DateTime,nullable=True)
+    work_order_id: Mapped[str|None]=mapped_column(String(60),nullable=True,index=True)
+
+class PreventiveDispatchAssignment(Base):
+    __tablename__='preventive_dispatch_assignments'
+    id: Mapped[int]=mapped_column(Integer,primary_key=True)
+    dispatch_id: Mapped[int]=mapped_column(Integer,ForeignKey('preventive_dispatches.id'),index=True)
+    technician_id: Mapped[str]=mapped_column(String(50),ForeignKey('technicians.technician_id'),index=True)
+    response: Mapped[str]=mapped_column(String(20),default='Pending')
+    assigned_at: Mapped[datetime]=mapped_column(DateTime,default=datetime.utcnow)
+    responded_at: Mapped[datetime|None]=mapped_column(DateTime,nullable=True)
+    __table_args__=(UniqueConstraint('dispatch_id','technician_id',name='uq_pm_dispatch_technician'),)
+
 class SOP(Base):
     __tablename__='sops'
     id: Mapped[int]=mapped_column(Integer,primary_key=True)
@@ -212,6 +233,7 @@ class WorkOrder(Base):
     status: Mapped[str]=mapped_column(String(30),default='Open')
     problem_description: Mapped[str|None]=mapped_column(Text,nullable=True)
     work_description: Mapped[str|None]=mapped_column(Text,nullable=True)
+    pm_details: Mapped[str|None]=mapped_column(Text,nullable=True)
     request_date: Mapped[date]=mapped_column(Date,default=date.today)
     planned_date: Mapped[date|None]=mapped_column(Date,nullable=True)
     assigned_technician_id: Mapped[str|None]=mapped_column(String(50),nullable=True)

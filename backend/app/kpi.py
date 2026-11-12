@@ -22,8 +22,8 @@ from datetime import date, datetime, timedelta, timezone
 from sqlalchemy.orm import Session
 
 from .models import (
-    Component, DailyReport, DailyReportItem, Equipment, KpiTarget, KpiWorkDay,
-    MachineRecord, Plant, PlantLine, PMPlan, WorkOrder, WorkOrderAssignment,
+    AnnualPMDayTask, AnnualPMPlan, Component, DailyReport, DailyReportItem, Equipment, KpiTarget, KpiWorkDay,
+    MachineRecord, Plant, PlantLine, PMPlan, PreventiveDispatch, WorkOrder, WorkOrderAssignment,
 )
 
 FAILURE_TYPES = {'Corrective', 'Emergency'}
@@ -382,6 +382,7 @@ def compute_kpi(
             if finished and order.planned_date and finished > order.planned_date:
                 late_pm_ids.add(order.pm_id)
         due_plans = []
+        overdue_plans = []
         on_time = 0
         for plan in plans:
             if not equipment_ok(plan.equipment_id, plan.manual_plant_id, plan.manual_line_id):
@@ -394,11 +395,39 @@ def compute_kpi(
             overdue_now = bool(plan.next_due_date and plan.next_due_date < today)
             if completed_in_window and plan.pm_id not in late_pm_ids and not overdue_now:
                 on_time += 1
-        overdue_plans = [
+        annual_occurrences = db.query(AnnualPMDayTask, AnnualPMPlan.plant_id).join(
+            AnnualPMPlan, AnnualPMPlan.id == AnnualPMDayTask.plan_id,
+        ).filter(
+            AnnualPMDayTask.maintenance_type == 'Preventive',
+            AnnualPMDayTask.work_date >= window_start,
+            AnnualPMDayTask.work_date <= min(window_end, today),
+        ).all()
+        annual_ids = [task.id for task, _plant_id in annual_occurrences]
+        annual_dispatches = {
+            row.annual_task_id: row
+            for row in db.query(PreventiveDispatch).filter(PreventiveDispatch.annual_task_id.in_(annual_ids)).all()
+        } if annual_ids else {}
+        for task, task_plant_id in annual_occurrences:
+            if not equipment_ok(task.machine_code, task_plant_id):
+                continue
+            if technician_id and task.technician_id != technician_id:
+                continue
+            due_plans.append(task)
+            dispatch = annual_dispatches.get(task.id)
+            if dispatch and dispatch.status == 'Accepted' and dispatch.accepted_at:
+                if dispatch.accepted_at.date() <= task.work_date:
+                    on_time += 1
+                else:
+                    overdue_plans.append(task)
+            elif dispatch and dispatch.status == 'Expired':
+                overdue_plans.append(task)
+            elif task.work_date + timedelta(days=7) <= today:
+                overdue_plans.append(task)
+        overdue_plans.extend(
             row for row in plans
             if row.next_due_date and row.next_due_date < today
             and equipment_ok(row.equipment_id, row.manual_plant_id, row.manual_line_id)
-        ]
+        )
         scope_plans = [
             row for row in plans
             if equipment_ok(row.equipment_id, row.manual_plant_id, row.manual_line_id)
@@ -410,6 +439,7 @@ def compute_kpi(
             plan_by_id = {row.pm_id: row for row in scope_plans}
             unplanned = len([row for row in preventive_items if row.pm_id and plan_by_id.get(row.pm_id) and plan_by_id[row.pm_id].added_unplanned])
             planned = len(preventive_items) - unplanned
+        planned += len([task for task, task_plant_id in annual_occurrences if equipment_ok(task.machine_code, task_plant_id) and (not technician_id or task.technician_id == technician_id)])
 
         scheduled_orders = [row for row in window_orders if row.work_order_type != 'Emergency']
         scheduled_done = [row for row in scheduled_orders if row.status in CLOSED]

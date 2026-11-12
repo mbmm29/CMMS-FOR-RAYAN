@@ -177,6 +177,9 @@ def ensure_additive_columns():
             if 'crew_type' not in existing:
                 with engine.begin() as conn:
                     conn.execute(text('ALTER TABLE work_orders ADD COLUMN crew_type VARCHAR(30)'))
+            if 'pm_details' not in existing:
+                with engine.begin() as conn:
+                    conn.execute(text('ALTER TABLE work_orders ADD COLUMN pm_details TEXT'))
         if 'work_order_assignments' in tables:
             existing = {c['name'] for c in inspector.get_columns('work_order_assignments')}
             additions = {
@@ -598,11 +601,16 @@ def create_bootstrap_system():
             db.rollback()
         try:
             release_due_corrective_orders(db)
+            events = sync_preventive_dispatches(db)
+            db.commit()
+            if events:
+                queue_engineer_pushes(events)
         except Exception:
             db.rollback()
     finally:
         db.close()
     start_corrective_release_worker()
+    start_preventive_dispatch_worker()
     threading.Thread(target=run_deferred_boot_jobs, name='boot-catalog', daemon=True).start()
 
 @app.get('/health')
@@ -1827,6 +1835,10 @@ def week_token(value: date) -> str:
 def drop_generated_task(db, row):
     cancel_unreleased_order(db, row)
     if not row.released_at:
+        dispatch = db.query(PreventiveDispatch).filter_by(annual_task_id=row.id).first()
+        if dispatch:
+            db.query(PreventiveDispatchAssignment).filter_by(dispatch_id=dispatch.id).delete(synchronize_session=False)
+            db.delete(dispatch)
         db.delete(row)
 
 def sync_repeated_day_tasks(db, user, plan, plant_id: str):
@@ -1916,7 +1928,11 @@ def pack_plan_tasks(rows, limit=80, plant_names=None):
 @app.get('/annual-pm/overview')
 def annual_pm_overview(year: int, plant_id: str | None = None, db: Session = Depends(get_db), u=Depends(auth)):
     """Tasks that fall today, this week, and this month, plus task counts per plant."""
-    today = date.today()
+    events = sync_preventive_dispatches(db)
+    db.commit()
+    if events:
+        queue_engineer_pushes(events)
+    today = plant_now().date()
     plant_rows = db.query(Plant).all()
     names = {row.plant_id: row.name for row in plant_rows}
     active_ids = {row.plant_id for row in plant_rows if row.active is not False}
@@ -1990,7 +2006,11 @@ def due_task_status(task, today: date, completed: bool) -> str:
 @app.get('/annual-pm/due')
 def annual_pm_due(year: int, plant_id: str | None = None, db: Session = Depends(get_db), u=Depends(auth)):
     """Real due, overdue, completed, and compliance figures for the annual plan."""
-    today = date.today()
+    events = sync_preventive_dispatches(db)
+    db.commit()
+    if events:
+        queue_engineer_pushes(events)
+    today = plant_now().date()
     plans = db.query(AnnualPMPlan).filter(AnnualPMPlan.year == year)
     if plant_id:
         plans = plans.filter(AnnualPMPlan.plant_id == plant_id)
@@ -2007,6 +2027,10 @@ def annual_pm_due(year: int, plant_id: str | None = None, db: Session = Depends(
         row.work_order_id: row
         for row in db.query(WorkOrder).filter(WorkOrder.work_order_id.in_(order_ids)).all()
     } if order_ids else {}
+    dispatches = {
+        row.annual_task_id: row
+        for row in db.query(PreventiveDispatch).filter(PreventiveDispatch.annual_task_id.in_([task.id for task in tasks])).all()
+    } if tasks else {}
     done_reports = db.query(DailyReportItem, DailyReport.report_date).join(
         DailyReport, DailyReport.id == DailyReportItem.report_id
     ).filter(
@@ -2023,14 +2047,18 @@ def annual_pm_due(year: int, plant_id: str | None = None, db: Session = Depends(
         if code:
             done_on_day.setdefault((code, report_date.isoformat(), item.maintenance_type), True)
     items = []
-    completed_count = overdue_count = due_month = on_time = due_to_date = 0
+    completed_count = overdue_count = missed_count = due_month = on_time = due_to_date = 0
     for task in tasks:
         finished = None
         completed = False
         order = orders.get(task.work_order_id) if task.work_order_id else None
+        dispatch = dispatches.get(task.id)
         if order and order.status in ('Completed', 'Closed'):
             completed = True
             finished = order.closing_date.date() if order.closing_date else (order.end_time.date() if order.end_time else None)
+        elif dispatch and dispatch.status == 'Accepted':
+            completed = True
+            finished = dispatch.accepted_at.date() if dispatch.accepted_at else task.work_date
         elif task.work_order_id and task.work_order_id in done_by_order:
             completed = True
             finished = min(done_by_order[task.work_order_id])
@@ -2038,10 +2066,14 @@ def annual_pm_due(year: int, plant_id: str | None = None, db: Session = Depends(
             completed = True
             finished = task.work_date
         status = due_task_status(task, today, completed)
+        if not completed and task.work_date + timedelta(days=7) <= today:
+            status = 'Missed'
         if completed:
             completed_count += 1
-        if status == 'Overdue':
+        if status in ('Overdue', 'Missed'):
             overdue_count += 1
+        if status == 'Missed':
+            missed_count += 1
         if status in ('Due Today', 'Due This Week', 'Due This Month') and task.work_date.month == today.month and task.work_date.year == today.year:
             due_month += 1
         if task.work_date <= today:
@@ -2067,6 +2099,7 @@ def annual_pm_due(year: int, plant_id: str | None = None, db: Session = Depends(
         'due_month': due_month,
         'overdue': overdue_count,
         'completed': completed_count,
+            'missed': missed_count,
         'compliance': compliance,
         'items': items,
     }
@@ -2268,6 +2301,83 @@ def release_due_corrective_orders(db):
         db.commit()
     return sent
 
+def sync_preventive_dispatches(db):
+    """Create one approval draft for each newly due annual preventive occurrence."""
+    now = plant_now()
+    today = now.date()
+    start_date = today - timedelta(days=6)
+    tasks = db.query(AnnualPMDayTask).filter(
+        AnnualPMDayTask.work_order_id.is_(None),
+        AnnualPMDayTask.work_date >= start_date,
+        AnnualPMDayTask.work_date <= today,
+    ).order_by(AnnualPMDayTask.work_date, AnnualPMDayTask.id).all()
+    events = []
+    engineers = db.query(User).filter(User.role.in_(tuple(ENGINEER)), User.is_active == True).all()
+    for task in tasks:
+        dispatch = db.query(PreventiveDispatch).filter_by(annual_task_id=task.id).first()
+        deadline = datetime.combine(task.work_date + timedelta(days=7), datetime.min.time())
+        if dispatch is None:
+            dispatch = PreventiveDispatch(
+                annual_task_id=task.id,
+                status='Expired' if now >= deadline else 'Needs Approval',
+                created_at=datetime.combine(task.work_date, datetime.min.time()),
+                expires_at=deadline,
+            )
+            db.add(dispatch)
+            db.flush()
+            if dispatch.status == 'Needs Approval':
+                plan = db.get(AnnualPMPlan, task.plan_id)
+                plant = db.query(Plant).filter_by(plant_id=plan.plant_id).first() if plan else None
+                equipment_label = task.machine_code or task.machine_name or 'Equipment'
+                body = f'{equipment_label} — {task.task}. Select technicians and send it before the 7-day deadline.'
+                for engineer in engineers:
+                    notify(db, engineer.id, 'Preventive maintenance needs approval and dispatch', body, 'pm_dispatch', str(dispatch.id))
+                events.append({
+                    'kind': 'pm_dispatch',
+                    'ref': f'pm-dispatch-{dispatch.id}',
+                    'title': 'Preventive maintenance needs approval and dispatch',
+                    'body': f'{plant.name if plant else "Plant"}: {equipment_label} — {task.task}',
+                    'url': '/index.html#work-orders',
+                })
+        if dispatch.status in ('Needs Approval', 'Awaiting Acceptance') and now >= dispatch.expires_at:
+            dispatch.status = 'Expired'
+            for assignment in db.query(PreventiveDispatchAssignment).filter_by(dispatch_id=dispatch.id, response='Pending').all():
+                assignment.response = 'Expired'
+                assignment.responded_at = now
+    expired = db.query(PreventiveDispatch).filter(
+        PreventiveDispatch.status.in_(('Needs Approval', 'Awaiting Acceptance')),
+        PreventiveDispatch.expires_at <= now,
+    ).all()
+    for dispatch in expired:
+        dispatch.status = 'Expired'
+        for assignment in db.query(PreventiveDispatchAssignment).filter_by(dispatch_id=dispatch.id, response='Pending').all():
+            assignment.response = 'Expired'
+            assignment.responded_at = now
+    db.flush()
+    return events
+
+def start_preventive_dispatch_worker():
+    if getattr(start_preventive_dispatch_worker, 'started', False):
+        return
+    start_preventive_dispatch_worker.started = True
+
+    def loop():
+        import time as sleeper
+        while True:
+            sleeper.sleep(300)
+            session = SessionLocal()
+            try:
+                events = sync_preventive_dispatches(session)
+                session.commit()
+                if events:
+                    queue_engineer_pushes(events)
+            except Exception:
+                session.rollback()
+            finally:
+                session.close()
+
+    threading.Thread(target=loop, name='preventive-dispatch', daemon=True).start()
+
 def start_corrective_release_worker():
     if getattr(start_corrective_release_worker, 'started', False):
         return
@@ -2286,6 +2396,167 @@ def start_corrective_release_worker():
                 session.close()
 
     threading.Thread(target=loop, name='corrective-release', daemon=True).start()
+
+def preventive_dispatch_out(db, dispatch):
+    task = db.get(AnnualPMDayTask, dispatch.annual_task_id)
+    plan = db.get(AnnualPMPlan, task.plan_id) if task else None
+    plant = db.query(Plant).filter_by(plant_id=plan.plant_id).first() if plan else None
+    equipment = equipment_for_day_task(db, plan.plant_id, task.machine_code) if plan and task else None
+    line = db.query(PlantLine).filter_by(line_id=equipment.line_id).first() if equipment and equipment.line_id else None
+    plan_item = db.query(AnnualPMItem).filter_by(plan_id=plan.id, line_key=task.source_key).first() if plan and task and task.source_key else None
+    assignments = db.query(PreventiveDispatchAssignment).filter_by(dispatch_id=dispatch.id).order_by(PreventiveDispatchAssignment.id).all()
+    return {
+        'id': dispatch.id,
+        'annual_task_id': dispatch.annual_task_id,
+        'status': dispatch.status,
+        'work_order_id': dispatch.work_order_id,
+        'created_at': dispatch.created_at,
+        'expires_at': dispatch.expires_at,
+        'sent_at': dispatch.sent_at,
+        'accepted_at': dispatch.accepted_at,
+        'work_date': task.work_date if task else None,
+        'machine_code': task.machine_code if task else '',
+        'machine_name': (equipment.name if equipment else (task.machine_name if task else '')),
+        'task': task.task if task else '',
+        'maintenance_type': task.maintenance_type if task else 'Preventive',
+        'plant_id': plan.plant_id if plan else '',
+        'plant_name': plant.name if plant else (plan.plant_id if plan else ''),
+        'line_id': equipment.line_id if equipment else '',
+        'line_name': line.name if line else '',
+        'frequency_time': plan_item.frequency_time if plan_item else '',
+        'frequency_hours': plan_item.frequency_hours if plan_item else '',
+        'technician_ids': [row.technician_id for row in assignments],
+        'assignment_states': [{'technician_id': row.technician_id, 'response': row.response} for row in assignments],
+    }
+
+
+@app.get('/preventive-dispatches')
+def preventive_dispatches(db: Session = Depends(get_db), u=Depends(auth)):
+    events = sync_preventive_dispatches(db)
+    db.commit()
+    if events:
+        queue_engineer_pushes(events)
+    now = plant_now()
+    if u.role in ENGINEER:
+        rows = db.query(PreventiveDispatch).filter_by(status='Needs Approval').order_by(PreventiveDispatch.expires_at, PreventiveDispatch.id).all()
+    elif is_technician_account(u) and u.technician_id:
+        ids = db.query(PreventiveDispatchAssignment.dispatch_id).filter_by(technician_id=u.technician_id, response='Pending')
+        rows = db.query(PreventiveDispatch).filter(
+            PreventiveDispatch.id.in_(ids),
+            PreventiveDispatch.status == 'Awaiting Acceptance',
+            PreventiveDispatch.expires_at > now,
+        ).order_by(PreventiveDispatch.expires_at, PreventiveDispatch.id).all()
+    else:
+        raise HTTPException(403, 'Preventive dispatches are available to maintenance engineers and technicians')
+    return [preventive_dispatch_out(db, row) for row in rows]
+
+
+@app.post('/preventive-dispatches/{dispatch_id}/send')
+def send_preventive_dispatch(dispatch_id: int, data: PreventiveDispatchSend, db: Session = Depends(get_db), u=Depends(role(*ENGINEER))):
+    sync_preventive_dispatches(db)
+    dispatch = db.get(PreventiveDispatch, dispatch_id)
+    if not dispatch:
+        raise HTTPException(404, 'Preventive task not found')
+    now = plant_now()
+    if now >= dispatch.expires_at:
+        dispatch.status = 'Expired'
+        db.commit()
+        raise HTTPException(410, 'The 7-day acceptance period has ended')
+    if dispatch.status != 'Needs Approval':
+        raise HTTPException(409, 'This task is no longer waiting for approval')
+    technician_ids = list(dict.fromkeys((item or '').strip() for item in data.technician_ids if (item or '').strip()))
+    if not technician_ids:
+        raise HTTPException(400, 'Select at least one technician')
+    active = {row.technician_id for row in db.query(Technician).filter(Technician.status == 'Active', Technician.technician_id.in_(technician_ids)).all()}
+    if active != set(technician_ids):
+        raise HTTPException(400, 'One or more selected technicians are inactive or unavailable')
+    db.query(PreventiveDispatchAssignment).filter_by(dispatch_id=dispatch.id).delete(synchronize_session=False)
+    task = db.get(AnnualPMDayTask, dispatch.annual_task_id)
+    plan = db.get(AnnualPMPlan, task.plan_id) if task else None
+    for technician_id in technician_ids:
+        db.add(PreventiveDispatchAssignment(dispatch_id=dispatch.id, technician_id=technician_id, response='Pending', assigned_at=now))
+        account = db.query(User).filter_by(technician_id=technician_id, is_active=True).first()
+        if account:
+            notify(db, account.id, 'Preventive maintenance work order', f'{task.machine_code} — {task.task}. Open and accept before the 7-day deadline.', 'pm_dispatch', str(dispatch.id))
+    dispatch.status = 'Awaiting Acceptance'
+    dispatch.sent_at = now
+    audit(db, u, 'SEND', 'PreventiveDispatch', dispatch.id, new={'technician_ids': technician_ids, 'expires_at': dispatch.expires_at})
+    db.commit()
+    return preventive_dispatch_out(db, dispatch)
+
+
+@app.post('/preventive-dispatches/{dispatch_id}/respond')
+def respond_preventive_dispatch(dispatch_id: int, data: PreventiveDispatchResponse, db: Session = Depends(get_db), u=Depends(auth)):
+    if not is_technician_account(u) or not u.technician_id:
+        raise HTTPException(403, 'Only the assigned technician can respond')
+    events = sync_preventive_dispatches(db)
+    dispatch = db.get(PreventiveDispatch, dispatch_id)
+    if not dispatch:
+        raise HTTPException(404, 'Preventive task not found')
+    if plant_now() >= dispatch.expires_at or dispatch.status == 'Expired':
+        db.commit()
+        raise HTTPException(410, 'The 7-day acceptance period has ended')
+    if dispatch.status != 'Awaiting Acceptance':
+        raise HTTPException(409, 'This task is not waiting for a technician response')
+    assignment = db.query(PreventiveDispatchAssignment).filter_by(dispatch_id=dispatch.id, technician_id=u.technician_id).first()
+    if not assignment or assignment.response != 'Pending':
+        raise HTTPException(403, 'This task was not sent to your account')
+    decision = (data.decision or '').strip().lower()
+    now = plant_now()
+    if decision == 'rejected':
+        assignment.response = 'Rejected'
+        assignment.responded_at = now
+        remaining = db.query(PreventiveDispatchAssignment).filter_by(dispatch_id=dispatch.id, response='Pending').count()
+        if not remaining:
+            dispatch.status = 'Needs Approval'
+            task = db.get(AnnualPMDayTask, dispatch.annual_task_id)
+            for engineer in db.query(User).filter(User.role.in_(tuple(ENGINEER)), User.is_active == True).all():
+                notify(db, engineer.id, 'Preventive maintenance needs a new assignment', f'{task.machine_code} — all assigned technicians declined. Choose another team.', 'pm_dispatch', str(dispatch.id))
+        db.commit()
+        return {'status': dispatch.status, 'decision': 'Rejected'}
+    if decision != 'accepted':
+        raise HTTPException(400, 'Decision must be Accepted or Rejected')
+
+    task = db.get(AnnualPMDayTask, dispatch.annual_task_id)
+    plan = db.get(AnnualPMPlan, task.plan_id) if task else None
+    if not task or not plan:
+        raise HTTPException(404, 'The annual maintenance task no longer exists')
+    plan_item = db.query(AnnualPMItem).filter_by(plan_id=plan.id, line_key=task.source_key).first() if task.source_key else None
+    equipment = equipment_for_day_task(db, plan.plant_id, task.machine_code)
+    order = WorkOrder(
+        work_order_id=next_work_order_id(db, plan.plant_id, task.work_date.year),
+        work_order_type=task.maintenance_type if task.maintenance_type in MAINT_TYPES else 'Preventive',
+        priority='Medium',
+        status='In Progress',
+        problem_description=task.task,
+        work_description=task.task,
+        pm_details='; '.join(part for part in [f"Frequency days: {plan_item.frequency_time}" if plan_item and plan_item.frequency_time else '', f"Running hours: {plan_item.frequency_hours}" if plan_item and plan_item.frequency_hours else '', f"Scheduled: {task.work_date.isoformat()}"] if part),
+        planned_date=task.work_date,
+        request_date=now.date(),
+        assigned_technician_id=u.technician_id,
+        created_by='Annual PM approval',
+        records_committed=True,
+    )
+    fill_order_equipment(order, equipment, plan.plant_id, task.machine_code, task.machine_name)
+    db.add(order)
+    db.flush()
+    db.add(WorkOrderAssignment(work_order_id=order.work_order_id, technician_id=u.technician_id, response='Accepted', assigned_at=dispatch.sent_at or dispatch.created_at, responded_at=now))
+    task.work_order_id = order.work_order_id
+    task.technician_id = u.technician_id
+    task.released_at = now
+    dispatch.status = 'Accepted'
+    dispatch.accepted_at = now
+    dispatch.work_order_id = order.work_order_id
+    for other in db.query(PreventiveDispatchAssignment).filter_by(dispatch_id=dispatch.id).all():
+        if other.technician_id != u.technician_id and other.response == 'Pending':
+            other.response = 'Rejected'
+            other.responded_at = now
+    deliver_to_technician(db, u, order, u.technician_id)
+    audit(db, u, 'ACCEPT', 'PreventiveDispatch', dispatch.id, new={'work_order_id': order.work_order_id})
+    db.commit()
+    db.refresh(order)
+    return {'status': dispatch.status, 'work_order_id': order.work_order_id}
+
 
 @app.get('/annual-pm/days', response_model=list[AnnualDayTaskOut])
 def annual_pm_days(plant_id: str, year: int, date_from: date, date_to: date, db: Session = Depends(get_db), u=Depends(auth)):
@@ -2359,6 +2630,10 @@ def save_annual_pm_days(data: AnnualDaySave, db: Session = Depends(get_db), u=De
     for row in existing_rows:
         if row.id not in kept:
             cancel_unreleased_order(db, row)
+            dispatch = db.query(PreventiveDispatch).filter_by(annual_task_id=row.id).first()
+            if dispatch:
+                db.query(PreventiveDispatchAssignment).filter_by(dispatch_id=dispatch.id).delete(synchronize_session=False)
+                db.delete(dispatch)
             db.delete(row)
     audit(db, u, 'SAVE', 'AnnualPMDay', f'{data.plant_id}-{data.year}', new={'tasks': len(cleaned)})
     db.commit()
@@ -2858,6 +3133,10 @@ def update_kpi_target(data: KpiTargetIn, db: Session = Depends(get_db), u=Depend
 @app.get('/work-orders',response_model=list[WOOut])
 def work_orders(status:str|None=None,equipment_id:str|None=None,db:Session=Depends(get_db),u=Depends(auth)):
     release_due_corrective_orders(db)
+    events = sync_preventive_dispatches(db)
+    db.commit()
+    if events:
+        queue_engineer_pushes(events)
     expire_pending_assignments(db)
     q=db.query(WorkOrder)
     if status:q=q.filter(WorkOrder.status==status)

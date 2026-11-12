@@ -264,6 +264,14 @@ class AnnualDayTaskOut(AnnualDayTaskIn):
     model_config = ConfigDict(from_attributes=True)
 
 
+class PreventiveDispatchSend(BaseModel):
+    technician_ids: list[str]
+
+
+class PreventiveDispatchResponse(BaseModel):
+    decision: str
+
+
 class WOCreate(BaseModel):
     work_order_id: str | None = None
     work_order_type: str
@@ -348,6 +356,7 @@ class WOOut(WOCreate):
     failure_mode: str | None = None
     failure_cause: str | None = None
     corrective_action: str | None = None
+    pm_details: str | None = None
     result: str | None = None
     verification: str | None = None
     parts_used: str | None = None

@@ -1421,7 +1421,40 @@ function assetList(selectedCode, options = {}) {
   }).join('') || `<p class="live-note">${esc(t(emptyNote))}</p>`}</aside>`;
 }
 
-function drawWorkOrders() {
+function preventiveDispatchDetails(dispatch, engineer = false) {
+  const technicianOptions = (store.technicians || []).filter((person) => person.status === 'Active').map((person) => `<label><input type="checkbox" name="assigned_technician_ids" value="${esc(person.technician_id)}"> ${esc(person.name)}</label>`).join('');
+  const assignments = (dispatch.assignment_states || []).map((row) => `${esc(technicianName(row.technician_id))}: ${esc(t(row.response))}`).join(', ');
+  return `<aside class="panel detail pm-dispatch-detail"><h2>${esc(t(engineer ? 'Preventive task approval' : 'Preventive task details'))}</h2><div class="detail-top"><div class="machine" aria-hidden="true">⚙</div><h3>${esc(dispatch.machine_code || '—')} — ${esc(dispatch.machine_name || '—')}</h3><p>${esc(dispatch.plant_name || '')}${dispatch.line_name ? ` · ${esc(dispatch.line_name)}` : ''}</p></div><div class="detail-list"><div><b>${esc(t('Maintenance type'))}</b><span>${esc(t(dispatch.maintenance_type || 'Preventive'))}</span></div><div><b>${esc(t('Planned date'))}</b><span>${esc(fmtDate(dispatch.work_date))}</span></div><div><b>${esc(t('Task description'))}</b><span>${esc(dispatch.task || '—')}</span></div><div><b>${esc(t('Frequency days'))}</b><span>${esc(dispatch.frequency_time || '—')}</span></div><div><b>${esc(t('Running hours'))}</b><span>${esc(dispatch.frequency_hours || '—')}</span></div><div><b>${esc(t('Accept before'))}</b><span>${esc(fmtDate(String(dispatch.expires_at || '').slice(0, 10)))}</span></div>${assignments ? `<div><b>${esc(t('Technicians'))}</b><span>${assignments}</span></div>` : ''}</div>${engineer ? `<div class="pm-dispatch-technicians"><b>${esc(t('Select technicians to send this order'))}</b><div class="assignee-list">${technicianOptions || `<span>${esc(t('No technicians'))}</span>`}</div><button type="button" class="detail-button primary" id="pm-dispatch-send"${technicianOptions ? '' : ' disabled'}>${esc(t('Send to technicians'))}</button><p id="pm-dispatch-error" class="form-error"></p></div>` : `<button type="button" class="detail-button primary" id="pm-dispatch-accept">${esc(t('Open and accept work order'))}</button><p id="pm-dispatch-error" class="form-error"></p>`}</aside>`;
+}
+
+function drawPreventiveDispatchApprovals(dispatches) {
+  const rows = dispatches.filter((item) => item.status === 'Needs Approval');
+  const selected = rows.find((item) => item.id === Number(ui.pmDispatchId)) || rows[0];
+  if (selected) ui.pmDispatchId = selected.id;
+  const body = rows.map((item) => `<tr data-pm-dispatch="${item.id}" class="${selected?.id === item.id ? 'selected' : ''}">${cell(esc(item.machine_code || '—'), true)}${cell(esc(item.machine_name || '—'))}${cell(esc(item.task || '—'))}${cell(esc(item.plant_name || '—'))}${cell(fmtDate(item.work_date))}${cell(liveBadge('Needs Approval'))}</tr>`);
+  document.getElementById('workspace').className = 'workspace work-orders-board pm-dispatch-board';
+  document.getElementById('workspace').innerHTML = `<section class="panel">${tabsHtml(['All Work Orders', 'In Progress', 'Overdue', 'Completed', 'On Hold', 'Work orders needing approval and dispatch'])}${tableShell(['Equipment no.', 'Equipment name', 'Preventive task', 'Plant', 'Scheduled date', 'Status'], body, shown(rows.length, rows.length, 'preventive orders waiting for approval'))}</section>${selected ? preventiveDispatchDetails(selected, true) : `<aside class="panel detail"><h2>${esc(t('Preventive task approval'))}</h2><p class="live-note">${esc(t('No preventive work orders need approval and dispatch.'))}</p></aside>`}`;
+  bindRows();
+  document.querySelectorAll('[data-pm-dispatch]').forEach((row) => row.addEventListener('click', () => {
+    ui.pmDispatchId = Number(row.dataset.pmDispatch);
+    drawWorkOrders();
+  }));
+  document.getElementById('pm-dispatch-send')?.addEventListener('click', async () => {
+    const error = document.getElementById('pm-dispatch-error');
+    const technicianIds = [...document.querySelectorAll('.pm-dispatch-detail input[name="assigned_technician_ids"]:checked')].map((input) => input.value);
+    try {
+      await apiRequest(`/preventive-dispatches/${selected.id}/send`, { method: 'POST', body: JSON.stringify({ technician_ids: technicianIds }) });
+      ui.pmDispatchId = '';
+      toast(t('Preventive work order sent to technicians.'));
+      await paint('work-orders');
+    } catch (exception) {
+      if (error) error.textContent = t(exception.message);
+    }
+  });
+}
+
+async function drawWorkOrders() {
+  const pmDispatches = (canMaintain() || isTechnician()) ? await apiRequest('/preventive-dispatches') : [];
   const scopeOrders = scopedWorkOrders(store.orders);
   const queryOrders = scopeOrders.filter((order) => workOrderSearchMatches(order));
   const rows = queryOrders.filter((order) => {
@@ -1467,15 +1500,24 @@ function drawWorkOrders() {
     }
     ui.mode = 'view';
   }
+  if (canMaintain() && ui.tab === 'Work orders needing approval and dispatch') {
+    drawPreventiveDispatchApprovals(pmDispatches);
+    return;
+  }
+  const myPmDispatch = isTechnician() ? pmDispatches.find((item) => item.id === Number(ui.pmDispatchId)) : null;
+  if (ui.pmDispatchId && !myPmDispatch) ui.pmDispatchId = '';
   const body = rows.map((order) => `<tr data-row="${esc(order.work_order_id)}" class="${selected && selected.work_order_id === order.work_order_id ? 'selected' : ''}">${cell(esc(order.work_order_id), true)}${cell(liveBadge(order.work_order_type))}${cell(esc(equipmentText(order)))}${cell(esc(order.problem_description || order.work_description || '—'))}${cell(liveBadge(order.priority))}${cell(isTechnician() ? `<button type="button" class="badge blue job-open" data-open="${esc(order.work_order_id)}">${esc(t(order.status || 'Open'))}</button>` : liveBadge(order.status))}${cell(esc(assigneeNames(order)))}${cell(fmtDate(order.planned_date))}${cell(fmtDate(order.request_date))}</tr>`);
-  const detail = ui.mode === 'create' ? workOrderForm() : detailPanel('Work Order Details', selected?.status || '—', selected?.work_order_id || '—', equipmentText(selected || {}), [
+  const detail = myPmDispatch ? preventiveDispatchDetails(myPmDispatch, false) : ui.mode === 'create' ? workOrderForm() : detailPanel('Work Order Details', selected?.status || '—', selected?.work_order_id || '—', equipmentText(selected || {}), [
     ['Type', selected?.work_order_type], ['Priority', selected?.priority], ['Equipment', equipmentText(selected || {})],
-    ['Problem', selected?.problem_description], ['Work', selected?.work_description], ['Technicians', assigneeNames(selected)],
+    ['Problem', selected?.problem_description], ['Work', selected?.work_description], ['PM details', selected?.pm_details], ['Technicians', assigneeNames(selected)],
     ['Planned', fmtDate(selected?.planned_date)], ['Downtime (h)', selected?.downtime_h ?? '—'], ['Parts', selected?.parts_used],
   ]);
   const workOrderFilters = filtersHtml({ className: 'work-order-filters', equipmentSearch: false, equipmentQuery: '', extra: `<label class="equipment-query">${esc(t('Search'))}<span class="equipment-query-row"><input id="work-order-query" type="search" value="${esc(ui.workOrderQuery || '')}" placeholder="${esc(t('Search...'))}" autocomplete="off"><button type="button" class="detail-button" id="work-order-query-go">${esc(t('Search'))}</button></span></label>` });
+  const technicianDispatches = isTechnician() && pmDispatches.length
+    ? `<div class="pm-dispatch-inbox"><b>${esc(t('Preventive work orders awaiting acceptance'))}</b>${pmDispatches.map((item) => `<button type="button" class="pm-dispatch-item${myPmDispatch?.id === item.id ? ' selected' : ''}" data-open-pm="${item.id}"><strong>${esc(item.machine_code)} — ${esc(item.machine_name)}</strong><small>${esc(item.task)}</small><small>${esc(fmtDate(item.work_date))} · ${esc(t('Accept before'))}: ${esc(fmtDate(String(item.expires_at || '').slice(0, 10)))}</small></button>`).join('')}</div>` : '';
   document.getElementById('workspace').className = 'workspace work-orders-board';
-  document.getElementById('workspace').innerHTML = `${workOrderFilters}<section class="panel">${tabsHtml(['All Work Orders', 'In Progress', 'Overdue', 'Completed', 'On Hold'])}${tableShell(['WO No.', 'Type', 'Equipment', 'Problem / Description', 'Priority', 'Status', 'Assigned To', 'Due Date', 'Created On'], body, shown(rows.length, scopeOrders.length, 'work orders'))}</section>${detail}`;
+  const workOrderTabs = ['All Work Orders', 'In Progress', 'Overdue', 'Completed', 'On Hold', ...(canMaintain() ? ['Work orders needing approval and dispatch'] : [])];
+  document.getElementById('workspace').innerHTML = `${workOrderFilters}<section class="panel">${technicianDispatches}${tabsHtml(workOrderTabs)}${tableShell(['WO No.', 'Type', 'Equipment', 'Problem / Description', 'Priority', 'Status', 'Assigned To', 'Due Date', 'Created On'], body, shown(rows.length, scopeOrders.length, 'work orders'))}</section>${detail}`;
   bindFilters();
   const workOrderQuery = document.getElementById('work-order-query');
   const applyWorkOrderQuery = () => {
@@ -1489,11 +1531,11 @@ function drawWorkOrders() {
     event.preventDefault();
     applyWorkOrderQuery();
   });
-  if (ui.mode !== 'create' && selected) {
+  if (!myPmDispatch && ui.mode !== 'create' && selected) {
     document.querySelector('.detail')?.insertAdjacentHTML('beforeend', `<button type="button" class="detail-button primary job-open-detail" data-open="${esc(selected.work_order_id)}" title="${esc(t('Open maintenance order'))}"><span class="job-open-glyph" aria-hidden="true">▣</span><span>${esc(t('Open maintenance order'))}</span></button><button type="button" class="detail-button" id="job-pdf-export">${esc(t('Export PDF'))}</button>`);
     document.getElementById('job-pdf-export')?.addEventListener('click', () => exportJobOrderPdf(selected));
   }
-  if (ui.mode !== 'create' && selected && canMaintain()) {
+  if (!myPmDispatch && ui.mode !== 'create' && selected && canMaintain()) {
     document.querySelector('.detail')?.insertAdjacentHTML('beforeend', `<button type="button" class="detail-button danger" data-delete="/work-orders" data-delete-id="${esc(selected.work_order_id)}">${esc(t('Delete'))}</button>`);
   }
   bindRows();
@@ -1504,8 +1546,25 @@ function drawWorkOrders() {
     ui.mode = 'job';
     drawWorkOrders();
   }));
+  document.querySelectorAll('[data-open-pm]').forEach((button) => button.addEventListener('click', () => {
+    ui.pmDispatchId = Number(button.dataset.openPm);
+    drawWorkOrders();
+  }));
+  document.getElementById('pm-dispatch-accept')?.addEventListener('click', async () => {
+    const error = document.getElementById('pm-dispatch-error');
+    try {
+      const result = await apiRequest(`/preventive-dispatches/${myPmDispatch.id}/respond`, { method: 'POST', body: JSON.stringify({ decision: 'Accepted' }) });
+      store = null;
+      ui.pmDispatchId = '';
+      ui.rowKey = result.work_order_id;
+      toast(`${t('Preventive work order accepted.')}${result.work_order_id ? ` ${result.work_order_id}` : ''}`);
+      await paint('work-orders');
+    } catch (exception) {
+      if (error) error.textContent = t(exception.message);
+    }
+  });
   bindForm();
-  if (ui.mode !== 'create' && selected && isTechnician()) {
+  if (!myPmDispatch && ui.mode !== 'create' && selected && isTechnician()) {
     const response = myResponse(selected);
     const panel = document.querySelector('.detail');
     if (response === 'Pending') {
@@ -2089,6 +2148,7 @@ async function drawPlans() {
     if (ui.tab === 'Due This Week') return item.status === 'Due Today' || item.status === 'Due This Week';
     if (ui.tab === 'Due This Month') return ['Due Today', 'Due This Week', 'Due This Month'].includes(item.status);
     if (ui.tab === 'Overdue') return item.status === 'Overdue';
+    if (ui.tab === 'Missed') return item.status === 'Missed';
     if (ui.tab === 'Completed') return item.status === 'Completed';
     return true;
   });
@@ -2101,8 +2161,9 @@ async function drawPlans() {
     ['Compliance (%)', compliance, '◈', 'purple', ''],
   ]);
   const body = rows.map((item) => `<tr data-row="${esc(item.id)}">${cell(esc(item.machine_code || '—'), true)}${cell(esc(item.machine_name || '—'))}${cell(esc(item.task || '—'))}${cell(liveBadge(item.maintenance_type))}${cell(fmtDate(item.work_date))}${cell(liveBadge(item.status))}${cell(esc(item.plant_name || '—'))}</tr>`);
+  document.getElementById('metric-grid').insertAdjacentHTML('beforeend', metrics([['Missed', String(due.missed || 0), '×', 'red', '']]));
   document.getElementById('workspace').className = 'workspace due-board';
-  document.getElementById('workspace').innerHTML = `<section class="panel">${tabsHtml(['Annual plan', 'Due tasks', 'Due Today', 'Due This Week', 'Due This Month', 'Overdue', 'Completed'])}${tableShell(['Equipment number', 'Equipment name', 'Task description', 'Maintenance type', 'Date', 'Status', 'Plant'], body, shown(rows.length, all.length, 'PM tasks'))}</section>`;
+  document.getElementById('workspace').innerHTML = `<section class="panel">${tabsHtml(['Annual plan', 'Due tasks', 'Due Today', 'Due This Week', 'Due This Month', 'Overdue', 'Missed', 'Completed'])}${tableShell(['Equipment number', 'Equipment name', 'Task description', 'Maintenance type', 'Date', 'Status', 'Plant'], body, shown(rows.length, all.length, 'PM tasks'))}</section>`;
   document.querySelectorAll('[data-tab]').forEach((button) => button.addEventListener('click', () => {
     ui.tab = button.dataset.tab;
     ui.mode = 'view';
@@ -3116,6 +3177,7 @@ function workOrderForm(order) {
       jobField('Machine name', `<input class="job-code" value="${esc(equipmentText(order))}" readonly>`, 'job-wide'),
       jobField('Repair order no.', `<input class="job-code" value="${esc(order.work_order_id)}" readonly>`),
       jobField('Date', `<input type="date" value="${esc(String(order.planned_date || '').slice(0, 10))}" readonly>`),
+      ...(order.pm_details ? [jobField('PM details', `<input class="job-code" value="${esc(order.pm_details)}" readonly>`, 'job-wide')] : []),
     ].join('');
     return `<form id="live-form" class="lube-paper job-order" data-order-id="${esc(order.work_order_id)}">${jobHead()}<div class="job-fields">${fields}</div><div class="job-crew"><b>${esc(crew)}</b></div><label class="job-block"><span>${esc(t('Fault'))}</span><textarea readonly>${esc(order.problem_description || '')}</textarea></label><label class="job-block"><span>${esc(t('Action taken'))}</span><textarea name="corrective_action">${esc(order.corrective_action || '')}</textarea></label><div class="job-block"><span>${esc(t('Technician signature'))}</span><input value="${esc(acceptedTechnicianNames(order))}" readonly placeholder="${esc(t('Shows the technician who accepted this work order'))}"></div>${parts}<label class="job-block"><span>${esc(t('Result'))}</span><textarea name="verification">${esc(order.verification || '')}</textarea></label>${approvalDateField(order)}${jobActions(order)}</form>`;
   }
@@ -5591,7 +5653,7 @@ async function saveIsoForms() {
 
 async function draw(page) {
   if (page === 'dashboard') await drawDashboard();
-  else if (page === 'work-orders') drawWorkOrders();
+  else if (page === 'work-orders') await drawWorkOrders();
   else if (page === 'pm-schedule') await drawPlans();
   else if (page === 'plants') drawPlants();
   else if (page === 'new-equipment' || page === 'equipment') drawEquipment();
@@ -5629,6 +5691,7 @@ const liveSync = {
   busy: false,
   started: false,
   orderMark: null,
+  dispatchMark: null,
   noticeMark: null,
 };
 
@@ -5712,24 +5775,29 @@ async function pollLiveUpdates(force) {
   if (!force && document.hidden) return;
   liveSync.busy = true;
   try {
-    const [orders, notices] = await Promise.all([
+    const [orders, notices, dispatches] = await Promise.all([
       apiRequest('/work-orders'),
       apiRequest('/notifications').catch(() => []),
+      ui.page === 'work-orders' && (canMaintain() || isTechnician()) ? apiRequest('/preventive-dispatches').catch(() => []) : Promise.resolve([]),
     ]);
     const orderMark = ordersLiveMark(orders);
+    const dispatchMark = (dispatches || []).map((item) => `${item.id}:${item.status}:${(item.technician_ids || []).join(',')}`).sort().join('|');
     const noticeMark = noticesLiveMark(notices);
     const firstPass = liveSync.orderMark == null;
     const ordersChanged = !firstPass && orderMark !== liveSync.orderMark;
+    const dispatchesChanged = ui.page === 'work-orders' && liveSync.dispatchMark != null && dispatchMark !== liveSync.dispatchMark;
     const noticesChanged = !firstPass && noticeMark !== liveSync.noticeMark;
     const previousOrders = liveSync.orderMark;
     liveSync.orderMark = orderMark;
+    liveSync.dispatchMark = dispatchMark;
     liveSync.noticeMark = noticeMark;
     if (store) store.orders = orders;
     if (firstPass) return;
     if (ordersChanged) {
       announceLiveWorkOrders(orders, previousOrders);
-      if (ui.page === 'work-orders' && !liveSyncEditing()) drawWorkOrders();
-    } else if (noticesChanged) {
+    }
+    if ((ordersChanged || dispatchesChanged) && ui.page === 'work-orders' && !liveSyncEditing()) drawWorkOrders();
+    if (noticesChanged) {
       const newest = (notices || []).find((row) => !row.is_read);
       if (newest) {
         screenNotice(`${newest.title || t('New notice')}${newest.message ? ` — ${newest.message}` : ''}`, 'ok');

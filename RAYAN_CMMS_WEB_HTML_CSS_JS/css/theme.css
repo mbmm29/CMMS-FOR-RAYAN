@@ -424,6 +424,16 @@ body .motor-paper.lube-paper .motor-table input[readonly]{font-weight:800;backgr
 .nav-link.motor-nav[hidden]{display:none!important}
 body .workspace.log-board{display:block;width:100%;min-width:0;max-width:100%}
 body .workspace.work-orders-board>.work-order-filters{margin:0 0 12px}
+body .workspace.work-orders-board .pm-dispatch-inbox{display:grid;gap:8px;padding:12px;border-bottom:1px solid #23406e;background:#0e2346}
+body .workspace.work-orders-board .pm-dispatch-inbox>b{color:#f4f8ff;font-size:13px}
+body .workspace.work-orders-board .pm-dispatch-item{display:grid;gap:4px;width:100%;padding:9px 11px;border:1px solid #2a4f88;border-radius:9px;background:#07182f;color:#f4f8ff;text-align:start;cursor:pointer}
+body .workspace.work-orders-board .pm-dispatch-item:hover,body .workspace.work-orders-board .pm-dispatch-item.selected{border-color:#3b82f6;background:#132f59}
+body .workspace.work-orders-board .pm-dispatch-item small{color:#b7c9e6;white-space:normal}
+body .workspace.work-orders-board .pm-dispatch-detail{min-width:0}
+body .workspace.work-orders-board .pm-dispatch-detail .detail-list span{max-width:65%;white-space:normal;overflow-wrap:anywhere}
+body .workspace.work-orders-board .pm-dispatch-technicians{padding:12px 0;border-top:1px solid #23406e}
+body .workspace.work-orders-board .pm-dispatch-technicians>b{display:block;margin-bottom:8px;color:#f4f8ff}
+body .workspace.pm-dispatch-board{grid-template-columns:minmax(0,1fr) minmax(280px,360px)}
 body .workspace.log-board .record-filters{
   display:grid;grid-template-columns:minmax(0,1fr);grid-column:auto;gap:8px;width:100%;min-width:0;
   margin:0 0 14px;padding:12px;border:1px solid #2a4f88;border-radius:14px;
