@@ -15,7 +15,7 @@ const DEFAULT_TAB = {
   'spare-parts': 'All parts',
 };
 const shellRender = render;
-const ui = { page: 'dashboard', tab: 'All', rowKey: '', mode: 'view', plantId: '', plantIds: [], lineId: '', sectionId: '', equipmentId: '', equipmentQuery: '', spareEquipment: '', spareQuery: '', technicianId: '', dateFrom: '', dateTo: '', annualPlant: '', annualYear: new Date().getFullYear(), annualItems: [], annualWeek: '', annualCopy: null, weekTasks: [], lubeId: '', dailyId: '', dailyFilter: '' };
+const ui = { page: 'dashboard', tab: 'All', rowKey: '', mode: 'view', plantId: '', plantIds: [], lineId: '', sectionId: '', equipmentId: '', equipmentQuery: '', workOrderQuery: '', spareEquipment: '', spareQuery: '', technicianId: '', dateFrom: '', dateTo: '', annualPlant: '', annualYear: new Date().getFullYear(), annualItems: [], annualWeek: '', annualCopy: null, weekTasks: [], lubeId: '', dailyId: '', dailyFilter: '' };
 const ANNUAL_MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 const WEEKDAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 const DAY_MAINTENANCE_TYPES = ['Preventive', 'Corrective', 'Emergency', 'Routine', 'Inspection', 'Lubrication', 'Motor condition'];
@@ -394,7 +394,7 @@ function equipmentMatchesQuery(item, query = ui.equipmentQuery) {
   return fields.some((value) => String(value || '').toLowerCase().includes(needle));
 }
 
-function visibleEquipment() {
+function visibleEquipment(query = ui.equipmentQuery) {
   const plants = selectedPlantIds();
   return store.equipment.filter((item) => {
     if (plants.length && !plants.includes(item.plant_id)) return false;
@@ -402,7 +402,7 @@ function visibleEquipment() {
     if (ui.lineId && item.line_id !== ui.lineId) return false;
     if (ui.sectionId && item.section_id !== ui.sectionId) return false;
     if (ui.equipmentId && item.equipment_id !== ui.equipmentId) return false;
-    if (!equipmentMatchesQuery(item)) return false;
+    if (!equipmentMatchesQuery(item, query)) return false;
     return true;
   });
 }
@@ -413,6 +413,21 @@ function scoped(rows) {
   return rows.filter((row) => ids.has(row.equipment_id || row.manual_equipment_code));
 }
 
+function scopedWorkOrders(rows) {
+  if (!(ui.plantIds || []).length && !ui.plantId && !ui.lineId && !ui.sectionId && !ui.equipmentId) return rows;
+  const visibleIds = new Set(visibleEquipment('').map((item) => item.equipment_id));
+  const plants = selectedPlantIds();
+  return rows.filter((order) => {
+    const code = order.equipment_id || order.manual_equipment_code;
+    if (code && visibleIds.has(code)) return true;
+    if (!order.manual_equipment_code || ui.equipmentId || ui.sectionId) return false;
+    if (plants.length && !plants.includes(order.manual_plant_id)) return false;
+    if (!plants.length && ui.plantId && order.manual_plant_id !== ui.plantId) return false;
+    if (ui.lineId && order.manual_line_id !== ui.lineId) return false;
+    return true;
+  });
+}
+
 function closed(order) {
   return order.status === 'Closed' || order.status === 'Completed';
 }
@@ -421,6 +436,28 @@ function overdue(order) {
   if (order.status === 'Overdue') return true;
   const diff = dayDiff(order.planned_date);
   return diff !== null && diff < 0 && !closed(order) && order.status !== 'Cancelled';
+}
+
+function workOrderSearchMatches(order, rawQuery = ui.workOrderQuery) {
+  const query = String(rawQuery || '').trim().toLowerCase();
+  if (!query) return true;
+  const fields = [
+    order?.work_order_id,
+    order?.work_order_type,
+    order?.equipment_id,
+    order?.manual_equipment_code,
+    equipmentText(order),
+    order?.problem_description,
+    order?.work_description,
+    order?.failure_mode,
+    order?.failure_cause,
+    order?.priority,
+    order?.status,
+    assigneeNames(order),
+    order?.planned_date,
+    order?.request_date,
+  ];
+  return fields.some((value) => String(value || '').toLowerCase().includes(query));
 }
 
 function pmStatus(plan) {
@@ -575,6 +612,7 @@ function sopHasManual(manual) {
 function filtersHtml(options = {}) {
   const multiPlant = Boolean(options.multiPlant);
   const sopOnly = Boolean(options.sopOnly);
+  const equipmentQuery = options.equipmentQuery ?? ui.equipmentQuery;
   const openIds = new Set((store.plants || []).filter((plant) => plant.active !== false).map((plant) => plant.plant_id));
   const plants = selectedPlantIds();
   if (ui.plantId && !openIds.has(ui.plantId) && !plants.length) {
@@ -593,8 +631,8 @@ function filtersHtml(options = {}) {
   if (ui.sectionId && !sections.some((section) => section.section_id === ui.sectionId)) ui.sectionId = '';
   if (ui.lineId && !lineIds.has(ui.lineId)) ui.lineId = '';
   const withSop = sopOnly ? equipmentIdsWithSopFile() : null;
-  const equipment = store.equipment.filter((item) => (!item.plant_id || openIds.has(item.plant_id)) && (!plants.length || plantScope.has(item.plant_id)) && (!ui.lineId || item.line_id === ui.lineId) && (!ui.sectionId || item.section_id === ui.sectionId) && (!withSop || withSop.has(item.equipment_id)) && equipmentMatchesQuery(item));
-  if (ui.equipmentId && !equipment.some((item) => item.equipment_id === ui.equipmentId) && !String(ui.equipmentQuery || '').trim()) ui.equipmentId = '';
+  const equipment = store.equipment.filter((item) => (!item.plant_id || openIds.has(item.plant_id)) && (!plants.length || plantScope.has(item.plant_id)) && (!ui.lineId || item.line_id === ui.lineId) && (!ui.sectionId || item.section_id === ui.sectionId) && (!withSop || withSop.has(item.equipment_id)) && equipmentMatchesQuery(item, equipmentQuery));
+  if (ui.equipmentId && !equipment.some((item) => item.equipment_id === ui.equipmentId) && !String(equipmentQuery || '').trim()) ui.equipmentId = '';
   const option = (value, label, selected) => `<option value="${esc(value)}"${selected === value ? ' selected' : ''}>${esc(label)}</option>`;
   const plantSummary = plants.length
     ? (plants.length === 1
@@ -1384,7 +1422,9 @@ function assetList(selectedCode, options = {}) {
 }
 
 function drawWorkOrders() {
-  const rows = scoped(store.orders).filter((order) => {
+  const scopeOrders = scopedWorkOrders(store.orders);
+  const queryOrders = scopeOrders.filter((order) => workOrderSearchMatches(order));
+  const rows = queryOrders.filter((order) => {
     if (ui.tab === 'Overdue') return overdue(order);
     if (ui.tab === 'Completed') return closed(order);
     if (ui.tab === 'On Hold') return order.status === 'On Hold';
@@ -1433,8 +1473,22 @@ function drawWorkOrders() {
     ['Problem', selected?.problem_description], ['Work', selected?.work_description], ['Technicians', assigneeNames(selected)],
     ['Planned', fmtDate(selected?.planned_date)], ['Downtime (h)', selected?.downtime_h ?? '—'], ['Parts', selected?.parts_used],
   ]);
-  document.getElementById('workspace').className = 'workspace';
-  document.getElementById('workspace').innerHTML = `<section class="panel">${tabsHtml(['All Work Orders', 'In Progress', 'Overdue', 'Completed', 'On Hold'])}${tableShell(['WO No.', 'Type', 'Equipment', 'Problem / Description', 'Priority', 'Status', 'Assigned To', 'Due Date', 'Created On'], body, shown(rows.length, scoped(store.orders).length, 'work orders'))}</section>${detail}`;
+  const workOrderFilters = filtersHtml({ className: 'work-order-filters', equipmentSearch: false, equipmentQuery: '', extra: `<label class="equipment-query">${esc(t('Search'))}<span class="equipment-query-row"><input id="work-order-query" type="search" value="${esc(ui.workOrderQuery || '')}" placeholder="${esc(t('Search...'))}" autocomplete="off"><button type="button" class="detail-button" id="work-order-query-go">${esc(t('Search'))}</button></span></label>` });
+  document.getElementById('workspace').className = 'workspace work-orders-board';
+  document.getElementById('workspace').innerHTML = `${workOrderFilters}<section class="panel">${tabsHtml(['All Work Orders', 'In Progress', 'Overdue', 'Completed', 'On Hold'])}${tableShell(['WO No.', 'Type', 'Equipment', 'Problem / Description', 'Priority', 'Status', 'Assigned To', 'Due Date', 'Created On'], body, shown(rows.length, scopeOrders.length, 'work orders'))}</section>${detail}`;
+  bindFilters();
+  const workOrderQuery = document.getElementById('work-order-query');
+  const applyWorkOrderQuery = () => {
+    ui.workOrderQuery = String(workOrderQuery?.value || '').trim();
+    ui.rowKey = '';
+    drawWorkOrders();
+  };
+  document.getElementById('work-order-query-go')?.addEventListener('click', applyWorkOrderQuery);
+  workOrderQuery?.addEventListener('keydown', (event) => {
+    if (event.key !== 'Enter') return;
+    event.preventDefault();
+    applyWorkOrderQuery();
+  });
   if (ui.mode !== 'create' && selected) {
     document.querySelector('.detail')?.insertAdjacentHTML('beforeend', `<button type="button" class="detail-button primary job-open-detail" data-open="${esc(selected.work_order_id)}" title="${esc(t('Open maintenance order'))}"><span class="job-open-glyph" aria-hidden="true">▣</span><span>${esc(t('Open maintenance order'))}</span></button><button type="button" class="detail-button" id="job-pdf-export">${esc(t('Export PDF'))}</button>`);
     document.getElementById('job-pdf-export')?.addEventListener('click', () => exportJobOrderPdf(selected));

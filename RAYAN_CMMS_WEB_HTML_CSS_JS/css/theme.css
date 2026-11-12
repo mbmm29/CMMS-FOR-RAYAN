@@ -421,6 +421,7 @@ body .daily-paper .lube-machine input[data-field="line"][data-resolved="1"]{back
 body .motor-paper.lube-paper .motor-table input[readonly]{font-weight:800;background:#f3f7ff}
 .nav-link.motor-nav[hidden]{display:none!important}
 body .workspace.log-board{display:block;width:100%;min-width:0;max-width:100%}
+body .workspace.work-orders-board>.work-order-filters{margin:0 0 12px}
 body .workspace.log-board .record-filters{
   display:grid;grid-template-columns:minmax(0,1fr);grid-column:auto;gap:8px;width:100%;min-width:0;
   margin:0 0 14px;padding:12px;border:1px solid #2a4f88;border-radius:14px;
