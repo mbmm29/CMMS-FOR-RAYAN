@@ -1,0 +1,72 @@
+/* Keep the engineer's standalone reports page on the same scale as the live CMMS shell. */
+.app .sidebar{width:238px;background:linear-gradient(160deg,#174d36,#103c2b)}
+.app .main-content{margin-left:238px;padding:22px 22px 36px;background:linear-gradient(180deg,#f8faf6,#f1f5ef)}
+.app .brand{min-height:92px;padding:16px 14px;border-bottom:1px solid #ffffff28}
+.app .brand-logo{width:44px;height:44px;font-size:25px}
+.app .brand-title{font-size:25px;letter-spacing:-.6px}
+.app .brand-subtitle{font-size:10px;color:#d7e9dc}
+.app .sidebar-nav{gap:3px;padding:12px 11px 14px}
+.app .nav-item{min-height:43px;padding:0 11px;font-size:14px;border-radius:7px}
+.app .nav-item.active{background:linear-gradient(100deg,#318653,#246b43);box-shadow:inset 3px 0 #e0c85a,0 4px 12px #0a291b35}
+.app .sidebar-bottom{padding:13px 12px 15px;border-top-color:#ffffff28}
+.app .topbar{align-items:center;flex-wrap:wrap;gap:14px;margin-bottom:14px;padding:14px 16px;border:1px solid #d4dfd3;border-top:3px solid #c5a72e;border-radius:14px;background:#fff;box-shadow:0 5px 18px #183a2410}
+.app .page-title h1{font-size:clamp(25px,2.1vw,30px);line-height:1.15;letter-spacing:-.5px;color:#1d3829}
+.app .page-title p{margin-top:4px;font-size:13px;line-height:1.4;color:#56675a}
+.app .topbar-actions{flex:1 1 680px;flex-wrap:wrap;justify-content:flex-end;gap:8px}
+.app .top-search,.app .date-filter,.app .filter-button,.app .tech-filter{height:40px;border-color:#bdcdbb;border-radius:8px;background:#fff;color:#294b36}
+.app .top-search{width:220px;padding:0 10px}
+.app .top-search input,.app .date-filter input{font-size:12px;color:#24352a}
+.app .top-search input::placeholder{color:#707d73}
+.app .date-filter{padding:0 8px;gap:5px}
+.app .date-filter input{width:94px}
+.app .filter-button{padding:0 12px;color:#315541}
+.app .tech-filter{padding:0 8px}
+.app .tech-filter-button{min-width:150px;height:38px;font-size:12px;color:#315541}
+.app .tech-filter-menu{border-color:#bdcdbb;background:#fff;box-shadow:0 12px 28px #183a2420}
+.app .tech-filter-menu button{color:#294b36}
+.app .tech-filter-menu button:hover,.app .tech-filter-menu button[aria-selected=true]{background:#edf5eb;color:#1e603a}
+.app .stats-grid{grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;margin-bottom:14px}
+.app .stat-card{min-height:118px;padding:14px;border-color:#d4dfd2;border-radius:12px;box-shadow:0 4px 14px #19351f0c}
+.app .stat-title{font-size:11px;color:#53675a}
+.app .stat-value{margin-top:13px;font-size:26px;color:#1d3829}
+.app .stat-change{margin-top:10px;font-size:10px;color:#287548}
+.app .stat-change small{font-size:10px;color:#56675a}
+.app .stat-icon{flex-basis:38px;width:38px;height:38px;font-size:18px}
+.app .stat-icon.blue{background:#edf4eb;color:#287548}
+.app .stat-icon.green{background:#eaf4e9;color:#287548}
+.app .stat-icon.orange{background:#fbf6df;color:#806911}
+.app .stat-icon.purple{background:#f3f0e4;color:#806911}
+.app .stat-icon.red{background:#fff0ec;color:#9a3c32}
+.app .stat-icon.teal{background:#eaf4e9;color:#287548}
+.app .reports-layout{grid-template-columns:minmax(0,1fr) 300px;gap:12px}
+.app .reports-panel,.app .details-panel{border-color:#d4dfd2;border-radius:12px;box-shadow:0 4px 14px #19351f0c}
+.app .report-tabs{min-height:48px;padding-left:10px;border-bottom-color:#dce5db}
+.app .report-tab{padding:0 14px;color:#52665a;font-size:12px}
+.app .report-tab.active{color:#246b43}
+.app .report-tab.active:after{height:3px;background:#318653}
+.app .table-container thead{background:#edf3eb}
+.app .table-container th{height:44px;color:#314b39;border-bottom-color:#d5e0d3;font-size:11px}
+.app .table-container td{height:48px;color:#26372e;border-bottom-color:#e0e7de;font-size:12px}
+.app .table-container tbody tr:nth-child(even){background:#f7f9f6}
+.app .table-container tbody tr:hover{background:#eef5ec}
+.app .table-container input[type=checkbox]{accent-color:#318653}
+.app .pagination{min-height:50px;padding:0 14px;border-top-color:#e0e7de;color:#56675a}
+.app .page-button{color:#405b49}
+.app .page-button.active{background:#318653;color:#fff}
+.app .rows-per-page select{height:30px;border-color:#bdcdbb;color:#26372e}
+.app .details-panel{min-height:420px}
+.app .details-header{min-height:48px;padding:0 14px;border-bottom-color:#dce5db}
+.app .details-header h2{color:#203b2a;font-size:14px}
+.app .empty-details{min-height:340px;color:#56675a}
+.app .details-content{padding:15px}
+.app .details-content h3,.app .details-content h4{color:#203b2a}
+.app .details-content dt{color:#53675a}
+.app .details-content dd{color:#26372e}
+.app .activity-preview{border-top-color:#dce5db}
+.app .activity-preview th,.app .activity-preview td{color:#344f3c;border-bottom-color:#e0e7de}
+.app .report-actions .decision.approve,.app .report-actions .decision.print{background:#287548;border-color:#205f3a;color:#fff}
+.app .report-actions .decision.return{color:#8f302b;background:#fff4f1;border-color:#d9a9a1}
+@media(max-width:1400px){.app .topbar-actions{flex-basis:100%;justify-content:flex-start}}
+@media(max-width:1200px){.app .reports-layout{grid-template-columns:minmax(0,1fr) 280px}}
+@media(max-width:980px){.app .main-content{margin-left:0;margin-inline-start:0;padding:20px 16px 30px}.app .sidebar{width:min(84vw,300px)}.app .reports-layout{grid-template-columns:1fr}}
+@media(max-width:760px){.app .stats-grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:9px}.app .topbar{padding:13px}.app .topbar-actions{display:grid;grid-template-columns:minmax(0,1fr) auto}.app .top-search{grid-column:1/-1;width:100%}.app .date-filter{display:none}.app .tech-filter{max-width:100%}.app .details-panel{min-height:auto}.app .empty-details{min-height:220px}}
