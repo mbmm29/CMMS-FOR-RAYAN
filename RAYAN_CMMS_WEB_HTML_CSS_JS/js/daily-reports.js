@@ -121,7 +121,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         workOrders,
         downtime: items.reduce((total, item) => total + (Number(item.downtime_h) || 0), 0),
         submittedAt: report.submitted_at,
-        approvedBy: report.approved_by || report.shift_engineer || '',
+        approvedBy: report.approved_by || '',
         approvedAt: report.approved_at,
         shiftEngineer: report.shift_engineer,
         notes: report.general_notes,
@@ -264,6 +264,13 @@ document.addEventListener('DOMContentLoaded', async () => {
         <table class="lube-table"><thead><tr><th>${escapeHtml(t('Seq.'))}</th><th>${escapeHtml(t('Machine'))}</th><th>${escapeHtml(t('Work type'))}</th><th>${escapeHtml(t('Component'))}</th><th>${escapeHtml(t('Qty'))}</th><th>${escapeHtml(t('Oil or grease name'))}</th><th>${escapeHtml(t('Remarks'))}</th></tr></thead><tbody>${rows}</tbody></table>
         <p class="lube-help">${escapeHtml(t('Approved by the system'))}</p>
       </form>`;
+    const reviewHeaderDl = document.querySelector('#review-paper .lube-head dl');
+    if (reviewHeaderDl) {
+      const headerBox = document.createElement('div');
+      headerBox.className = 'daily-document-box';
+      headerBox.innerHTML = `<div class="daily-document-row"><span>${escapeHtml(t('Form No.:'))}</span><strong>${escapeHtml(state.formNo || 'DR')}</strong></div><div class="daily-document-row"><span>${escapeHtml(t('Approved by'))}</span><strong>${escapeHtml(report.approvedBy || '—')}</strong></div>`;
+      reviewHeaderDl.replaceWith(headerBox);
+    }
     document.getElementById('review-close')?.addEventListener('click', closeReview);
     document.getElementById('review-print')?.addEventListener('click', () => window.print());
     document.getElementById('review-delete')?.addEventListener('click', deleteSelected);
