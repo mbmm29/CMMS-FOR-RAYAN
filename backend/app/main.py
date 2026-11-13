@@ -8,7 +8,7 @@ import secrets
 import threading
 from pathlib import Path
 from xml.etree import ElementTree as ET
-from fastapi import FastAPI, Depends, HTTPException, File, UploadFile, Query
+from fastapi import FastAPI, Depends, HTTPException, File, Form, UploadFile, Query
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, Response
@@ -3024,7 +3024,7 @@ def save_sop_manual(db, equipment_id, manual, filename):
     db.add(row)
     return row
 
-def replace_sop_paragraphs(db, equipment_id, cleaned, u, action='SAVE', manual=None, filename=None):
+def replace_sop_paragraphs(db, equipment_id, cleaned, u, action='SAVE', manual=None, filename=None, commit=True):
     db.query(SOPParagraph).filter_by(equipment_id=equipment_id).delete(synchronize_session=False)
     for index, body in enumerate(cleaned, start=1):
         db.add(SOPParagraph(equipment_id=equipment_id, position=index, body=body))
@@ -3032,7 +3032,8 @@ def replace_sop_paragraphs(db, equipment_id, cleaned, u, action='SAVE', manual=N
     title = (manual or {}).get('title') if manual else None
     publish_equipment_sop(db, equipment_id, title, filename, u)
     audit(db, u, action, 'SOPParagraph', equipment_id, new={'count': len(cleaned), 'manual': bool(manual)})
-    db.commit()
+    if commit:
+        db.commit()
     rows = db.query(SOPParagraph).filter_by(equipment_id=equipment_id).order_by(SOPParagraph.position, SOPParagraph.id).all()
     stored = db.query(SOPManual).filter_by(equipment_id=equipment_id).first()
     return sop_paragraph_payload(equipment_id, rows, stored)
@@ -3062,6 +3063,47 @@ async def import_sop_paragraphs(
         manual=manual,
         filename=file.filename or '',
     )
+
+@app.post('/sops/publish-category')
+async def publish_category_sop(
+    equipment_ids: str = Form(...),
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db),
+    u=Depends(role(*ENGINEER)),
+):
+    try:
+        ids = json.loads(equipment_ids)
+    except (TypeError, ValueError):
+        raise HTTPException(400, 'Choose equipment from one category.')
+    if not isinstance(ids, list):
+        raise HTTPException(400, 'Choose equipment from one category.')
+    ids = list(dict.fromkeys(str(value).strip() for value in ids if str(value).strip()))
+    if not ids or len(ids) > 1000:
+        raise HTTPException(400, 'Select between 1 and 1000 equipment items.')
+    equipment = db.query(Equipment).filter(Equipment.equipment_id.in_(ids)).all()
+    if len(equipment) != len(ids):
+        raise HTTPException(404, 'Some selected equipment could not be found.')
+    categories = {(row.equipment_type or '').strip().casefold() for row in equipment}
+    if len(categories) != 1 or not next(iter(categories), ''):
+        raise HTTPException(400, 'All selected equipment must belong to the same category.')
+    raw = await file.read(SOP_IMPORT_MAX_BYTES + 1)
+    await file.close()
+    if not raw:
+        raise HTTPException(400, 'Choose a file to import.')
+    if len(raw) > SOP_IMPORT_MAX_BYTES:
+        raise HTTPException(400, 'The file must be smaller than 2 MB.')
+    manual, cleaned = extract_sop_import(file.filename or '', raw)
+    try:
+        for row in equipment:
+            replace_sop_paragraphs(
+                db, row.equipment_id, cleaned, u, action='IMPORT',
+                manual=manual, filename=file.filename or '', commit=False,
+            )
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise
+    return {'published': len(equipment), 'category': equipment[0].equipment_type}
 
 @app.delete('/equipment/{equipment_id}/sop')
 def delete_equipment_sop(equipment_id: str, db: Session = Depends(get_db), u=Depends(role(*ENGINEER))):
