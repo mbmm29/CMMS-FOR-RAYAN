@@ -301,7 +301,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     const sheet = document.getElementById('detailsContent');
     if (!sheet) return;
     layout?.classList.add('reviewing');
-    sheet.innerHTML = `<div class="review-bar no-print"><button type="button" id="review-close">${escapeHtml(t('Back to reports'))}</button><button type="button" class="decision print" id="review-print">${escapeHtml(t('Print'))}</button><button type="button" class="decision print" id="review-export">${escapeHtml(t('Export PDF'))}</button>${decisions}${remove}</div>
+    sheet.innerHTML = `<div class="review-bar no-print"><button type="button" id="review-close">${escapeHtml(t('Back to reports'))}</button><button type="button" class="decision print" id="review-export">${escapeHtml(t('Export PDF'))}</button>${decisions}${remove}</div>
       <form class="lube-paper daily-paper" id="review-paper">
         <header class="lube-head"><img src="logo-rayan.png?v=4" alt="Rayan"><div><h2>${escapeHtml(t('DAILY MAINTENANCE REPORT'))}</h2><p>${escapeHtml(t(report.status || 'Draft'))}</p><small>${escapeHtml(t('Mechanical Maintenance Department'))}</small></div><dl><div><dt>${escapeHtml(t('Form No.:'))}</dt><dd class="form-no">${escapeHtml(state.formNo || 'DR')}</dd></div><div><dt>${escapeHtml(t('Approved by'))}</dt><dd class="approved-name">${escapeHtml((report.approvedBy || report.shiftEngineer || '').trim() || '—')}</dd></div></dl></header>
         <div class="lube-meta">
@@ -330,7 +330,6 @@ document.addEventListener('DOMContentLoaded', async () => {
       reviewHeaderDl.replaceWith(headerBox);
     }
     document.getElementById('review-close')?.addEventListener('click', closeReview);
-    document.getElementById('review-print')?.addEventListener('click', () => window.print());
     document.getElementById('review-export')?.addEventListener('click', () => {
       const previousTitle = document.title;
       const filename = String(report.id || 'daily-report').replace(/[^a-zA-Z0-9._-]+/g, '-');
