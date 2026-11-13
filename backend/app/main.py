@@ -1545,18 +1545,29 @@ def spare_part_catalog(db: Session = Depends(get_db), u=Depends(auth)):
     ]
 
 @app.get('/spare-parts')
-def list_spare_parts(equipment_id: str | None = None, db: Session = Depends(get_db), u=Depends(role(*ENGINEER))):
+def list_spare_parts(equipment_id: str | None = None, db: Session = Depends(get_db), u=Depends(auth)):
+    technician_view = is_technician_account(u)
+    if technician_view and not equipment_id:
+        raise HTTPException(403, 'Technicians may view spare parts linked to one equipment item.')
+    if not technician_view and u.role not in ENGINEER:
+        raise HTTPException(403, 'Insufficient permission')
     parts = db.query(SparePart).order_by(SparePart.part_number).all()
     if equipment_id:
+        if not db.query(Equipment).filter_by(equipment_id=equipment_id.strip()).first():
+            raise HTTPException(404, 'Equipment not found')
         linked = {
             row.part_id
             for row in db.query(SparePartEquipment).filter_by(equipment_id=equipment_id.strip()).all()
         }
         parts = [part for part in parts if part.part_id in linked]
     # Catch already-critical parts (e.g. after import) and notify engineers once.
-    if watch_critical_stock(db, parts):
+    if not technician_view and watch_critical_stock(db, parts):
         db.commit()
-    return [spare_part_payload(db, part) for part in parts]
+    result = [spare_part_payload(db, part) for part in parts]
+    if technician_view:
+        for part in result:
+            part['equipment'] = [item for item in part['equipment'] if item['equipment_id'] == equipment_id]
+    return result
 
 @app.post('/spare-parts/import-mekanik')
 def import_mekanik_spare_parts_endpoint(

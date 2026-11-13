@@ -2638,6 +2638,24 @@ async function loadEquipmentCategoryFile(selected, documentType, content, object
   }
 }
 
+async function loadEquipmentSpareTab(selected, content, objectUrls = []) {
+  content.innerHTML = `<section class="equipment-spare-list"><h3>${esc(t('Spare parts linked to this equipment'))}</h3><div id="equipment-linked-parts-list"><p class="live-note">${esc(t('Loading spare parts...'))}</p></div></section><section class="equipment-category-spare-file"><h3>${esc(t('Category spare parts file'))}</h3><div id="equipment-category-spare-file-content"><p class="live-note">${esc(t('Loading document...'))}</p></div></section>`;
+  const list = content.querySelector('#equipment-linked-parts-list');
+  const categoryFile = content.querySelector('#equipment-category-spare-file-content');
+  try {
+    const parts = await apiRequest(`/spare-parts?equipment_id=${encodeURIComponent(selected.equipment_id)}`);
+    if (list?.isConnected) {
+      const body = (parts || []).map((part, index) => `<tr><td>${index + 1}</td><td>${esc(part.part_number || '—')}</td><td>${esc(part.name || '—')}</td><td>${esc(hasStockBalance(part) ? stockAmount(part.stock_qty) : t('No warehouse balance'))}</td><td>${esc(part.critical_qty == null ? '—' : stockAmount(part.critical_qty))}</td><td>${esc(part.unit || 'pcs')}</td></tr>`).join('');
+      list.innerHTML = parts?.length
+        ? `<div class="equipment-linked-parts-table"><table class="data-table"><thead><tr>${['No.', 'Part No.', 'Part name', 'Stock', 'Critical balance', 'Unit'].map((label) => `<th>${esc(t(label))}</th>`).join('')}</tr></thead><tbody>${body}</tbody></table></div>`
+        : `<p class="live-note">${esc(t('No spare parts are linked to this equipment.'))}</p>`;
+    }
+  } catch (exception) {
+    if (list?.isConnected) list.innerHTML = `<p class="live-note">${esc(t(exception.message || 'Could not load spare parts.'))}</p>`;
+  }
+  if (categoryFile?.isConnected) loadEquipmentCategoryFile(selected, 'spare-parts', categoryFile, objectUrls);
+}
+
 function openEquipmentCategoryFilePublish(selected) {
   const categories = [...new Set((store.equipment || []).map((item) => String(item.equipment_type || '').trim()).filter(Boolean))].sort((a, b) => a.localeCompare(b));
   if (!categories.length) return;
@@ -2697,8 +2715,12 @@ function openEquipmentDocumentTab(selected, initialTab = 'sop') {
       loadEquipmentSop(selected, 'equipment-sop-box');
       return;
     }
-    if (tab === 'manual' || tab === 'spare-parts') {
+    if (tab === 'manual') {
       loadEquipmentCategoryFile(selected, tab, content, objectUrls);
+      return;
+    }
+    if (tab === 'spare-parts') {
+      loadEquipmentSpareTab(selected, content, objectUrls);
       return;
     }
     content.innerHTML = `<div class="equipment-document-plan-controls"><label>${esc(t('Year'))}<input id="equipment-document-year" type="number" min="2000" max="2100" value="${new Date().getFullYear()}"></label><button type="button" class="detail-button" id="equipment-document-show-plan">${esc(t('Show plan'))}</button><button type="button" class="detail-button primary" id="equipment-document-export-plan">${esc(t('Export Excel'))}</button></div><div id="equipment-document-annual-box"><p class="live-note">${esc(t('Loading annual plan...'))}</p></div>`;
@@ -2726,7 +2748,7 @@ function equipmentDetail(selected) {
     ? `<div class="equipment-actions"><button type="button" class="detail-button primary" id="equipment-edit">${esc(t('Edit'))}</button><button type="button" class="detail-button danger" data-delete="/equipment" data-delete-id="${esc(selected.equipment_id)}" data-delete-query="${esc(equipmentScopeQuery(selected).replace(/^\?/, ''))}" data-delete-note="Delete this equipment? Its maintenance history and KPI charts will be removed.">${esc(t('Delete'))}</button></div>`
     : '';
   const documents = selected?.equipment_id
-    ? `<div class="equipment-doc-actions"><button type="button" class="detail-button primary" id="equipment-open-sop">${esc(t('Open SOP'))}</button><button type="button" class="detail-button" id="equipment-open-manual">${esc(t('Open manual'))}</button><button type="button" class="detail-button" id="equipment-open-spare-file">${esc(t('Spare parts file'))}</button><button type="button" class="detail-button" id="equipment-open-annual-plan">${esc(t('Open annual plan'))}</button>${canMaintain() ? `<button type="button" class="detail-button equipment-category-publish-button" id="equipment-publish-category-files">${esc(t('Publish category files'))}</button>` : ''}</div>`
+    ? `<div class="equipment-doc-actions"><button type="button" class="detail-button primary" id="equipment-open-sop">${esc(t('Open SOP'))}</button><button type="button" class="detail-button" id="equipment-open-manual">${esc(t('Open manual'))}</button><button type="button" class="detail-button" id="equipment-open-spare-file">${esc(t('Spare parts'))}</button><button type="button" class="detail-button" id="equipment-open-annual-plan">${esc(t('Open annual plan'))}</button>${canMaintain() ? `<button type="button" class="detail-button equipment-category-publish-button" id="equipment-publish-category-files">${esc(t('Publish category files'))}</button>` : ''}</div>`
     : '';
   return `<aside class="panel detail"><h2>${esc(t('Equipment Details'))}</h2><div class="detail-top"><div class="machine">⚙</div>${liveBadge(selected?.status || '—')}<h3>${esc(selected?.equipment_id || '—')}</h3><p>${esc(selected?.name || '')}</p></div>${actions}<div class="detail-list">${detailRows([
     ['Category', selected?.equipment_type], ['Location', placeOf(selected)], ['Section', sectionName(selected?.section_id) || '—'], ['Area', selected?.area],
@@ -2889,8 +2911,7 @@ function drawEquipment() {
       const sectionForm = lineSections(selected.line_id).length
         ? `<form id="equipment-section" class="live-form"><label>${esc(t('Section'))}<select name="section_id">${sectionOptions(selected.line_id, selected.section_id || '')}</select></label><button class="detail-button primary" type="submit">${esc(t('Save'))}</button><p id="equipment-section-error" class="form-error"></p></form>`
         : `<p class="live-note">${esc(t('No sections on this line yet.'))}</p>`;
-      document.querySelector('.detail')?.insertAdjacentHTML('beforeend', `${sectionForm}<div id="equipment-parts" class="equipment-parts"></div>`);
-      loadEquipmentParts(selected);
+      document.querySelector('.detail')?.insertAdjacentHTML('beforeend', sectionForm);
     }
     document.querySelector('.detail')?.insertAdjacentHTML('beforeend', '<div id="equipment-motor" class="equipment-motor"></div>');
     loadEquipmentMotor(selected);
@@ -5668,32 +5689,6 @@ function stockClass(part) {
 function isCriticalSpare(part) {
   if (!hasStockBalance(part) || part?.critical_qty == null || part?.critical_qty === '') return false;
   return Number(part.stock_qty) <= Number(part.critical_qty);
-}
-
-let equipmentPartsToken = 0;
-
-async function loadEquipmentParts(selected) {
-  const token = ++equipmentPartsToken;
-  const box = document.getElementById('equipment-parts');
-  if (!box || !selected?.equipment_id) return;
-  try {
-    const parts = await apiRequest(`/spare-parts?equipment_id=${encodeURIComponent(selected.equipment_id)}`);
-    if (token !== equipmentPartsToken || !box.isConnected) return;
-    const rows = (parts || []).map((part) => {
-      const stock = hasStockBalance(part) ? stockAmount(part.stock_qty) : t('No warehouse balance');
-      const tone = stockClass(part);
-      return `<li><b>${esc(part.part_number)}</b><span>${esc(part.name)}</span><em${tone ? ` class="${tone}"` : ''}>${esc(stock)}</em></li>`;
-    }).join('');
-    box.innerHTML = `<h3>${esc(t('Spare parts'))}</h3>${rows ? `<ul class="spare-links">${rows}</ul>` : `<p class="live-note">${esc(t('No spare parts linked to this machine.'))}</p>`}<button type="button" class="detail-button" id="open-spare">${esc(t('Spare parts'))}</button>`;
-    document.getElementById('open-spare')?.addEventListener('click', () => {
-      ui.spareEquipment = selected.equipment_id;
-      ui.mode = 'view';
-      ui.rowKey = '';
-      render('spare-parts');
-    });
-  } catch (exception) {
-    if (token === equipmentPartsToken && box.isConnected) box.innerHTML = `<p class="form-error">${esc(t(exception.message || ''))}</p>`;
-  }
 }
 
 function spareEquipmentIds(form) {
