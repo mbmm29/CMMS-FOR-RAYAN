@@ -2094,6 +2094,48 @@ async function drawTechnicianSchedule() {
   workspace.hidden = true;
 }
 
+function enableAnnualPlanEdgeScroll() {
+  const scroller = document.querySelector('.annual-scroll');
+  if (!scroller) return;
+  scroller.style.scrollBehavior = 'auto';
+  const edgeSize = 48;
+  let direction = 0;
+  let speed = 0;
+  let frame = 0;
+  const stop = () => {
+    direction = 0;
+    speed = 0;
+    if (frame) cancelAnimationFrame(frame);
+    frame = 0;
+  };
+  const step = () => {
+    if (!direction) { frame = 0; return; }
+    const before = scroller.scrollLeft;
+    scroller.scrollLeft += direction * speed;
+    if (scroller.scrollLeft === before) { stop(); return; }
+    frame = requestAnimationFrame(step);
+  };
+  scroller.addEventListener('mousemove', (event) => {
+    const bounds = scroller.getBoundingClientRect();
+    const maxScroll = scroller.scrollWidth - scroller.clientWidth;
+    if (maxScroll <= 0) { stop(); return; }
+    const fromLeft = event.clientX - bounds.left;
+    const fromRight = bounds.right - event.clientX;
+    if (fromRight <= edgeSize && scroller.scrollLeft < maxScroll) {
+      direction = 1;
+      speed = 2 + 8 * Math.min(1, (edgeSize - fromRight) / edgeSize);
+    } else if (fromLeft <= edgeSize && scroller.scrollLeft > 0) {
+      direction = -1;
+      speed = 2 + 8 * Math.min(1, (edgeSize - fromLeft) / edgeSize);
+    } else {
+      stop();
+      return;
+    }
+    if (!frame) frame = requestAnimationFrame(step);
+  });
+  scroller.addEventListener('mouseleave', stop);
+}
+
 async function drawAnnualPlan() {
   if (isTechnician()) return drawTechnicianSchedule();
   if (ui.annualPlant && store?.plants && !store.plants.some((plant) => plant.plant_id === ui.annualPlant && plant.active !== false)) {
@@ -2140,6 +2182,7 @@ async function drawAnnualPlan() {
     <p class="kpi-note">${esc(t('Enter how many days between each repeat. The task is placed on those dates with its maintenance type.'))}</p>
     <p id="annual-error" class="form-error"></p>
   </section>`;
+  enableAnnualPlanEdgeScroll();
   document.querySelectorAll('[data-tab]').forEach((button) => button.addEventListener('click', () => {
     captureAnnual();
     ui.tab = button.dataset.tab;
