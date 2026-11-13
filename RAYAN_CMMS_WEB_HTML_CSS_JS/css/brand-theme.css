@@ -2,9 +2,10 @@
 html body .shell .content,html[dir="rtl"] body .shell .content,html body .app .main-content,html[dir="rtl"] body .app .main-content{color:#26372e;background:linear-gradient(180deg,#f8faf6,#f1f5ef)}
 body .sidebar{background:linear-gradient(160deg,#174d36,#103c2b);color:#fff}
 body .brand{color:#fff;border-bottom-color:#ffffff28}body .brand small,body .profile small{color:#d7e9dc}
-body .nav-link{color:#f6fbf7}body .nav-link:hover{background:#ffffff16}body .nav-link.active{background:linear-gradient(100deg,#318653,#246b43);box-shadow:0 5px 14px #0a291b44}
+body .nav-link{color:#f6fbf7}body .nav-link:hover{background:#ffffff16}body .nav-link.active{background:linear-gradient(100deg,#318653,#246b43);box-shadow:inset 3px 0 #e0c85a,0 5px 14px #0a291b44}
 body .profile{border-top-color:#ffffff28}body .profile mark{background:#e6c84c}
 body .page-header,.app .topbar{color:#25382d;border-color:#d4dfd3;background:#fff;box-shadow:0 5px 18px #183a2410}
+body .page-header{border-top:3px solid #c5a72e}
 body .page-header h1,.app .page-title h1{color:#1d3829}body .page-header p,.app .page-title p{color:#66766b}
 body .primary,body .detail-button.primary,body .app .new-report-button,body .login-button,body .app .decision.approve,body .app .decision.print{background:linear-gradient(135deg,#318653,#246b43);border-color:#246b43;color:#fff;box-shadow:0 4px 12px #246b4326}
 body .primary:hover,body .detail-button.primary:hover,body .app .new-report-button:hover,body .login-button:hover{background:#1e623b}
@@ -130,3 +131,47 @@ body .shell .content .plan-panel .empty,body .app .main-content .plan-panel .emp
 body .shell .content .live-note,body .app .main-content .live-note,body .shell .content .kpi-note,body .app .main-content .kpi-note{color:#4f6254}
 body .shell .content .status,body .app .main-content .status{font-weight:750}
 @media(max-width:980px){body .shell .content .workspace{gap:12px}body .shell .content .panel{border-radius:10px}}
+
+/* Correct high-specificity legacy page rules shown by visual review. */
+html body[data-live-page] .shell .content .metric,
+html body[data-live-page] .shell .content .panel.chart-panel,
+html body[data-live-page] .shell .content .kpi-card{
+  color:#26372e!important;background:#fff!important;border:1px solid #d4dfd2!important;
+  box-shadow:0 4px 14px #19351f0c!important;
+}
+html body[data-live-page] .shell .content .metric h3,
+html body[data-live-page] .shell .content .kpi-card h3{color:#344f3c!important}
+html body[data-live-page] .shell .content .metric b,
+html body[data-live-page] .shell .content .kpi-card b{color:#17613a!important}
+html body[data-live-page] .shell .content .metric .trend,
+html body[data-live-page] .shell .content .kpi-card small{color:#4f6254!important}
+html body[data-live-page] .shell .content .chart-panel h2{color:#203b2a!important}
+html body[data-live-page] .shell .content .detail h2,
+html body[data-live-page] .shell .content .detail-top h3,
+html body[data-live-page] .shell .content .detail-list b,
+html body[data-live-page] .shell .content .detail-list span,
+html body[data-live-page] .shell .content .detail-top p,
+html body[data-live-page] .shell .content .detail-top .machine{color:#26372e!important}
+html body[data-live-page] .shell .content .detail h2,
+html body[data-live-page] .shell .content .detail-top,
+html body[data-live-page] .shell .content .detail-list div{border-color:#dce5db!important}
+html body[data-live-page] .shell .content .detail-list b{font-weight:750}
+html body[data-live-page] .shell .content .section-chip{color:#315541!important;background:#f3f8f1!important;border-color:#cbdcc8!important}
+html body[data-live-page] .shell .content .section-chip .detail-button{color:#7b382d!important;background:#fff3ef!important;border-color:#dfb4a9!important}
+html body[data-live-page] .shell .content .header-actions .primary,
+html body[data-live-page] .shell .content .header-actions .primary:hover,
+html body[data-live-page] .shell .content .header-actions .primary:focus,
+html body[data-live-page] .shell .content .header-actions .primary:focus-visible,
+html body[data-live-page] .shell .content .header-actions .primary:active{
+  background:linear-gradient(135deg,#318653,#246b43)!important;color:#fff!important;border:1px solid #205f3a!important;
+  box-shadow:0 4px 12px #246b4326!important;
+}
+html body[data-live-page] .shell .content .header-actions .ghost,
+html body[data-live-page] .shell .content .header-actions .ghost:hover,
+html body[data-live-page] .shell .content .header-actions .ghost:focus,
+html body[data-live-page] .shell .content .header-actions .ghost:focus-visible{
+  color:#315541!important;background:#fff!important;border:1px solid #bdcdbb!important;
+}
+html body[data-live-page] .shell .content .donut:after{color:#203b2a;background:#fff!important}
+html body[data-live-page] .shell .content .annual-sheet tbody tr:nth-child(even) td{background:#f7f9f6!important}
+html body[data-live-page] .shell .content .annual-sheet tbody tr:hover td{background:#eef5ec!important}
