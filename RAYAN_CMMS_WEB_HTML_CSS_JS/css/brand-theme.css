@@ -37,3 +37,96 @@ body .category-pm-close{color:#315541;background:#f3f7f1;border-color:#cbd8ca}bo
 body .category-pm-dialog .live-form input:not([type="checkbox"]),body .category-pm-dialog .live-form select,body .category-pm-dialog .live-form textarea{color:#26372e;background:#fff;border-color:#cbd8ca}
 body .report-alert{border-color:#e6d37a;background:#fff9df;color:#735d12;box-shadow:none}
 @media(max-width:980px){body .sidebar{background:linear-gradient(160deg,#174d36,#103c2b)}}
+
+/* Contrast and workflow polish shared by all signed-in pages. */
+body .shell .content,body .app .main-content{color:#24352a}
+body .shell .content p,body .app .main-content p,body .shell .content small,body .app .main-content small,
+body .shell .content .live-note,body .app .main-content .live-note,
+body .shell .content .kpi-note,body .app .main-content .kpi-note,
+body .shell .content .kpi-period,body .app .main-content .kpi-period{color:#56675a}
+body .shell .content a:not(.brand),body .app .main-content a:not(.brand){color:#246b43}
+body .shell .content .workspace{gap:16px;align-items:start}
+body .shell .content .panel,body .app .main-content .panel,body .app .reports-panel,body .app .details-panel,
+body .shell .content .kpi-card,body .app .main-content .kpi-card{border-color:#d4dfd2;border-radius:12px}
+body .shell .content .panel h2,body .shell .content .panel h3,body .app .main-content .panel h2,
+body .app .main-content .panel h3,body .app .details-header h2,body .app .details-content h3{color:#203b2a}
+body .shell .content button,body .app .main-content button{font-family:inherit;font-weight:650;transition:background-color .15s,border-color .15s,color .15s,box-shadow .15s,transform .15s}
+body .shell .content button:not(:disabled):hover,body .app .main-content button:not(:disabled):hover{box-shadow:0 3px 10px #173b2418}
+body .shell .content button:active,body .app .main-content button:active{transform:translateY(1px)}
+body .shell .content button:focus-visible,body .shell .content a:focus-visible,
+body .app .main-content button:focus-visible,body .app .main-content a:focus-visible,
+body .shell .content input:focus-visible,body .shell .content select:focus-visible,body .shell .content textarea:focus-visible,
+body .app .main-content input:focus-visible,body .app .main-content select:focus-visible,body .app .main-content textarea:focus-visible{
+  outline:3px solid #d8c04e;outline-offset:2px;box-shadow:0 0 0 2px #fff;
+}
+body .shell .content button:disabled,body .app .main-content button:disabled{color:#7d887f;background:#edf0eb;border-color:#d5ddd3;opacity:1;cursor:not-allowed;box-shadow:none}
+body .shell .content .detail-button,body .app .main-content .detail-button,
+body .shell .content .decision,body .app .main-content .decision,
+body .shell .content .view-button,body .app .main-content .view-button{
+  min-height:38px;border-radius:8px;color:#294b36;background:#f7faf6;border:1px solid #bccdbb;
+}
+body .shell .content .detail-button.primary,body .app .main-content .detail-button.primary,
+body .shell .content .decision.approve,body .app .main-content .decision.approve,
+body .shell .content .decision.print,body .app .main-content .decision.print,
+body .shell .content .new-report-button,body .app .main-content .new-report-button{
+  color:#fff;background:#287548;border:1px solid #205f3a;
+}
+body .shell .content .detail-button.primary:hover,body .app .main-content .detail-button.primary:hover,
+body .shell .content .decision.approve:hover,body .app .main-content .decision.approve:hover,
+body .shell .content .decision.print:hover,body .app .main-content .decision.print:hover,
+body .shell .content .new-report-button:hover,body .app .main-content .new-report-button:hover{background:#1d603a}
+body .shell .content .detail-button.danger,body .app .main-content .detail-button.danger,
+body .shell .content .decision.return,body .app .main-content .decision.return{color:#8f302b;background:#fff4f1;border-color:#d9a9a1}
+body .shell .content .live-form label,body .shell .content .live-filters label,
+body .shell .content .record-filters label,body .shell .content .annual-bar label,
+body .app .main-content label{color:#344f3c;font-weight:650}
+body .shell .content input:not([type="checkbox"]):not([type="radio"]),body .shell .content select,body .shell .content textarea,
+body .app .main-content input:not([type="checkbox"]):not([type="radio"]),body .app .main-content select,body .app .main-content textarea{
+  color:#24352a;background:#fff;border-color:#bdcdbb;border-radius:7px;
+}
+body .shell .content input::placeholder,body .shell .content textarea::placeholder,
+body .app .main-content input::placeholder,body .app .main-content textarea::placeholder{color:#707d73;opacity:1}
+body .shell .content .data-table,body .app .main-content .table-container table{border-collapse:separate;border-spacing:0}
+body .shell .content .data-table tbody tr:nth-child(even),body .app .main-content .table-container tbody tr:nth-child(even){background:#f7f9f6}
+body .shell .content .data-table th,body .app .main-content .table-container th{font-size:12px;font-weight:750}
+body .shell .content .data-table td,body .app .main-content .table-container td{font-size:13px}
+body .shell .content .annual-sheet th,body .shell .content .annual-sheet td{color:#2c3b30}
+body .shell .content .annual-sheet thead th{color:#244632;background:#eaf1e7}
+body .shell .content .annual-sheet tbody tr:nth-child(even) td{background:#f7f9f6}
+body .shell .content .annual-sheet tbody tr:hover td{background:#eef5ec}
+body .shell .content .annual-title{color:#203b2a}
+body .shell .content .equipment-list,body .app .main-content .equipment-list{background:#fff;border-color:#d4dfd2}
+body .shell .content .asset,body .app .main-content .asset{color:#253a2c;border-bottom-color:#e3e9e1}
+body .shell .content .asset.selected,body .app .main-content .asset.selected{background:#eaf4e9;box-shadow:inset 3px 0 #318653}
+body .shell .content .asset b,body .app .main-content .asset b{color:#243d2d}
+body .shell .content .asset small,body .app .main-content .asset small{color:#56675a}
+body .shell .content .asset em,body .app .main-content .asset em{color:#246b43;background:#f3f8f1;border-color:#cbdcc8}
+body .shell .content .asset .asset-count,body .app .main-content .asset .asset-count{color:#fff;background:#287548}
+body .shell .content .review-bar button,body .app .main-content .review-bar button,
+body .shell .content .lube-actions button,body .app .main-content .lube-actions button,
+body .shell .content .daily-parts .lube-list-head button,body .app .main-content .daily-parts .lube-list-head button{
+  min-height:38px;padding:8px 14px;border:1px solid #b9cbb7;border-radius:8px;background:#fff;color:#245d3b;
+}
+body .shell .content .review-bar button:hover,body .app .main-content .review-bar button:hover,
+body .shell .content .lube-actions button:hover,body .app .main-content .lube-actions button:hover{background:#eff5ed;border-color:#83a889}
+body .shell .content .pm-dispatch-inbox,body .app .main-content .pm-dispatch-inbox,
+body .shell .content .send-watch,body .app .main-content .send-watch{color:#26372e;background:#f5f8f3;border-color:#d4dfd2}
+body .shell .content .pm-dispatch-item,body .app .main-content .pm-dispatch-item,
+body .shell .content .lube-open,body .app .main-content .lube-open,
+body .shell .content .daily-rejected-item,body .app .main-content .daily-rejected-item{color:#26372e;background:#fff;border-color:#d4dfd2}
+body .shell .content .pm-dispatch-item small,body .app .main-content .pm-dispatch-item small,
+body .shell .content .lube-open small,body .app .main-content .lube-open small,
+body .shell .content .daily-rejected-item small,body .app .main-content .daily-rejected-item small{color:#56675a}
+body .shell .content .pm-dispatch-item:hover,body .shell .content .pm-dispatch-item.selected,
+body .shell .content .lube-open.selected,body .shell .content .daily-rejected-item.selected{background:#edf5eb;border-color:#82a987}
+body .shell .content .section-chip{color:#315541;background:#f3f8f1;border-color:#cbdcc8}
+body .shell .content .section-chip small{color:#56675a}
+body .shell .content .kpi-card small,body .app .main-content .kpi-card small{color:#4f6254}
+body .shell .content .kpi-card h3,body .app .main-content .kpi-card h3{color:#344f3c;font-size:13px}
+body .shell .content .kpi-card b,body .app .main-content .kpi-card b{color:#17613a}
+body .shell .content .kpi-card .kpi-spark-date,body .app .main-content .kpi-card .kpi-spark-date{fill:#58695c}
+body .shell .content .kpi-card .kpi-spark-grid line,body .app .main-content .kpi-card .kpi-spark-grid line{stroke:#dce5da}
+body .shell .content .plan-panel .empty,body .app .main-content .plan-panel .empty{color:#526557}
+body .shell .content .live-note,body .app .main-content .live-note,body .shell .content .kpi-note,body .app .main-content .kpi-note{color:#4f6254}
+body .shell .content .status,body .app .main-content .status{font-weight:750}
+@media(max-width:980px){body .shell .content .workspace{gap:12px}body .shell .content .panel{border-radius:10px}}
