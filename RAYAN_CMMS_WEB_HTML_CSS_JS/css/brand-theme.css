@@ -210,3 +210,61 @@ html body .annual-sheet input[type="checkbox"]:checked::before{
   transform:rotate(-45deg);margin-top:-2px;
 }
 html body .annual-sheet input[type="checkbox"]:focus-visible{outline:3px solid #e4cf78;outline-offset:2px}
+
+/* Clearer, calmer reading across all pages. */
+html body .shell .content,html body .app .main-content{font-size:14px;line-height:1.5;color:#26372e}
+html body .shell .content p,html body .app .main-content p,
+html body .shell .content small,html body .app .main-content small,
+html body .shell .content .live-note,html body .app .main-content .live-note,
+html body .shell .content .kpi-note,html body .app .main-content .kpi-note{font-size:13px;color:#4d5d51}
+html body .shell .content label,html body .app .main-content label,
+html body .shell .content .tab,html body .app .main-content .tab{font-size:13px;color:#344b3a}
+html body .shell .content input:not([type="checkbox"]):not([type="radio"]),
+html body .shell .content select,html body .shell .content textarea,
+html body .app .main-content input:not([type="checkbox"]):not([type="radio"]),
+html body .app .main-content select,html body .app .main-content textarea{font-size:14px;color:#24352a}
+html body .shell .content button,html body .app .main-content button{font-size:14px}
+html body .shell .content .data-table th,html body .app .main-content .table-container th{font-size:13px;color:#304739}
+html body .shell .content .data-table td,html body .app .main-content .table-container td{font-size:14px;color:#26372e}
+html body .shell .content .panel,html body .app .main-content .panel{background-color:#fbfcf9}
+html body .category-pm-dialog{background:#f7f9f5;color:#26372e}
+html body .category-pm-dialog>header{background:#f0f4ec;border-bottom-color:#d2ddcf}
+html body .category-pm-dialog>header h2{font-size:19px;color:#203b2a}
+html body .category-pm-dialog>header p{font-size:13px;color:#4d5d51}
+html body .category-pm-dialog .live-form{gap:14px;padding:18px 20px}
+html body .category-pm-fields label,html body .category-pm-task{font-size:13px;font-weight:700;color:#344b3a}
+html body .category-pm-dialog .live-form input:not([type="checkbox"]),
+html body .category-pm-dialog .live-form select,html body .category-pm-dialog .live-form textarea{font-size:14px;color:#24352a;background:#fff}
+html body .category-pm-list-head{font-size:13px;color:#283e31}
+html body .category-pm-list-head button{font-size:13px;font-weight:700;color:#246b43}
+html body .category-pm-list{background:#f1f5ef;border-color:#ced9cc}
+html body .category-pm-equipment{padding:9px;color:#26372e}
+html body .category-pm-equipment b{font-size:13px;color:#26372e}
+html body .category-pm-equipment small{font-size:12px;color:#536256}
+html body .category-pm-equipment:hover{background:#e8f0e6}
+html body .category-pm-dialog .live-form footer{background:#f7f9f5;border-top-color:#d2ddcf;padding-top:12px;padding-bottom:12px}
+html body .category-pm-dialog .live-form footer .detail-button{font-size:14px;min-height:42px}
+html body .category-pm-close{font-size:22px}
+@media(max-width:680px){
+  html body .shell .content,html body .app .main-content{font-size:14px}
+  html body .category-pm-dialog>header h2{font-size:18px}
+  html body .category-pm-equipment b{font-size:13px}
+}
+
+/* Keep the category publishing action compact and readable. */
+html body .shell .content .sop-category-action{
+  display:grid!important;grid-template-columns:minmax(0,1fr) auto!important;align-items:center;gap:12px;
+  min-height:0;margin:0 0 10px;padding:11px 14px;border:1px solid #d4dfd2;border-radius:10px;
+  background:#f4f7f2!important;color:#26372e!important;box-shadow:none;
+}
+html body .shell .content .sop-category-action>div{display:flex;flex-direction:column;align-items:flex-start;gap:3px;min-width:0}
+html body .shell .content .sop-category-action b{font-size:14px;line-height:1.35;color:#203b2a;overflow-wrap:normal}
+html body .shell .content .sop-category-action small{font-size:12px;line-height:1.4;color:#536256;overflow-wrap:normal}
+html body .shell .content .sop-category-action .detail-button{
+  width:auto!important;min-width:150px;min-height:38px;margin:0;padding:8px 13px;border-radius:7px;
+  white-space:nowrap;font-size:13px;box-shadow:none;
+}
+@media(max-width:680px){
+  html body .shell .content .sop-category-action{grid-template-columns:minmax(0,1fr)!important}
+  html body .shell .content .sop-category-action .detail-button{width:100%!important}
+}

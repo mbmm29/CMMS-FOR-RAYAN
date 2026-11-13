@@ -2999,7 +2999,7 @@ async function drawSops() {
   const hasManual = sopHasManual(manual);
   const filterBar = filtersHtml({ sopOnly: techView });
   const categoryPublishAction = !techView && canMaintain()
-    ? `<div class="sop-category-action"><div><b>${esc(t('Publish SOP by category'))}</b><small>${esc(t('Publish one Excel SOP to selected equipment in a category.'))}</small></div><button type="button" class="detail-button primary" id="category-sop-open">${esc(t('Publish by category'))}</button></div>`
+    ? `<div class="sop-category-action"><div><b>${esc(t('Publish SOP to a category'))}</b><small>${esc(t('Choose a category, select equipment, then upload one Excel file.'))}</small></div><button type="button" class="detail-button primary" id="category-sop-open">${esc(t('Start publishing'))}</button></div>`
     : '';
   const list = assetList(chosen, {
     requireSop: techView,
