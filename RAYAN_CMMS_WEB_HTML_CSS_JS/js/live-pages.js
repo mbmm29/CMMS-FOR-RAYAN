@@ -1059,7 +1059,7 @@ function bindTempTrendCharts(root = document) {
 
 function areaChart(series, unit = 'h', options = {}) {
   const settings = options && typeof options === 'object' ? options : {};
-  const palette = ['#075cf5', '#009c63', '#ff710d', '#7439f5', '#fa3038', '#17adae', '#0b2558', '#d4a017', '#0ea5e9', '#c026d3'];
+  const palette = ['#318653', '#c5a72e', '#1d6040', '#e0c85a', '#5b8064', '#8c7922', '#7c9b7f', '#d6bd49', '#426e4f', '#a18e35'];
   const rows = (series || []).filter((row) => row.points?.length);
   if (!rows.length) return '';
   const large = Boolean(settings.large);
@@ -2029,7 +2029,7 @@ function drawWeekForm() {
   });
 }
 
-const PLAN_COLORS = ['#3b82f6', '#22c55e', '#f59e0b', '#a78bfa', '#fb7185', '#2dd4bf', '#f97316', '#60a5fa'];
+const PLAN_COLORS = ['#318653', '#c5a72e', '#1d6040', '#e0c85a', '#5b8064', '#8c7922', '#7c9b7f', '#d6bd49'];
 
 function horizonTasks(bucket, emptyText, showPlant = false) {
   const rows = bucket?.items || [];

@@ -1,0 +1,39 @@
+/* RAYAN identity palette: white first, green for actions, gold for highlights. */
+html body .shell .content,html[dir="rtl"] body .shell .content,html body .app .main-content,html[dir="rtl"] body .app .main-content{color:#26372e;background:linear-gradient(180deg,#f8faf6,#f1f5ef)}
+body .sidebar{background:linear-gradient(160deg,#174d36,#103c2b);color:#fff}
+body .brand{color:#fff;border-bottom-color:#ffffff28}body .brand small,body .profile small{color:#d7e9dc}
+body .nav-link{color:#f6fbf7}body .nav-link:hover{background:#ffffff16}body .nav-link.active{background:linear-gradient(100deg,#318653,#246b43);box-shadow:0 5px 14px #0a291b44}
+body .profile{border-top-color:#ffffff28}body .profile mark{background:#e6c84c}
+body .page-header,.app .topbar{color:#25382d;border-color:#d4dfd3;background:#fff;box-shadow:0 5px 18px #183a2410}
+body .page-header h1,.app .page-title h1{color:#1d3829}body .page-header p,.app .page-title p{color:#66766b}
+body .primary,body .detail-button.primary,body .app .new-report-button,body .login-button,body .app .decision.approve,body .app .decision.print{background:linear-gradient(135deg,#318653,#246b43);border-color:#246b43;color:#fff;box-shadow:0 4px 12px #246b4326}
+body .primary:hover,body .detail-button.primary:hover,body .app .new-report-button:hover,body .login-button:hover{background:#1e623b}
+body .panel,body .app .metric,body .app .stat-card,body .app .reports-panel,body .app .details-panel,body .plan-panel,body .week-day,body .kpi-card{color:#26372e;border-color:#dce5db;background:#fff;box-shadow:0 4px 14px #19351f0c}
+body .app .metric h3,body .app .stat-title,body .kpi-card h3{color:#53675a}body .app .metric b,body .app .stat-value,body .kpi-card b{color:#1d3829}body .app .metric .trend,body .app .stat-change,body .app .stat-change small{color:#287548}
+body .live-filters,body .app .live-filters,body .tabs,body .app .report-tabs,body .app .details-header,body .annual-plan-header{color:#26372e;border-color:#dce5db;background:#fff}
+body .live-filters label,body .annual-bar label,body .live-form label,body .user-editor label{color:#405b49}
+body .live-filters select,body .live-filters input[type="date"],body .live-filters input[type="search"],body .live-form input,body .live-form select,body .live-form textarea,body .user-editor input,body .user-editor select,body .mini-search input,body .annual-bar select,body .annual-bar input,body .annual-sheet select,body .annual-sheet input:not([type="checkbox"]),body .day-task input,body .day-task select,body .day-task textarea{color:#26372e;background:#fff;border-color:#cbd8ca}
+body .tab,body .report-tab,body .page-button{color:#52665a}body .tab.active,body .report-tab.active,body .page-button.active,body .code,body .app .report-link,body .app .view-button{color:#287548}body .tab.active{border-color:#318653}
+body .pages .current,body .app .page-button.active{background:#318653;color:#fff}
+body .data-table th,body .app .table-container thead,body .annual-sheet thead th{color:#314b39;background:#edf3eb;border-color:#d5e0d3}
+body .data-table td,body .app .table-container td,body .annual-sheet th,body .annual-sheet td{color:#26372e;border-color:#e0e7de;background:#fff}
+body .data-table tr:hover,body .data-table tr.selected,body .app .table-container tbody tr:hover{background:#f0f6ef}
+body .annual-sheet thead tr:nth-child(2) th{background:#e9f1e7}body .annual-sheet input[type="checkbox"],body .category-pm-equipment input,body input[type="checkbox"]{accent-color:#318653}
+body .week-open{color:#246b43;background:#f4f8f2;border-color:#84a88b}body .week-open:hover{color:#fff;background:#318653}
+body .detail-button,body .app .view-button,body .app .decision{color:#315541;background:#f7faf6;border-color:#cbd8ca}
+body .detail-button.danger,body .app .decision.return{color:#a33e35;background:#fff4f1;border-color:#e9c4bd}
+body .app .status.approved,body .app .status.completed,body .badge.green{color:#246b43;background:#eaf4e9;border-color:#c6ddc4}
+body .app .status.in-progress,body .badge.orange{color:#775f13;background:#fbf6df;border-color:#e9d98b}
+body .app .status.submitted,body .app .shift{color:#365943;background:#edf4eb;border-color:#d3e0d1}
+body .annual-title,body .details-header h2,body .details-content h3,body .details-content h4,body .plan-panel h3,body .week-day header b{color:#263d2d}
+body .annual-scroll{border-color:#d2ded0}body .plan-panel li,body .app .empty-details>div{color:#315541;background:#f3f7f1;border-color:#dce6da}
+body .live-note,body .chart-empty,body .loading,body .kpi-period,body .kpi-note,body .plan-panel>small,body .plan-panel li small,body .plan-panel .empty,body .week-day header small{color:#68796c}
+body .toast,body #screen-notice{background:#287548;color:#fff}body #screen-notice.error,body .toast.error{background:#a33e35}
+body .login-card{color:#26372e;border-color:#dce5db;background:#fff}body .login-card .brand-name,body .login-title h1{color:#1d3829}body .login-card .brand-subtitle,body .login-title p,body .login-footer,body .login-footer span,body .field label{color:#596d60}
+body .input-wrapper input{color:#26372e;background:#fff;border-color:#cbd8ca}body .input-wrapper input::placeholder{color:#839087}body .input-wrapper input:focus{border-color:#318653;box-shadow:0 0 0 3px #31865320}body .password-toggle{color:#42634c}body .password-toggle:hover{background:#edf4eb}body .login-error{color:#a33e35}
+body .category-plan-action,body .category-pm-dialog,body .category-pm-dialog>header,body .category-pm-list,body .category-pm-dialog .live-form footer{color:#26372e;background:#fff;border-color:#d7e1d5}
+body .category-pm-dialog>header h2,body .category-pm-list-head,body .category-pm-equipment{color:#26372e}body .category-pm-dialog>header p,body .category-pm-equipment small,body .category-plan-action small{color:#68796c}
+body .category-pm-close{color:#315541;background:#f3f7f1;border-color:#cbd8ca}body .category-pm-list-head button{color:#287548}body .category-pm-equipment:hover{background:#f0f6ef}
+body .category-pm-dialog .live-form input:not([type="checkbox"]),body .category-pm-dialog .live-form select,body .category-pm-dialog .live-form textarea{color:#26372e;background:#fff;border-color:#cbd8ca}
+body .report-alert{border-color:#e6d37a;background:#fff9df;color:#735d12;box-shadow:none}
+@media(max-width:980px){body .sidebar{background:linear-gradient(160deg,#174d36,#103c2b)}}
