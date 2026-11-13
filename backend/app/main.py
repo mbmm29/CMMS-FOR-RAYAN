@@ -1106,9 +1106,7 @@ def find_equipment(db: Session, equipment_id: str, plant_id: str | None = None, 
 
 
 @app.post('/equipment',response_model=EquipmentOut)
-def create_equipment(data:EquipmentCreate,db:Session=Depends(get_db),u=Depends(auth)):
-    if u.role not in ENGINEER and not is_technician_account(u):
-        raise HTTPException(403, 'Insufficient permission')
+def create_equipment(data:EquipmentCreate,db:Session=Depends(get_db),u=Depends(role(*ENGINEER))):
     if not data.plant_id or not data.line_id:
         raise HTTPException(400, 'Select a plant and then a line number')
     active_plant_or_404(db, data.plant_id)

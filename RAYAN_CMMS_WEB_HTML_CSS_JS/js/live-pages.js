@@ -502,7 +502,9 @@ async function loadStore() {
 function setHeader(page) {
   const spec = pages[page] || pages.dashboard;
   document.getElementById('page-title').textContent = t(spec.title);
-  const subtitle = spec.sub;
+  const subtitle = page === 'equipment' && isTechnician()
+    ? 'Browse equipment details in view-only mode.'
+    : spec.sub;
   document.getElementById('page-subtitle').textContent = t(subtitle);
   const action = document.getElementById('primary-action');
   const draft = document.getElementById('draft-action');
@@ -530,7 +532,7 @@ function setHeader(page) {
     action.textContent = t(page === 'machine-records' ? 'Export PDF' : spec.action);
   }
   document.querySelectorAll('.engineer-only').forEach((link) => {
-    link.hidden = !canMaintain();
+    link.hidden = !canMaintain() && !(link.dataset.page === 'equipment' && isTechnician());
   });
   document.querySelectorAll('.motor-nav').forEach((link) => {
     link.hidden = !canSeeMotor();
@@ -2421,7 +2423,7 @@ function plantForm() {
 
 function equipmentTabs() {
   const pending = (store.pending || []).length;
-  const labels = ['All Equipment', 'From reports', 'Critical Assets', 'Out of Service', 'Under Maintenance'];
+  const labels = ['All Equipment', ...(canMaintain() ? ['From reports'] : []), 'Critical Assets', 'Out of Service', 'Under Maintenance'];
   return `<div class="tabs">${labels.map((label) => {
     const text = label === 'From reports' ? `${t(label)} (${pending})` : t(label);
     return `<button class="tab${ui.tab === label ? ' active' : ''}" data-tab="${esc(label)}" type="button">${esc(text)}</button>`;
@@ -2771,6 +2773,10 @@ async function saveEquipmentTempLimit(event, equipment) {
 }
 
 function drawEquipment() {
+  if (isTechnician()) {
+    ui.mode = 'view';
+    if (ui.tab === 'From reports') ui.tab = 'All Equipment';
+  }
   if (ui.tab === 'From reports') {
     drawEquipmentFromReports();
     return;
@@ -2789,14 +2795,15 @@ function drawEquipment() {
   const categoryAction = canMaintain() && categoryPlan.equipment.length
     ? `<div class="category-plan-action"><div><b>${esc(t('Category preventive plan'))}</b><small>${esc(categoryPlan.categories.join(' · '))} · ${categoryPlan.equipment.length} ${esc(t('equipment'))}</small></div><button type="button" class="detail-button primary" id="category-pm-open">${esc(t('Set preventive plan'))}</button></div>`
     : '';
-  document.getElementById('metric-grid').innerHTML = metrics([
+  const equipmentMetrics = [
     ['Total Equipment', String(all.length), '▣', 'blue', ''],
     ['Operational', String(all.filter((item) => item.status === 'Running' || item.status === 'Operational').length), '✓', 'green', ''],
     ['Under Maintenance', String(all.filter((item) => item.status === 'Under Maintenance').length), '⚒', 'orange', ''],
     ['Out of Service', String(all.filter((item) => item.status === 'Out of Service').length), '×', 'red', ''],
-    ['From reports', String((store.pending || []).length), '＋', 'purple', ''],
     ['Critical Assets', String(all.filter(isCriticalAsset).length), '◈', 'red', ''],
-  ]);
+  ];
+  if (canMaintain()) equipmentMetrics.splice(4, 0, ['From reports', String((store.pending || []).length), '＋', 'purple', '']);
+  document.getElementById('metric-grid').innerHTML = metrics(equipmentMetrics);
   const body = rows.map((item) => `<tr data-row="${esc(equipmentRowKey(item))}" class="${selected && equipmentRowKey(selected) === equipmentRowKey(item) ? 'selected' : ''}">${cell(esc(item.equipment_id), true)}${cell(esc(item.name))}${cell(esc(item.equipment_type))}${cell(esc(placeOf(item)))}${cell(liveBadge(item.status))}${cell(liveBadge(item.condition || '—'))}${cell(liveBadge(criticalityLabel(item.criticality)))}</tr>`);
   const detail = ui.mode === 'create'
     ? equipmentForm()
@@ -6283,10 +6290,8 @@ function startLiveSync() {
 
 function openCreate() {
   if (isTechnician()) {
-    if (ui.page !== 'equipment') {
-      toast(t('A technician can add equipment only.'));
-      return;
-    }
+    toast(t('Equipment is available in view-only mode for technicians.'));
+    return;
   } else if (!canMaintain()) {
     toast(t('Only a maintenance engineer can add this record.'));
     return;
@@ -6352,8 +6357,8 @@ render = function liveRender(page) {
     return;
   }
   let name = LIVE_PAGES.has(page) ? page : 'dashboard';
-  const lubricationPages = ['lubrication', 'work-orders', 'sop', 'motor-condition'];
-  const maintenancePages = ['daily-reports', 'work-orders', 'pm-schedule', 'sop'];
+  const lubricationPages = ['lubrication', 'work-orders', 'sop', 'motor-condition', 'equipment'];
+  const maintenancePages = ['daily-reports', 'work-orders', 'pm-schedule', 'sop', 'equipment'];
   const openReports = name === 'new-equipment' && canMaintain();
   if (isLubricationTechnician()) {
     if (!lubricationPages.includes(name)) name = 'lubrication';
@@ -6362,7 +6367,7 @@ render = function liveRender(page) {
   } else if (name === 'motor-condition' && !canSeeMotor()) {
     name = 'dashboard';
   } else if (name === 'new-equipment' || name === 'equipment') {
-    name = canMaintain() ? 'equipment' : 'dashboard';
+    name = canMaintain() || isTechnician() ? 'equipment' : 'dashboard';
   } else if (name === 'iso' && !canMaintain()) {
     name = 'dashboard';
   } else if (name === 'spare-parts' && !canMaintain()) {
