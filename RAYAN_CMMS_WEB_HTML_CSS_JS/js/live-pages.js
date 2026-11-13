@@ -2999,37 +2999,74 @@ function openCategorySopPublish() {
   if (!categories.length) { toast(t('No equipment categories found.')); return; }
   const overlay = document.createElement('div');
   overlay.className = 'category-pm-overlay';
-  overlay.innerHTML = `<section class="category-pm-dialog" role="dialog" aria-modal="true" aria-labelledby="category-sop-title"><header><div><h2 id="category-sop-title">${esc(t('Publish one SOP per category'))}</h2><p>${esc(t('Choose a category and upload one Excel file. It will be shared by all equipment in that category.'))}</p></div><button type="button" class="category-pm-close" aria-label="${esc(t('Close'))}">×</button></header><form id="category-sop-form" class="live-form"><label>${esc(t('Category'))}<select name="category" id="category-sop-category" required>${categories.map((group) => `<option value="${esc(group.name)}">${esc(group.name)} · ${group.equipment.length} ${esc(t('equipment'))}</option>`).join('')}</select></label><label class="category-pm-task">${esc(t('SOP Excel file (.xlsx)'))}<input type="file" name="file" accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" required></label><p id="category-sop-error" class="form-error"></p><footer><button type="button" class="detail-button" id="category-sop-cancel">${esc(t('Cancel'))}</button><button type="submit" class="detail-button primary" id="category-sop-publish">${esc(t('Publish one file'))}</button></footer></form></section>`;
+  const equipment = [...(store.equipment || [])].sort((a, b) => `${a.equipment_id} ${a.name}`.localeCompare(`${b.equipment_id} ${b.name}`));
+  overlay.innerHTML = `<section class="category-pm-dialog sop-publish-dialog" role="dialog" aria-modal="true" aria-labelledby="category-sop-title"><header><div><h2 id="category-sop-title">${esc(t('Publish SOP'))}</h2><p>${esc(t('Choose whether this file is shared by a category or assigned to one equipment item.'))}</p></div><button type="button" class="category-pm-close" aria-label="${esc(t('Close'))}">×</button></header><form id="category-sop-form" class="live-form"><label>${esc(t('Publish scope'))}<select name="scope" id="sop-publish-scope"><option value="category">${esc(t('One shared SOP for a category'))}</option><option value="equipment">${esc(t('One SOP for one equipment'))}</option></select></label><label class="sop-publish-category-field">${esc(t('Category'))}<select name="category" id="category-sop-category">${categories.map((group) => `<option value="${esc(group.name)}">${esc(group.name)} · ${group.equipment.length} ${esc(t('equipment'))}</option>`).join('')}</select></label><label class="sop-publish-equipment-field" hidden>${esc(t('Equipment'))}<select name="equipment_id" id="sop-publish-equipment">${equipment.map((item) => `<option value="${esc(item.equipment_id)}">${esc(item.equipment_id)} — ${esc(item.name)} · ${esc(item.equipment_type || '')}</option>`).join('')}</select></label><label class="category-pm-task">${esc(t('SOP Excel file (.xlsx)'))}<input type="file" name="file" accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" required></label><p class="sop-publish-help">${esc(t('For category publishing, the same file applies to every machine in that category. For equipment publishing, it applies to the selected machine only.'))}</p><p id="category-sop-error" class="form-error"></p><footer><button type="button" class="detail-button" id="category-sop-cancel">${esc(t('Cancel'))}</button><button type="submit" class="detail-button primary" id="category-sop-publish">${esc(t('Publish SOP'))}</button></footer></form></section>`;
   document.body.appendChild(overlay);
   const close = () => overlay.remove();
   overlay.querySelector('.category-pm-close').addEventListener('click', close);
   overlay.querySelector('#category-sop-cancel').addEventListener('click', close);
   overlay.addEventListener('click', (event) => { if (event.target === overlay) close(); });
+  const scope = overlay.querySelector('#sop-publish-scope');
+  const syncScope = () => {
+    overlay.querySelector('.sop-publish-category-field').hidden = scope.value !== 'category';
+    overlay.querySelector('.sop-publish-equipment-field').hidden = scope.value !== 'equipment';
+  };
+  scope.addEventListener('change', syncScope);
+  syncScope();
   overlay.querySelector('#category-sop-form').addEventListener('submit', async (event) => {
     event.preventDefault();
+    const isEquipment = scope.value === 'equipment';
     const category = event.currentTarget.elements.category.value;
+    const equipmentId = event.currentTarget.elements.equipment_id.value;
     const file = event.currentTarget.elements.file.files?.[0];
     const error = overlay.querySelector('#category-sop-error');
     const button = overlay.querySelector('#category-sop-publish');
     if (!file) { error.textContent = t('Choose a file to import.'); return; }
     const body = new FormData();
-    body.append('category', category);
+    if (isEquipment) body.append('equipment_id', equipmentId);
+    else body.append('category', category);
     body.append('file', file);
     button.disabled = true;
     try {
-      const result = await apiRequest('/sops/publish-category', { method: 'POST', body });
+      const result = await apiRequest(isEquipment ? '/sops/publish-equipment' : '/sops/publish-category', { method: 'POST', body });
       close();
       store = null;
-      ui.equipmentId = '';
-      ui.sopCategory = category;
+      ui.equipmentId = isEquipment ? equipmentId : '';
+      ui.sopCategory = isEquipment ? '' : category;
       ui.rowKey = '';
-      toast(`${t('Published one SOP for category')}: ${result.category}.`);
+      toast(isEquipment ? `${t('SOP published for equipment')}: ${result.equipment_id}.` : `${t('Published one SOP for category')}: ${result.category}.`);
       await paint('sop');
     } catch (exception) {
       error.textContent = t(exception.message || 'Could not publish SOP.');
       button.disabled = false;
     }
   });
+}
+
+async function openPublishedSop(sop) {
+  const overlay = document.createElement('div');
+  overlay.className = 'equipment-document-overlay';
+  const targetEquipment = (store.equipment || []).find((item) => item.equipment_id === sop.equipment_id);
+  const subtitle = sop.category_sop
+    ? `${t('Shared category SOP')} · ${sop.category}`
+    : `${sop.equipment_id} — ${sop.equipment_name || targetEquipment?.name || ''} · ${sop.category || targetEquipment?.equipment_type || ''}`;
+  overlay.innerHTML = `<section class="equipment-document-page sop-document-viewer" role="dialog" aria-modal="true" aria-labelledby="published-sop-title"><header class="equipment-document-header"><div><h2 id="published-sop-title">${esc(sop.title || t('Standard operating procedure'))}</h2><p>${esc(subtitle)} · ${esc(t('Revision'))} ${esc(sop.revision || '—')}</p></div><button type="button" id="published-sop-close" aria-label="${esc(t('Close'))}">×</button></header><main class="equipment-document-content" id="published-sop-content"><p class="live-note">${esc(t('Loading SOP...'))}</p></main></section>`;
+  document.body.appendChild(overlay);
+  const previousOverflow = document.body.style.overflow;
+  document.body.style.overflow = 'hidden';
+  const close = () => { document.removeEventListener('keydown', onKeyDown); document.body.style.overflow = previousOverflow; overlay.remove(); };
+  const onKeyDown = (event) => { if (event.key === 'Escape') close(); };
+  document.addEventListener('keydown', onKeyDown);
+  overlay.querySelector('#published-sop-close').addEventListener('click', close);
+  overlay.addEventListener('click', (event) => { if (event.target === overlay) close(); });
+  try {
+    const payload = sop.category_sop
+      ? await apiRequest(`/sop-category-manual?category=${encodeURIComponent(sop.category)}`)
+      : await apiRequest(`/equipment/${encodeURIComponent(sop.equipment_id)}/sop-paragraphs`);
+    if (overlay.isConnected) overlay.querySelector('#published-sop-content').innerHTML = sopManualHtml(payload?.manual || payload) || `<p class="live-note">${esc(t('No SOP document is available.'))}</p>`;
+  } catch (exception) {
+    if (overlay.isConnected) overlay.querySelector('#published-sop-content').innerHTML = `<p class="live-note">${esc(t(exception.message || 'Could not load SOP.'))}</p>`;
+  }
 }
 
 async function drawSops() {
@@ -3101,11 +3138,11 @@ async function drawSops() {
     ]);
   const pickNote = techView
     ? t('Select a machine that has a published SOP file.')
-    : t('Choose a category to view its shared SOP. Each category has one SOP file.');
+    : t('Select a published SOP to open the full document.');
   const hasManual = sopHasManual(manual);
   const filterBar = filtersHtml({ sopOnly: techView });
   const categoryPublishAction = !techView && canMaintain()
-    ? `<div class="sop-category-action"><div><b>${esc(t('Publish SOP to a category'))}</b><small>${esc(t('Choose a category, then upload one Excel file shared by all its equipment.'))}</small></div><button type="button" class="detail-button primary" id="category-sop-open">${esc(t('Start publishing'))}</button></div>`
+    ? `<div class="sop-category-action"><div><b>${esc(t('Publish an SOP'))}</b><small>${esc(t('Publish one shared file for a category or a separate file for one equipment item.'))}</small></div><button type="button" class="detail-button primary" id="category-sop-open">${esc(t('Publish SOP'))}</button></div>`
     : '';
   let markup;
   if (techView) {
@@ -3115,17 +3152,24 @@ async function drawSops() {
       : `<p class="live-note">${esc(pickNote)}</p>`;
     markup = `<section class="panel sop-tech-panel">${filterBar}<div class="sop-tech-layout">${list}<div class="sop-tech-view">${sheet}</div></div></section>`;
   } else {
-    const body = rows.map((sop) => `<tr data-row="${esc(sop.category)}" class="${selected && selected.category === sop.category ? 'selected' : ''}">${cell(esc(sop.sop_id), true)}${cell(esc(sop.title || '—'))}${cell(esc(sop.category))}${cell(esc(sop.revision || '—'))}${cell(liveBadge(sop.status))}${cell(esc(sop.document_path || '—'))}</tr>`);
-    const detail = selected
-      ? `<aside class="panel detail sop-details-view"><h2>${esc(t('SOP Details'))}</h2><div class="sop-category-summary"><b>${esc(selected.category)}</b><span>${esc(selected.title || '')}</span><small>${esc(selected.document_path || '—')} · ${esc(t('Revision'))} ${esc(selected.revision || '—')}</small></div>${hasManual ? sopManualHtml(manual) : `<p class="live-note">${esc(pickNote)}</p>`}</aside>`
-      : `<aside class="panel detail"><h2>${esc(t('SOP Details'))}</h2><p class="live-note">${esc(pickNote)}</p></aside>`;
-    markup = `<section class="panel">${categoryPublishAction}${filterBar}${tabsHtml(['All SOPs', 'Published'])}${tableShell(['SOP Code', 'SOP Title', 'Category', 'Version', 'Status', 'Imported file'], body, shown(rows.length, rows.length, 'SOPs'))}</section>${detail}`;
+    const body = rows.map((sop) => `<tr data-open-sop="${esc(sop.sop_id)}" tabindex="0" role="button" title="${esc(t('Open SOP document'))}">${cell(esc(sop.sop_id), true)}${cell(esc(sop.title || '—'))}${cell(esc(sop.category || '—'))}${cell(esc(sop.category_sop ? t('All equipment in category') : `${sop.equipment_id || ''} — ${sop.equipment_name || ''}`))}${cell(esc(sop.revision || '—'))}${cell(liveBadge(sop.status))}${cell(esc(sop.document_path || '—'))}</tr>`);
+    const emptyHint = rows.length ? '' : `<p class="live-note sop-list-empty">${esc(t('No published SOP files match these filters.'))}</p>`;
+    markup = `<section class="panel sop-published-board">${categoryPublishAction}${filterBar}${tabsHtml(['All SOPs', 'Published'])}<p class="sop-open-hint">${esc(pickNote)}</p>${emptyHint}${tableShell(['SOP Code', 'SOP Title', 'Category', 'Applies to', 'Version', 'Status', 'Imported file'], body, shown(rows.length, rows.length, 'SOPs'))}</section>`;
   }
-  document.getElementById('workspace').className = `workspace sop-board${hasManual && !techView ? ' sop-reading' : ''}`;
+  document.getElementById('workspace').className = `workspace sop-board${techView ? '' : ' sop-published-workspace'}`;
   document.getElementById('workspace').innerHTML = markup;
   bindFilters();
   bindAssets();
-  if (!techView) bindRows();
+  if (!techView) {
+    const openRow = (row) => {
+      const sop = (store.sops || []).find((item) => item.sop_id === row.dataset.openSop);
+      if (sop) openPublishedSop(sop);
+    };
+    document.querySelectorAll('[data-open-sop]').forEach((row) => {
+      row.addEventListener('click', () => openRow(row));
+      row.addEventListener('keydown', (event) => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); openRow(row); } });
+    });
+  }
   bindDeletes();
   document.getElementById('category-sop-open')?.addEventListener('click', openCategorySopPublish);
   document.querySelector('.asset.selected')?.scrollIntoView({ block: 'nearest' });

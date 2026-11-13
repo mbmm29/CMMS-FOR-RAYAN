@@ -2674,11 +2674,14 @@ def sops(equipment_id:str|None=None,db:Session=Depends(get_db),u=Depends(auth)):
         equipment_categories[item.equipment_id] = key
 
     category_manuals = {row.category.casefold(): row for row in db.query(SOPCategoryManual).all()}
+    single_equipment_ids = {row.equipment_id for row in db.query(SOPEquipmentManual.equipment_id).all()}
     legacy = {}
     for row in db.query(SOP).order_by(SOP.id).all():
         if not (row.document_path or re.search(r'Published|Approved', row.status or '', re.I)):
             continue
         category_key = equipment_categories.get(row.equipment_id)
+        if row.equipment_id in single_equipment_ids:
+            continue
         if category_key and category_key not in legacy:
             legacy[category_key] = row
 
@@ -2704,6 +2707,21 @@ def sops(equipment_id:str|None=None,db:Session=Depends(get_db),u=Depends(auth)):
             'document_path': source.filename if source else old.document_path,
             'source_equipment_id': None if source else old.equipment_id,
         })
+    equipment_manuals = {row.equipment_id: row for row in db.query(SOPEquipmentManual).all()}
+    for equipment in equipment_rows:
+        source = equipment_manuals.get(equipment.equipment_id)
+        if source is None:
+            continue
+        if equipment_id and equipment.equipment_id != equipment_id:
+            continue
+        result.append({
+            'sop_id': f'SOP-EQ-{equipment.equipment_id}', 'equipment_id': equipment.equipment_id,
+            'equipment_ids': [equipment.equipment_id], 'equipment_name': equipment.name,
+            'category': equipment.equipment_type or '', 'category_sop': False,
+            'title': source.title, 'sop_type': equipment.equipment_type or 'Equipment SOP',
+            'revision': source.revision, 'effective_date': source.effective_date.isoformat() if source.effective_date else None,
+            'status': source.status, 'document_path': source.filename, 'source_equipment_id': equipment.equipment_id,
+        })
     return result
 
 @app.get('/sop-category-manual')
@@ -2719,6 +2737,8 @@ def get_sop_category_manual(category: str, db: Session = Depends(get_db), u=Depe
                 'status': row.status, 'document': document}
     equipment = db.query(Equipment).filter(func.lower(Equipment.equipment_type) == category.strip().lower()).order_by(Equipment.equipment_id).all()
     for item in equipment:
+        if db.query(SOPEquipmentManual.equipment_id).filter_by(equipment_id=item.equipment_id).first():
+            continue
         manual = db.query(SOPManual).filter_by(equipment_id=item.equipment_id).first()
         if manual:
             payload = sop_manual_payload(manual)
@@ -2794,6 +2814,18 @@ def get_sop_paragraphs(equipment_id:str, db:Session=Depends(get_db), u=Depends(a
     equipment = db.query(Equipment).filter_by(equipment_id=equipment_id).first()
     if not equipment:
         raise HTTPException(404, 'Equipment not found')
+    equipment_manual = db.query(SOPEquipmentManual).filter_by(equipment_id=equipment_id).first()
+    if equipment_manual:
+        try:
+            document = json.loads(equipment_manual.document or '{}')
+        except Exception:
+            document = {}
+        return {'equipment_id': equipment_id, 'items': [], 'manual': {
+            'category': equipment.equipment_type or '', 'filename': equipment_manual.filename,
+            'title': equipment_manual.title or document.get('title') or '', 'revision': equipment_manual.revision,
+            'effective_date': equipment_manual.effective_date.isoformat() if equipment_manual.effective_date else None,
+            'status': equipment_manual.status, 'document': document,
+        }}
     category_manual = db.query(SOPCategoryManual).filter(func.lower(SOPCategoryManual.category) == (equipment.equipment_type or '').strip().lower()).first()
     if category_manual:
         try:
@@ -3183,16 +3215,59 @@ async def publish_category_sop(
         raise
     return {'published': True, 'category': category}
 
+@app.post('/sops/publish-equipment')
+async def publish_equipment_sop_file(
+    equipment_id: str = Form(...),
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db),
+    u=Depends(role(*ENGINEER)),
+):
+    equipment = db.query(Equipment).filter_by(equipment_id=equipment_id).first()
+    if not equipment:
+        raise HTTPException(404, 'Equipment not found')
+    raw = await file.read(SOP_IMPORT_MAX_BYTES + 1)
+    await file.close()
+    if not raw:
+        raise HTTPException(400, 'Choose a file to import.')
+    if len(raw) > SOP_IMPORT_MAX_BYTES:
+        raise HTTPException(400, 'The file must be smaller than 2 MB.')
+    manual, cleaned = extract_sop_import(file.filename or '', raw)
+    manual = dict(manual or {})
+    if not manual:
+        manual['title'] = Path(file.filename or '').stem or 'Standard operating procedure'
+        manual['paragraphs'] = cleaned
+    try:
+        row = db.query(SOPEquipmentManual).filter_by(equipment_id=equipment_id).first()
+        if row is None:
+            row = SOPEquipmentManual(equipment_id=equipment_id)
+            db.add(row)
+        row.filename = (file.filename or '')[:255] or None
+        row.title = (manual.get('title') or '')[:300] or None
+        row.revision = (manual.get('revision') or row.revision or '01')[:30]
+        row.effective_date = row.effective_date or date.today()
+        row.status = 'Published'
+        row.document = json.dumps(manual, ensure_ascii=False)
+        row.updated_at = datetime.utcnow()
+        publish_equipment_sop(db, equipment_id, row.title, row.filename, u)
+        audit(db, u, 'PUBLISH', 'SOPEquipment', equipment_id, new={'title': row.title, 'filename': row.filename})
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise
+    return {'published': True, 'equipment_id': equipment_id}
+
 @app.delete('/equipment/{equipment_id}/sop')
 def delete_equipment_sop(equipment_id: str, db: Session = Depends(get_db), u=Depends(role(*ENGINEER))):
     if not db.query(Equipment).filter_by(equipment_id=equipment_id).first():
         raise HTTPException(404, 'Equipment not found')
+    equipment_manuals = db.query(SOPEquipmentManual).filter_by(equipment_id=equipment_id).count()
     manuals = db.query(SOPManual).filter_by(equipment_id=equipment_id).count()
     paragraphs = db.query(SOPParagraph).filter_by(equipment_id=equipment_id).count()
     sops = db.query(SOP).filter_by(equipment_id=equipment_id).count()
-    if not manuals and not paragraphs and not sops:
+    if not equipment_manuals and not manuals and not paragraphs and not sops:
         raise HTTPException(404, 'SOP not found')
     db.query(SOPManual).filter_by(equipment_id=equipment_id).delete(synchronize_session=False)
+    db.query(SOPEquipmentManual).filter_by(equipment_id=equipment_id).delete(synchronize_session=False)
     db.query(SOPParagraph).filter_by(equipment_id=equipment_id).delete(synchronize_session=False)
     db.query(SOP).filter_by(equipment_id=equipment_id).delete(synchronize_session=False)
     audit(db, u, 'DELETE', 'SOP', equipment_id, old={'manuals': manuals, 'paragraphs': paragraphs, 'sops': sops})

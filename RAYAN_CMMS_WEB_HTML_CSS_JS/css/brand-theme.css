@@ -251,6 +251,28 @@ html body .category-pm-close{font-size:22px}
   html body .category-pm-equipment b{font-size:13px}
 }
 
+/* The engineer SOP register uses the full workspace width; documents open only on selection. */
+html body .workspace.sop-published-workspace{grid-template-columns:minmax(0,1fr)!important;align-items:start}
+html body .workspace.sop-published-workspace .sop-published-board{grid-column:1/-1;width:100%;min-width:0;padding:16px}
+html body .shell .content .sop-published-board .sop-category-action{margin-bottom:14px}
+html body .sop-published-board .table-wrap{width:100%;max-width:100%;overflow:auto}
+html body .sop-published-board .data-table{width:100%;min-width:980px}
+html body .sop-published-board .data-table th,html body .sop-published-board .data-table td{padding:12px 14px;font-size:14px;line-height:1.45}
+html body .sop-published-board [data-open-sop]{cursor:pointer}
+html body .sop-published-board [data-open-sop]:hover>td{background:#fff1bd!important;color:#3e3517!important}
+html body .sop-published-board [data-open-sop]:focus-visible{outline:3px solid #c5a72e;outline-offset:-3px}
+html body .sop-open-hint{margin:10px 2px 12px;color:#536256;font-size:13px}
+html body .sop-published-board .sop-list-empty{padding:22px;text-align:center}
+html body .sop-document-viewer{width:min(1500px,98vw);height:min(96vh,1250px)}
+html body .sop-document-viewer .equipment-document-content>.sop-manual{max-width:1320px;min-height:100%;padding:26px}
+html body .sop-publish-dialog .sop-publish-help{margin:0;color:#536256;font-size:13px;line-height:1.55}
+html body .sop-publish-dialog [hidden]{display:none!important}
+@media(max-width:680px){
+  html body .workspace.sop-published-workspace .sop-published-board{padding:10px}
+  html body .sop-published-board .data-table th,html body .sop-published-board .data-table td{padding:9px;font-size:13px}
+  html body .sop-document-viewer .equipment-document-content>.sop-manual{padding:12px}
+}
+
 /* Keep the category publishing action compact and readable. */
 html body .shell .content .sop-category-action{
   display:grid!important;grid-template-columns:minmax(0,1fr) auto!important;align-items:center;gap:12px;
