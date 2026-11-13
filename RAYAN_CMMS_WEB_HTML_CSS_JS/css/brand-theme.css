@@ -175,3 +175,17 @@ html body[data-live-page] .shell .content .header-actions .ghost:focus-visible{
 html body[data-live-page] .shell .content .donut:after{color:#203b2a;background:#fff!important}
 html body[data-live-page] .shell .content .annual-sheet tbody tr:nth-child(even) td{background:#f7f9f6!important}
 html body[data-live-page] .shell .content .annual-sheet tbody tr:hover td{background:#eef5ec!important}
+html body[data-live-page="dashboard"] .shell .content .pareto-chart{height:390px!important}
+html body[data-live-page="dashboard"] .shell .content .pareto-chart .pareto-grid line{stroke:#d9e3d7!important;stroke-width:1}
+html body[data-live-page="dashboard"] .shell .content .pareto-chart text{font-family:Arial,Tahoma,sans-serif}
+html body[data-live-page="dashboard"] .shell .content .pareto-chart .pareto-left,
+html body[data-live-page="dashboard"] .shell .content .pareto-chart .pareto-axis{fill:#53675a!important;font-weight:600}
+html body[data-live-page="dashboard"] .shell .content .pareto-chart .pareto-right{fill:#927914!important;font-weight:700}
+html body[data-live-page="dashboard"] .shell .content .pareto-chart .pareto-label{fill:#344f3c!important;font-size:11px;font-weight:600}
+html body[data-live-page="dashboard"] .shell .content .pareto-chart .pareto-bar{fill:#318653!important;opacity:.9}
+html body[data-live-page="dashboard"] .shell .content .pareto-chart .pareto-line{stroke:#c5a72e!important;stroke-width:3}
+html body[data-live-page="dashboard"] .shell .content .pareto-chart .pareto-dot{fill:#fff!important;stroke:#a78b1f!important;stroke-width:2.5}
+html body[data-live-page="dashboard"] .shell .content .pareto-chart .pareto-pct{fill:#806911!important;font-size:11px;font-weight:750}
+html body[data-live-page="dashboard"] .shell .content .pareto-legend{margin-top:2px}
+html body[data-live-page="dashboard"] .shell .content .pareto-legend-bar{background:#318653!important}
+html body[data-live-page="dashboard"] .shell .content .pareto-legend-line{background:#c5a72e!important}
