@@ -1,0 +1,7 @@
+html[lang="en"] body,
+html[lang="en"] body * {
+  font-family:"Plus Jakarta Sans",Arial,sans-serif!important;
+}
+html[lang="en"] body svg text {
+  font-family:"Plus Jakarta Sans",Arial,sans-serif;
+}

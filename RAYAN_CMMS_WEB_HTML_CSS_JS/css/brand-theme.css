@@ -189,3 +189,24 @@ html body[data-live-page="dashboard"] .shell .content .pareto-chart .pareto-pct{
 html body[data-live-page="dashboard"] .shell .content .pareto-legend{margin-top:2px}
 html body[data-live-page="dashboard"] .shell .content .pareto-legend-bar{background:#318653!important}
 html body[data-live-page="dashboard"] .shell .content .pareto-legend-line{background:#c5a72e!important}
+
+/* Warm gold accents for PM checkpoints and month headers. */
+html body .annual-sheet thead tr:first-child th[colspan="4"]{background:linear-gradient(180deg,#f8f1d6,#efe3ad)!important;color:#5c4a14!important;border-color:#e0d29a!important}
+html body .annual-sheet thead tr:first-child th[rowspan="2"],
+html body .annual-sheet thead tr:first-child th[colspan="2"]{background:#f5f0dc!important;color:#4f492f!important}
+html body .annual-sheet thead tr:nth-child(2) th{background:#faf7e9!important;color:#554e34!important;border-color:#e7dfc5!important}
+html body .annual-sheet .week-open{background:#fffdf5!important;color:#705b16!important;border-color:#d1bd6e!important}
+html body .annual-sheet .week-open:hover{background:#ead986!important;color:#3f3515!important;border-color:#c1a73c!important}
+html body .annual-sheet tbody td:has(input[type="checkbox"]){background:#fffdf7!important}
+html body .annual-sheet tbody tr:hover td:has(input[type="checkbox"]){background:#fff8dc!important}
+html body .annual-sheet input[type="checkbox"]{
+  appearance:none!important;-webkit-appearance:none!important;display:inline-grid;place-content:center;
+  width:16px;height:16px;margin:0;border:1px solid #b9a24c;border-radius:4px;
+  background:#fffef9;accent-color:#c7a833;cursor:pointer;vertical-align:middle;
+}
+html body .annual-sheet input[type="checkbox"]:checked{border-color:#9f8219;background:#c7a833}
+html body .annual-sheet input[type="checkbox"]:checked::before{
+  content:"";width:8px;height:4px;border:solid #fff;border-width:0 0 2px 2px;
+  transform:rotate(-45deg);margin-top:-2px;
+}
+html body .annual-sheet input[type="checkbox"]:focus-visible{outline:3px solid #e4cf78;outline-offset:2px}
