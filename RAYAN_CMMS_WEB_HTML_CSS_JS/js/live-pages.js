@@ -4858,10 +4858,10 @@ html,body{margin:0;padding:0;background:#fff;color:#102d60;font:8pt Arial,sans-s
 .lube-head p{margin:0.5mm 0 0;font-size:8pt;font-weight:800;text-align:center}
 .lube-head small{display:block;margin-top:0.3mm;font-size:7pt;text-align:center;color:#31517f}
 .lube-head dl{min-width:0;margin:0;border:0.3mm solid #2a5287;overflow:hidden}
-.lube-head dl div{display:grid;grid-template-columns:20mm minmax(0,1fr);align-items:center;gap:1mm;min-height:8mm;padding:0 2mm;font-size:9pt;font-weight:700;border-bottom:0.3mm solid #2a5287}
+.lube-head dl div{display:grid;grid-template-columns:max-content minmax(0,1fr);align-items:center;gap:1mm;min-height:8mm;padding:0 2mm;font-size:9pt;font-weight:700;border-bottom:0.3mm solid #2a5287}
 .lube-head dl div:last-child{border-bottom:0}
 .lube-head dt{grid-column:1;margin:0;color:#102d60;white-space:nowrap}
-.lube-head dd{grid-column:2;display:block;min-width:0;margin:0;color:#000!important;-webkit-text-fill-color:#000!important;text-align:end;font-weight:800;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.lube-head dd{grid-column:2;display:block;min-width:0;margin:0;color:#000!important;-webkit-text-fill-color:#000!important;text-align:start;font-weight:800;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .lube-meta{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:1mm 6mm;margin:2mm 0 1.5mm}
 .lube-meta label{display:grid;grid-template-columns:28mm minmax(0,1fr);gap:1.5mm;align-items:center;font-size:8pt;font-weight:800}
 .lube-meta input,.lube-meta select{width:100%;height:5mm;border:0;border-bottom:0.25mm solid #8eabda;background:transparent;font:8pt Arial,sans-serif;color:#102d60}
