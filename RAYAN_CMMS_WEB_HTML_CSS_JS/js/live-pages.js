@@ -2533,8 +2533,8 @@ function openCategoryPmPlan(categories, equipment) {
 let equipmentSopToken = 0;
 let equipmentAnnualToken = 0;
 
-async function loadEquipmentSop(selected) {
-  const box = document.getElementById('equipment-sop-box');
+async function loadEquipmentSop(selected, boxId = 'equipment-sop-box') {
+  const box = document.getElementById(boxId);
   const token = ++equipmentSopToken;
   if (!box || !selected?.equipment_type) return;
   box.innerHTML = `<p class="live-note">${esc(t('Loading SOP...'))}</p>`;
@@ -2560,13 +2560,13 @@ function equipmentAnnualTable(items, selected, year) {
     const marks = new Set(String(item.weeks || '').split(',').map((part) => part.trim()).filter(Boolean));
     const dates = ANNUAL_MONTHS.flatMap((_, month) => [1, 2, 3, 4].map((week) => `<td>${marks.has(`${month + 1}-${week}`) ? '✓' : ''}</td>`)).join('');
     const line = store.lines.find((row) => row.line_id === item.line_id);
-    return `<tr><td>${index + 1}</td><td>${esc(item.machine_code)}</td><td>${esc(item.machine_name || selected.name)}</td><td>${esc(line?.line_number ?? '')}</td><td>${esc(line?.name || item.line_key || '')}</td><td>${esc(item.task)}</td><td>${esc(t(item.maintenance_type || 'Preventive'))}</td><td>${esc(item.frequency_time)}</td><td>${esc(item.frequency_hours)}</td>${dates}</tr>`;
+    return `<tr><td>${index + 1}</td><td>${esc(item.machine_code)}</td><td>${esc(item.machine_name || selected.name)}</td><td>${esc(line?.line_number ?? '')}</td><td>${esc(line?.name || '')}</td><td>${esc(item.task)}</td><td>${esc(t(item.maintenance_type || 'Preventive'))}</td><td>${esc(item.frequency_time)}</td><td>${esc(item.frequency_hours)}</td>${dates}</tr>`;
   }).join('');
   return `<div class="equipment-annual-scroll"><table class="annual-sheet equipment-annual-sheet"><thead><tr><th rowspan="2">${esc(t('No.'))}</th><th rowspan="2">${esc(t('Machine number'))}</th><th rowspan="2">${esc(t('Machine name'))}</th><th rowspan="2">${esc(t('Line number'))}</th><th rowspan="2">${esc(t('Line name'))}</th><th rowspan="2">${esc(t('Task description'))}</th><th rowspan="2">${esc(t('Maintenance type'))}</th><th rowspan="2">${esc(t('Every (days)'))}</th><th rowspan="2">${esc(t('By running hours'))}</th>${months}</tr><tr>${weeks}</tr></thead><tbody>${rows}</tbody></table></div>`;
 }
 
-async function loadEquipmentAnnualPlan(selected, year) {
-  const box = document.getElementById('equipment-annual-box');
+async function loadEquipmentAnnualPlan(selected, year, boxId = 'equipment-annual-box') {
+  const box = document.getElementById(boxId);
   const token = ++equipmentAnnualToken;
   if (!box || !selected?.plant_id) return;
   box.innerHTML = `<p class="live-note">${esc(t('Loading annual plan...'))}</p>`;
@@ -2586,7 +2586,7 @@ async function exportEquipmentAnnualPlan(selected, year) {
   const items = (plan.items || []).filter((item) => equipmentAnnualMatches(item, selected));
   const line = store.lines.find((row) => row.line_id === selected.line_id);
   const lines = items.map((item, index) => ({
-    values: [index + 1, item.machine_code || selected.equipment_id, item.machine_name || selected.name, line?.line_number ?? '', line?.name || item.line_key || '', item.task || '', t(item.maintenance_type || 'Preventive'), item.frequency_time || '', item.frequency_hours || ''],
+    values: [index + 1, item.machine_code || selected.equipment_id, item.machine_name || selected.name, line?.line_number ?? '', line?.name || '', item.task || '', t(item.maintenance_type || 'Preventive'), item.frequency_time || '', item.frequency_hours || ''],
     marks: String(item.weeks || '').split(',').map((part) => part.trim()).filter(Boolean),
   }));
   let logo = null;
@@ -2602,6 +2602,54 @@ async function exportEquipmentAnnualPlan(selected, year) {
   downloadBlob(blob, `annual-plan-${year}-${String(selected.equipment_id).replace(/[^A-Za-z0-9_-]/g, '-')}.xlsx`);
 }
 
+function openEquipmentDocumentTab(selected, initialTab = 'sop') {
+  document.querySelector('.equipment-document-overlay')?.remove();
+  const overlay = document.createElement('div');
+  overlay.className = 'equipment-document-overlay';
+  overlay.innerHTML = `<section class="equipment-document-page" role="dialog" aria-modal="true" aria-labelledby="equipment-document-title"><header class="equipment-document-header"><div><h2 id="equipment-document-title">${esc(t('Equipment documents'))}</h2><p>${esc(selected.equipment_id)} — ${esc(selected.name)} · ${esc(selected.equipment_type || '')}</p></div><button type="button" id="equipment-document-close" aria-label="${esc(t('Close'))}">×</button></header><nav class="equipment-document-tabs" role="tablist"><button type="button" data-document-tab="sop">${esc(t('SOP'))}</button><button type="button" data-document-tab="annual">${esc(t('Annual maintenance plan'))}</button></nav><main id="equipment-document-content" class="equipment-document-content"></main></section>`;
+  document.body.appendChild(overlay);
+  const previousOverflow = document.body.style.overflow;
+  document.body.style.overflow = 'hidden';
+  const close = () => {
+    document.removeEventListener('keydown', onKeyDown);
+    document.body.style.overflow = previousOverflow;
+    overlay.remove();
+  };
+  const onKeyDown = (event) => { if (event.key === 'Escape') close(); };
+  document.addEventListener('keydown', onKeyDown);
+  overlay.querySelector('#equipment-document-close')?.addEventListener('click', close);
+  overlay.addEventListener('click', (event) => { if (event.target === overlay) close(); });
+  const showTab = (tab) => {
+    overlay.querySelectorAll('[data-document-tab]').forEach((button) => {
+      const active = button.dataset.documentTab === tab;
+      button.classList.toggle('active', active);
+      button.setAttribute('aria-selected', active ? 'true' : 'false');
+    });
+    const content = overlay.querySelector('#equipment-document-content');
+    if (tab === 'sop') {
+      content.innerHTML = `<div id="equipment-sop-box"><p class="live-note">${esc(t('Loading SOP...'))}</p></div>`;
+      loadEquipmentSop(selected, 'equipment-sop-box');
+      return;
+    }
+    content.innerHTML = `<div class="equipment-document-plan-controls"><label>${esc(t('Year'))}<input id="equipment-document-year" type="number" min="2000" max="2100" value="${new Date().getFullYear()}"></label><button type="button" class="detail-button" id="equipment-document-show-plan">${esc(t('Show plan'))}</button><button type="button" class="detail-button primary" id="equipment-document-export-plan">${esc(t('Export Excel'))}</button></div><div id="equipment-document-annual-box"><p class="live-note">${esc(t('Loading annual plan...'))}</p></div>`;
+    const yearInput = content.querySelector('#equipment-document-year');
+    const loadPlan = () => loadEquipmentAnnualPlan(selected, Number(yearInput.value), 'equipment-document-annual-box');
+    content.querySelector('#equipment-document-show-plan')?.addEventListener('click', loadPlan);
+    content.querySelector('#equipment-document-export-plan')?.addEventListener('click', async (event) => {
+      const button = event.currentTarget;
+      try {
+        button.disabled = true;
+        await exportEquipmentAnnualPlan(selected, Number(yearInput.value));
+      } catch (exception) {
+        toast(t(exception.message || 'Could not export annual plan.'));
+      } finally { button.disabled = false; }
+    });
+    loadPlan();
+  };
+  overlay.querySelectorAll('[data-document-tab]').forEach((button) => button.addEventListener('click', () => showTab(button.dataset.documentTab)));
+  showTab(initialTab);
+}
+
 function equipmentDetail(selected) {
   const capacity = selected?.capacity == null ? '—' : `${selected.capacity}${selected.capacity_unit ? ` ${selected.capacity_unit}` : ''}`;
   const actions = selected?.equipment_id && canMaintain()
@@ -2613,7 +2661,7 @@ function equipmentDetail(selected) {
     ['Criticality', criticalityLabel(selected?.criticality)], ['Condition', selected?.condition], ['Capacity', capacity],
     ['Motor power (kW)', selected?.motor_power_kw ?? '—'],
     ['Notes', selected?.notes],
-  ])}</div><details class="equipment-extra" id="equipment-sop-details"><summary>${esc(t('SOP for this category'))}</summary><div id="equipment-sop-box"><p class="live-note">${esc(t('Open to view the shared category SOP.'))}</p></div></details><details class="equipment-extra" id="equipment-annual-details"><summary>${esc(t('Annual maintenance plan'))}</summary><div class="equipment-annual-controls"><label>${esc(t('Year'))}<input id="equipment-annual-year" type="number" min="2000" max="2100" value="${new Date().getFullYear()}"></label><button type="button" class="detail-button" id="equipment-annual-load">${esc(t('Show plan'))}</button><button type="button" class="detail-button primary" id="equipment-annual-export">${esc(t('Export Excel'))}</button></div><div id="equipment-annual-box"><p class="live-note">${esc(t('Choose a year, then show this equipment plan.'))}</p></div></details></aside>`;
+  ])}</div><div class="equipment-doc-actions"><button type="button" class="detail-button primary" id="equipment-open-sop">${esc(t('Open SOP'))}</button><button type="button" class="detail-button" id="equipment-open-annual-plan">${esc(t('Open annual plan'))}</button></div></aside>`;
 }
 
 let equipmentMotorToken = 0;
@@ -2768,22 +2816,8 @@ function drawEquipment() {
     }
     document.querySelector('.detail')?.insertAdjacentHTML('beforeend', '<div id="equipment-motor" class="equipment-motor"></div>');
     loadEquipmentMotor(selected);
-    const sopDetails = document.getElementById('equipment-sop-details');
-    sopDetails?.addEventListener('toggle', () => { if (sopDetails.open) loadEquipmentSop(selected); });
-    const annualDetails = document.getElementById('equipment-annual-details');
-    annualDetails?.addEventListener('toggle', () => {
-      if (annualDetails.open) loadEquipmentAnnualPlan(selected, Number(document.getElementById('equipment-annual-year')?.value) || new Date().getFullYear());
-    });
-    document.getElementById('equipment-annual-load')?.addEventListener('click', () => loadEquipmentAnnualPlan(selected, Number(document.getElementById('equipment-annual-year')?.value)));
-    document.getElementById('equipment-annual-export')?.addEventListener('click', async () => {
-      const button = document.getElementById('equipment-annual-export');
-      try {
-        button.disabled = true;
-        await exportEquipmentAnnualPlan(selected, Number(document.getElementById('equipment-annual-year')?.value));
-      } catch (exception) {
-        toast(t(exception.message || 'Could not export annual plan.'));
-      } finally { button.disabled = false; }
-    });
+    document.getElementById('equipment-open-sop')?.addEventListener('click', () => openEquipmentDocumentTab(selected, 'sop'));
+    document.getElementById('equipment-open-annual-plan')?.addEventListener('click', () => openEquipmentDocumentTab(selected, 'annual'));
   }
   bindFilters();
   bindRows();
