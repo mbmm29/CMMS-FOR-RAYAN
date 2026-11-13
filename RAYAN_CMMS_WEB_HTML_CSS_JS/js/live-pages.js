@@ -2604,17 +2604,81 @@ async function exportEquipmentAnnualPlan(selected, year) {
   downloadBlob(blob, `annual-plan-${year}-${String(selected.equipment_id).replace(/[^A-Za-z0-9_-]/g, '-')}.xlsx`);
 }
 
+async function loadEquipmentCategoryFile(selected, documentType, content, objectUrls = []) {
+  content.innerHTML = `<p class="live-note">${esc(t('Loading document...'))}</p>`;
+  try {
+    const docs = await apiRequest(`/equipment-category-documents?category=${encodeURIComponent(selected.equipment_type || '')}`);
+    const info = (docs || []).find((item) => item.document_type === documentType);
+    if (!info) throw new Error(t('No file is published for this category.'));
+    const blob = await apiRequest(`/equipment-category-documents/file?category=${encodeURIComponent(info.category)}&document_type=${encodeURIComponent(documentType)}`, { blob: true });
+    if (!content.isConnected) return;
+    const url = URL.createObjectURL(blob);
+    objectUrls.push(url);
+    const download = `<a class="detail-button primary equipment-file-download" href="${url}" download="${esc(info.filename)}">${esc(t('Download file'))}</a>`;
+    const infoLine = `<div class="equipment-category-file-info"><b>${esc(info.filename)}</b><span>${esc(info.category)} · ${esc(fmtDate(info.updated_at) || '')}</span></div>`;
+    if (info.content_type === 'application/pdf') {
+      content.innerHTML = `${infoLine}${download}<iframe class="equipment-file-frame" src="${url}" title="${esc(info.filename)}"></iframe>`;
+    } else if (String(info.content_type || '').startsWith('image/')) {
+      content.innerHTML = `${infoLine}${download}<div class="equipment-file-image-wrap"><img class="equipment-file-image" src="${url}" alt="${esc(info.filename)}"></div>`;
+    } else if (info.content_type === 'text/plain' || info.content_type === 'text/csv') {
+      const text = await blob.text();
+      if (!content.isConnected) return;
+      content.innerHTML = `${infoLine}${download}<pre class="equipment-file-text"></pre>`;
+      content.querySelector('.equipment-file-text').textContent = text;
+    } else if (String(info.filename || '').toLowerCase().endsWith('.xlsx')) {
+      const preview = await apiRequest(`/equipment-category-documents/preview?category=${encodeURIComponent(info.category)}&document_type=${encodeURIComponent(documentType)}`);
+      if (!content.isConnected) return;
+      const rows = (preview.rows || []).map((row) => `<tr>${row.map((value) => `<td>${esc(value)}</td>`).join('')}</tr>`).join('');
+      content.innerHTML = `${infoLine}${download}<div class="equipment-xlsx-preview"><table class="data-table"><tbody>${rows || `<tr><td>${esc(t('No records yet'))}</td></tr>`}</tbody></table></div>`;
+    } else {
+      content.innerHTML = `${infoLine}<div class="equipment-file-download-card"><div class="machine">▤</div><h3>${esc(t(documentType === 'manual' ? 'Equipment manual' : 'Spare parts file'))}</h3><p>${esc(t('This file format opens in its matching application. Download it to view the full document.'))}</p>${download}</div>`;
+    }
+  } catch (exception) {
+    if (content.isConnected) content.innerHTML = `<p class="live-note">${esc(t(exception.message || 'Could not load document.'))}</p>`;
+  }
+}
+
+function openEquipmentCategoryFilePublish(selected) {
+  const categories = [...new Set((store.equipment || []).map((item) => String(item.equipment_type || '').trim()).filter(Boolean))].sort((a, b) => a.localeCompare(b));
+  if (!categories.length) return;
+  const overlay = document.createElement('div');
+  overlay.className = 'category-pm-overlay';
+  overlay.innerHTML = `<section class="category-pm-dialog equipment-category-file-dialog" role="dialog" aria-modal="true" aria-labelledby="equipment-category-file-title"><header><div><h2 id="equipment-category-file-title">${esc(t('Publish category document'))}</h2><p>${esc(t('Upload one manual or spare parts file. It will be available for every machine in the selected category.'))}</p></div><button type="button" class="category-pm-close" aria-label="${esc(t('Close'))}">×</button></header><form class="live-form" id="equipment-category-file-form"><label>${esc(t('Category'))}<select name="category" required>${categories.map((category) => `<option value="${esc(category)}"${category === selected.equipment_type ? ' selected' : ''}>${esc(category)}</option>`).join('')}</select></label><label>${esc(t('Document type'))}<select name="document_type" required><option value="manual">${esc(t('Equipment manual'))}</option><option value="spare-parts">${esc(t('Spare parts file'))}</option></select></label><label class="category-pm-task">${esc(t('Choose file'))}<input name="file" type="file" accept=".pdf,.xlsx,.xls,.docx,.doc,.png,.jpg,.jpeg,.txt,.csv" required></label><p class="live-note">${esc(t('Supported files: PDF, Excel, Word, images, CSV, and text. Maximum size: 15 MB. A new upload replaces the file for that category.'))}</p><p class="form-error" id="equipment-category-file-error"></p><footer><button type="button" class="detail-button" id="equipment-category-file-cancel">${esc(t('Cancel'))}</button><button class="detail-button primary" id="equipment-category-file-submit" type="submit">${esc(t('Upload file'))}</button></footer></form></section>`;
+  document.body.appendChild(overlay);
+  const close = () => overlay.remove();
+  overlay.querySelector('.category-pm-close').addEventListener('click', close);
+  overlay.querySelector('#equipment-category-file-cancel').addEventListener('click', close);
+  overlay.addEventListener('click', (event) => { if (event.target === overlay) close(); });
+  overlay.querySelector('#equipment-category-file-form').addEventListener('submit', async (event) => {
+    event.preventDefault();
+    const formData = new FormData(event.currentTarget);
+    const button = overlay.querySelector('#equipment-category-file-submit');
+    const error = overlay.querySelector('#equipment-category-file-error');
+    button.disabled = true;
+    try {
+      const result = await apiRequest('/equipment-category-documents', { method: 'POST', body: formData });
+      close();
+      toast(`${t('File published for category')}: ${result.category}.`);
+    } catch (exception) {
+      error.textContent = t(exception.message || 'Could not upload file.');
+      button.disabled = false;
+    }
+  });
+}
+
 function openEquipmentDocumentTab(selected, initialTab = 'sop') {
   document.querySelector('.equipment-document-overlay')?.remove();
+  const objectUrls = [];
   const overlay = document.createElement('div');
   overlay.className = 'equipment-document-overlay';
-  overlay.innerHTML = `<section class="equipment-document-page" role="dialog" aria-modal="true" aria-labelledby="equipment-document-title"><header class="equipment-document-header"><div><h2 id="equipment-document-title">${esc(t('Equipment documents'))}</h2><p>${esc(selected.equipment_id)} — ${esc(selected.name)} · ${esc(selected.equipment_type || '')}</p></div><button type="button" id="equipment-document-close" aria-label="${esc(t('Close'))}">×</button></header><nav class="equipment-document-tabs" role="tablist"><button type="button" data-document-tab="sop">${esc(t('SOP'))}</button><button type="button" data-document-tab="annual">${esc(t('Annual maintenance plan'))}</button></nav><main id="equipment-document-content" class="equipment-document-content"></main></section>`;
+  overlay.innerHTML = `<section class="equipment-document-page" role="dialog" aria-modal="true" aria-labelledby="equipment-document-title"><header class="equipment-document-header"><div><h2 id="equipment-document-title">${esc(t('Equipment documents'))}</h2><p>${esc(selected.equipment_id)} — ${esc(selected.name)} · ${esc(selected.equipment_type || '')}</p></div><button type="button" id="equipment-document-close" aria-label="${esc(t('Close'))}">×</button></header><nav class="equipment-document-tabs" role="tablist"><button type="button" data-document-tab="sop">${esc(t('SOP'))}</button><button type="button" data-document-tab="manual">${esc(t('Manual'))}</button><button type="button" data-document-tab="spare-parts">${esc(t('Spare parts'))}</button><button type="button" data-document-tab="annual">${esc(t('Annual maintenance plan'))}</button></nav><main id="equipment-document-content" class="equipment-document-content"></main></section>`;
   document.body.appendChild(overlay);
   const previousOverflow = document.body.style.overflow;
   document.body.style.overflow = 'hidden';
   const close = () => {
     document.removeEventListener('keydown', onKeyDown);
     document.body.style.overflow = previousOverflow;
+    objectUrls.forEach((url) => URL.revokeObjectURL(url));
     overlay.remove();
   };
   const onKeyDown = (event) => { if (event.key === 'Escape') close(); };
@@ -2631,6 +2695,10 @@ function openEquipmentDocumentTab(selected, initialTab = 'sop') {
     if (tab === 'sop') {
       content.innerHTML = `<div id="equipment-sop-box"><p class="live-note">${esc(t('Loading SOP...'))}</p></div>`;
       loadEquipmentSop(selected, 'equipment-sop-box');
+      return;
+    }
+    if (tab === 'manual' || tab === 'spare-parts') {
+      loadEquipmentCategoryFile(selected, tab, content, objectUrls);
       return;
     }
     content.innerHTML = `<div class="equipment-document-plan-controls"><label>${esc(t('Year'))}<input id="equipment-document-year" type="number" min="2000" max="2100" value="${new Date().getFullYear()}"></label><button type="button" class="detail-button" id="equipment-document-show-plan">${esc(t('Show plan'))}</button><button type="button" class="detail-button primary" id="equipment-document-export-plan">${esc(t('Export Excel'))}</button></div><div id="equipment-document-annual-box"><p class="live-note">${esc(t('Loading annual plan...'))}</p></div>`;
@@ -2657,13 +2725,16 @@ function equipmentDetail(selected) {
   const actions = selected?.equipment_id && canMaintain()
     ? `<div class="equipment-actions"><button type="button" class="detail-button primary" id="equipment-edit">${esc(t('Edit'))}</button><button type="button" class="detail-button danger" data-delete="/equipment" data-delete-id="${esc(selected.equipment_id)}" data-delete-query="${esc(equipmentScopeQuery(selected).replace(/^\?/, ''))}" data-delete-note="Delete this equipment? Its maintenance history and KPI charts will be removed.">${esc(t('Delete'))}</button></div>`
     : '';
+  const documents = selected?.equipment_id
+    ? `<div class="equipment-doc-actions"><button type="button" class="detail-button primary" id="equipment-open-sop">${esc(t('Open SOP'))}</button><button type="button" class="detail-button" id="equipment-open-manual">${esc(t('Open manual'))}</button><button type="button" class="detail-button" id="equipment-open-spare-file">${esc(t('Spare parts file'))}</button><button type="button" class="detail-button" id="equipment-open-annual-plan">${esc(t('Open annual plan'))}</button>${canMaintain() ? `<button type="button" class="detail-button equipment-category-publish-button" id="equipment-publish-category-files">${esc(t('Publish category files'))}</button>` : ''}</div>`
+    : '';
   return `<aside class="panel detail"><h2>${esc(t('Equipment Details'))}</h2><div class="detail-top"><div class="machine">⚙</div>${liveBadge(selected?.status || '—')}<h3>${esc(selected?.equipment_id || '—')}</h3><p>${esc(selected?.name || '')}</p></div>${actions}<div class="detail-list">${detailRows([
     ['Category', selected?.equipment_type], ['Location', placeOf(selected)], ['Section', sectionName(selected?.section_id) || '—'], ['Area', selected?.area],
     ['Manufacturer', selected?.manufacturer], ['Model', selected?.model], ['Serial number', selected?.serial_number],
     ['Criticality', criticalityLabel(selected?.criticality)], ['Condition', selected?.condition], ['Capacity', capacity],
     ['Motor power (kW)', selected?.motor_power_kw ?? '—'],
     ['Notes', selected?.notes],
-  ])}</div><div class="equipment-doc-actions"><button type="button" class="detail-button primary" id="equipment-open-sop">${esc(t('Open SOP'))}</button><button type="button" class="detail-button" id="equipment-open-annual-plan">${esc(t('Open annual plan'))}</button></div></aside>`;
+  ])}</div>${documents}</aside>`;
 }
 
 let equipmentMotorToken = 0;
@@ -2824,7 +2895,10 @@ function drawEquipment() {
     document.querySelector('.detail')?.insertAdjacentHTML('beforeend', '<div id="equipment-motor" class="equipment-motor"></div>');
     loadEquipmentMotor(selected);
     document.getElementById('equipment-open-sop')?.addEventListener('click', () => openEquipmentDocumentTab(selected, 'sop'));
+    document.getElementById('equipment-open-manual')?.addEventListener('click', () => openEquipmentDocumentTab(selected, 'manual'));
+    document.getElementById('equipment-open-spare-file')?.addEventListener('click', () => openEquipmentDocumentTab(selected, 'spare-parts'));
     document.getElementById('equipment-open-annual-plan')?.addEventListener('click', () => openEquipmentDocumentTab(selected, 'annual'));
+    document.getElementById('equipment-publish-category-files')?.addEventListener('click', () => openEquipmentCategoryFilePublish(selected));
   }
   bindFilters();
   bindRows();

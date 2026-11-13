@@ -241,6 +241,16 @@ class SOPEquipmentManual(Base):
     document: Mapped[str] = mapped_column(Text, default='{}')
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
+class EquipmentCategoryDocument(Base):
+    """A shared manual or spare-parts file for one equipment category."""
+    __tablename__ = 'equipment_category_documents'
+    category: Mapped[str] = mapped_column(String(100), primary_key=True)
+    document_type: Mapped[str] = mapped_column(String(30), primary_key=True)
+    filename: Mapped[str] = mapped_column(String(255))
+    content_type: Mapped[str] = mapped_column(String(150))
+    data: Mapped[bytes] = mapped_column(LargeBinary)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
 class WorkOrder(Base):
     __tablename__='work_orders'
     id: Mapped[int]=mapped_column(Integer,primary_key=True)

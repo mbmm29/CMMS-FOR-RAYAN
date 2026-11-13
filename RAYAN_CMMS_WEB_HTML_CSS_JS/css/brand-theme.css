@@ -319,6 +319,8 @@ html body .sop-category-summary b{font-size:15px;color:#203b2a}
 html body .sop-category-summary small{font-size:12px;color:#536256}
 html body .equipment-doc-actions{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:14px}
 html body .equipment-doc-actions .detail-button{width:100%;min-height:42px;margin:0;font-size:13px}
+html body .equipment-doc-actions{grid-template-columns:repeat(auto-fit,minmax(135px,1fr))}
+html body .equipment-doc-actions .equipment-category-publish-button{grid-column:1/-1}
 html body .equipment-document-overlay{position:fixed;inset:0;z-index:1600;display:flex;align-items:center;justify-content:center;padding:12px;background:#10231bcc}
 html body .equipment-document-page{display:flex;flex-direction:column;width:min(1500px,98vw);height:min(96vh,1200px);overflow:hidden;border:1px solid #cbd8ca;border-radius:14px;background:#f8faf6;color:#26372e;box-shadow:0 20px 70px #10231b55}
 html body .equipment-document-header{display:flex;align-items:center;justify-content:space-between;gap:16px;padding:14px 20px;border-bottom:1px solid #dce5db;background:#fff}
@@ -337,6 +339,21 @@ html body .equipment-document-plan-controls input{width:130px;min-height:38px;pa
 html body .equipment-document-plan-controls .detail-button{width:auto;min-height:38px;margin:0;padding:8px 14px}
 html body #equipment-document-annual-box{max-width:1400px;margin:0 auto}
 html body #equipment-document-annual-box .equipment-annual-sheet{min-width:2100px}
+html body .equipment-category-file-info{display:flex;justify-content:space-between;align-items:center;gap:12px;max-width:1300px;margin:0 auto 10px;padding:12px 15px;border:1px solid #d6dfd3;border-radius:9px;background:#fff;color:#26372e}
+html body .equipment-category-file-info b{font-size:14px;overflow-wrap:anywhere}
+html body .equipment-category-file-info span{color:#536256;font-size:12px;white-space:nowrap}
+html body .equipment-file-frame{display:block;width:100%;height:calc(100% - 100px);min-height:65vh;border:1px solid #d6dfd3;border-radius:8px;background:#fff}
+html body .equipment-file-download{display:inline-flex;width:auto;margin:0 auto 12px;padding:9px 14px;text-decoration:none}
+html body .equipment-file-image-wrap{display:flex;justify-content:center;align-items:flex-start;max-height:calc(100% - 100px);overflow:auto;padding:12px;border:1px solid #d6dfd3;border-radius:8px;background:#fff}
+html body .equipment-file-image{max-width:100%;height:auto;object-fit:contain}
+html body .equipment-file-text{max-width:1300px;margin:0 auto;padding:18px;border:1px solid #d6dfd3;border-radius:8px;background:#fff;color:#26372e;white-space:pre-wrap;overflow-wrap:anywhere}
+html body .equipment-xlsx-preview{max-width:1400px;max-height:calc(100% - 100px);margin:0 auto;overflow:auto;border:1px solid #d6dfd3;border-radius:8px;background:#fff}
+html body .equipment-xlsx-preview .data-table{width:max-content;min-width:100%;border-collapse:collapse}
+html body .equipment-xlsx-preview .data-table td{min-width:90px;max-width:420px;padding:9px 11px;border:1px solid #d6dfd3;white-space:pre-wrap;overflow-wrap:anywhere}
+html body .equipment-file-download-card{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;min-height:50vh;padding:24px;text-align:center;border:1px solid #d6dfd3;border-radius:10px;background:#fff}
+html body .equipment-file-download-card h3{margin:0;color:#203b2a;font-size:20px}
+html body .equipment-file-download-card p{max-width:560px;margin:0;color:#536256;line-height:1.6}
+html body .equipment-category-file-dialog .live-form{gap:14px}
 @media(max-width:680px){
   html body .equipment-doc-actions{grid-template-columns:1fr}
   html body .equipment-document-overlay{padding:0}
@@ -346,4 +363,7 @@ html body #equipment-document-annual-box .equipment-annual-sheet{min-width:2100p
   html body .equipment-document-tabs button{min-width:0;flex:1;padding:11px 8px;font-size:13px}
   html body .equipment-document-content{padding:10px}
   html body .equipment-document-content #equipment-sop-box>.sop-manual{padding:12px}
+  html body .equipment-category-file-info{align-items:flex-start;flex-direction:column}
+  html body .equipment-file-frame{height:75vh;min-height:0}
+  html body .equipment-doc-actions{grid-template-columns:1fr 1fr}
 }
