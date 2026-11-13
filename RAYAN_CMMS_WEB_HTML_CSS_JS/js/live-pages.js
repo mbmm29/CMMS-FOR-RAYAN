@@ -2617,7 +2617,49 @@ async function loadEquipmentCategoryFile(selected, documentType, content, object
     const download = `<a class="detail-button primary equipment-file-download" href="${url}" download="${esc(info.filename)}">${esc(t('Download file'))}</a>`;
     const infoLine = `<div class="equipment-category-file-info"><b>${esc(info.filename)}</b><span>${esc(info.category)} · ${esc(fmtDate(info.updated_at) || '')}</span></div>`;
     if (info.content_type === 'application/pdf') {
-      content.innerHTML = `${infoLine}${download}<iframe class="equipment-file-frame" src="${url}" title="${esc(info.filename)}"></iframe>`;
+      const pdf = await apiRequest(`/equipment-category-documents/pdf-info?category=${encodeURIComponent(info.category)}&document_type=${encodeURIComponent(documentType)}`);
+      if (!content.isConnected) return;
+      content.innerHTML = `${infoLine}<div class="equipment-pdf-toolbar"><div class="equipment-pdf-pages"><button type="button" data-pdf-prev aria-label="${esc(t('Previous page'))}">‹</button><span data-pdf-count>—</span><button type="button" data-pdf-next aria-label="${esc(t('Next page'))}">›</button></div><div class="equipment-pdf-zoom"><button type="button" data-pdf-zoom-out aria-label="${esc(t('Zoom out'))}">−</button><span data-pdf-zoom-label>100%</span><button type="button" data-pdf-zoom-in aria-label="${esc(t('Zoom in'))}">+</button></div>${download}</div><div class="equipment-pdf-stage"><div class="equipment-pdf-page"><p class="live-note" data-pdf-status>${esc(t('Loading document...'))}</p><img data-pdf-image alt="${esc(info.filename)}" hidden></div></div>`;
+      const viewer = content.querySelector('.equipment-pdf-stage');
+      const image = content.querySelector('[data-pdf-image]');
+      const status = content.querySelector('[data-pdf-status]');
+      const count = content.querySelector('[data-pdf-count]');
+      const zoomLabel = content.querySelector('[data-pdf-zoom-label]');
+      let currentPage = 1;
+      let zoom = 100;
+      let renderToken = 0;
+      let currentPageUrl = '';
+      const renderPage = async (page) => {
+        const token = ++renderToken;
+        currentPage = Math.max(1, Math.min(Number(pdf.pages) || 1, page));
+        if (count) count.textContent = `${currentPage} / ${pdf.pages}`;
+        content.querySelector('[data-pdf-prev]').disabled = currentPage <= 1;
+        content.querySelector('[data-pdf-next]').disabled = currentPage >= pdf.pages;
+        if (status) { status.hidden = false; status.textContent = t('Loading document...'); }
+        if (image) image.hidden = true;
+        try {
+          const pageBlob = await apiRequest(`/equipment-category-documents/pdf-page?category=${encodeURIComponent(info.category)}&document_type=${encodeURIComponent(documentType)}&page=${currentPage}`, { blob: true });
+          if (!viewer?.isConnected || token !== renderToken) return;
+          const nextUrl = URL.createObjectURL(pageBlob);
+          objectUrls.push(nextUrl);
+          if (currentPageUrl) URL.revokeObjectURL(currentPageUrl);
+          currentPageUrl = nextUrl;
+          image.src = nextUrl;
+          image.style.width = `${zoom}%`;
+          image.hidden = false;
+          if (status) status.hidden = true;
+        } catch (exception) {
+          if (viewer?.isConnected && token === renderToken && status) {
+            status.hidden = false;
+            status.textContent = t(exception.message || 'Could not render this PDF page.');
+          }
+        }
+      };
+      content.querySelector('[data-pdf-prev]')?.addEventListener('click', () => renderPage(currentPage - 1));
+      content.querySelector('[data-pdf-next]')?.addEventListener('click', () => renderPage(currentPage + 1));
+      content.querySelector('[data-pdf-zoom-out]')?.addEventListener('click', () => { zoom = Math.max(50, zoom - 10); zoomLabel.textContent = `${zoom}%`; image.style.width = `${zoom}%`; });
+      content.querySelector('[data-pdf-zoom-in]')?.addEventListener('click', () => { zoom = Math.min(160, zoom + 10); zoomLabel.textContent = `${zoom}%`; image.style.width = `${zoom}%`; });
+      renderPage(1);
     } else if (String(info.content_type || '').startsWith('image/')) {
       content.innerHTML = `${infoLine}${download}<div class="equipment-file-image-wrap"><img class="equipment-file-image" src="${url}" alt="${esc(info.filename)}"></div>`;
     } else if (info.content_type === 'text/plain' || info.content_type === 'text/csv') {

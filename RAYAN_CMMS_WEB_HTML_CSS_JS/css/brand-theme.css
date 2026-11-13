@@ -343,6 +343,17 @@ html body .equipment-category-file-info{display:flex;justify-content:space-betwe
 html body .equipment-category-file-info b{font-size:14px;overflow-wrap:anywhere}
 html body .equipment-category-file-info span{color:#536256;font-size:12px;white-space:nowrap}
 html body .equipment-file-frame{display:block;width:100%;height:calc(100% - 100px);min-height:65vh;border:1px solid #d6dfd3;border-radius:8px;background:#fff}
+html body .equipment-pdf-toolbar{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;max-width:1400px;margin:0 auto 10px;padding:9px 12px;border:1px solid #d2dfd0;border-radius:9px;background:#f0f5ee;color:#26372e}
+html body .equipment-pdf-pages,html body .equipment-pdf-zoom{display:flex;align-items:center;gap:8px}
+html body .equipment-pdf-toolbar button{display:inline-flex;align-items:center;justify-content:center;min-width:36px;height:34px;border:1px solid #bfd0be;border-radius:7px;background:#fff;color:#286b46;font-size:19px;font-weight:700;cursor:pointer}
+html body .equipment-pdf-toolbar button:hover:not(:disabled){border-color:#c5a72e;background:#fff4cc;color:#443914}
+html body .equipment-pdf-toolbar button:disabled{opacity:.45;cursor:default}
+html body .equipment-pdf-pages span,html body .equipment-pdf-zoom span{min-width:56px;text-align:center;color:#344b3a;font-size:13px;font-weight:700}
+html body .equipment-pdf-toolbar .equipment-file-download{margin:0}
+html body .equipment-pdf-stage{width:100%;max-width:1400px;height:calc(100% - 160px);min-height:60vh;margin:0 auto;overflow:auto;border:1px solid #d6dfd3;border-radius:10px;background:#edf1e9}
+html body .equipment-pdf-page{width:min(100%,1100px);min-height:55vh;margin:18px auto;padding:16px;border:1px solid #d6dfd3;border-radius:5px;background:#fff;box-shadow:0 3px 14px #183b2718;text-align:center}
+html body .equipment-pdf-page .live-note{padding:28px;color:#536256}
+html body .equipment-pdf-page img{display:block;height:auto;max-width:none;margin:0 auto}
 html body .equipment-file-download{display:inline-flex;width:auto;margin:0 auto 12px;padding:9px 14px;text-decoration:none}
 html body .equipment-file-image-wrap{display:flex;justify-content:center;align-items:flex-start;max-height:calc(100% - 100px);overflow:auto;padding:12px;border:1px solid #d6dfd3;border-radius:8px;background:#fff}
 html body .equipment-file-image{max-width:100%;height:auto;object-fit:contain}
@@ -376,6 +387,9 @@ html body .equipment-category-spare-file .equipment-file-frame{height:58vh;min-h
   html body .equipment-document-content #equipment-sop-box>.sop-manual{padding:12px}
   html body .equipment-category-file-info{align-items:flex-start;flex-direction:column}
   html body .equipment-file-frame{height:75vh;min-height:0}
+  html body .equipment-pdf-toolbar{justify-content:center;padding:8px}
+  html body .equipment-pdf-stage{height:calc(100% - 180px);min-height:55vh}
+  html body .equipment-pdf-page{margin:8px auto;padding:8px}
   html body .equipment-doc-actions{grid-template-columns:1fr 1fr}
   html body .equipment-category-doc-publish{align-items:stretch;flex-direction:column}
   html body .equipment-category-doc-publish .detail-button{width:100%}

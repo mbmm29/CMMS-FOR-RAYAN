@@ -1,6 +1,9 @@
 import io
 import os
 import re
+import shutil
+import subprocess
+import tempfile
 import zipfile
 from datetime import date, datetime, timedelta, timezone
 import json
@@ -985,6 +988,64 @@ def get_equipment_category_document(category: str, document_type: str, db: Sessi
         media_type=row.content_type or 'application/octet-stream',
         headers={'Content-Disposition': f'inline; filename="{safe_name}"'},
     )
+
+@app.get('/equipment-category-documents/pdf-info')
+def equipment_category_pdf_info(category: str, document_type: str, db: Session = Depends(get_db), u=Depends(auth)):
+    pdfinfo = shutil.which('pdfinfo')
+    if not pdfinfo:
+        raise HTTPException(503, 'PDF preview is unavailable on this server.')
+    row = db.query(EquipmentCategoryDocument).filter(
+        func.lower(EquipmentCategoryDocument.category) == category.strip().lower(),
+        EquipmentCategoryDocument.document_type == document_type,
+    ).first()
+    if not row or Path(row.filename).suffix.lower() != '.pdf':
+        raise HTTPException(404, 'No PDF is published for this category.')
+    with tempfile.TemporaryDirectory(prefix='cmms-category-pdf-') as temp_dir:
+        pdf_path = Path(temp_dir) / 'document.pdf'
+        pdf_path.write_bytes(bytes(row.data))
+        try:
+            result = subprocess.run([pdfinfo, str(pdf_path)], capture_output=True, text=True, timeout=15, check=False)
+        except (OSError, subprocess.TimeoutExpired):
+            raise HTTPException(503, 'Could not prepare the PDF preview.') from None
+    match = re.search(r'^Pages:\s+(\d+)\s*$', result.stdout, re.M)
+    if result.returncode != 0 or not match:
+        raise HTTPException(422, 'The uploaded PDF could not be read.')
+    return {'filename': row.filename, 'category': row.category, 'pages': int(match.group(1))}
+
+@app.get('/equipment-category-documents/pdf-page')
+def equipment_category_pdf_page(category: str, document_type: str, page: int = 1, db: Session = Depends(get_db), u=Depends(auth)):
+    row = db.query(EquipmentCategoryDocument).filter(
+        func.lower(EquipmentCategoryDocument.category) == category.strip().lower(),
+        EquipmentCategoryDocument.document_type == document_type,
+    ).first()
+    if not row or Path(row.filename).suffix.lower() != '.pdf':
+        raise HTTPException(404, 'No PDF is published for this category.')
+    pdfinfo = shutil.which('pdfinfo')
+    pdftoppm = shutil.which('pdftoppm')
+    if not pdfinfo or not pdftoppm:
+        raise HTTPException(503, 'PDF preview is unavailable on this server.')
+    with tempfile.TemporaryDirectory(prefix='cmms-category-pdf-') as temp_dir:
+        pdf_path = Path(temp_dir) / 'document.pdf'
+        output_path = Path(temp_dir) / 'page'
+        pdf_path.write_bytes(bytes(row.data))
+        try:
+            info = subprocess.run([pdfinfo, str(pdf_path)], capture_output=True, text=True, timeout=15, check=False)
+            match = re.search(r'^Pages:\s+(\d+)\s*$', info.stdout, re.M)
+            if info.returncode != 0 or not match:
+                raise HTTPException(422, 'The uploaded PDF could not be read.')
+            total_pages = int(match.group(1))
+            if page < 1 or page > total_pages:
+                raise HTTPException(400, 'Page number is outside the PDF.')
+            rendered = subprocess.run(
+                [pdftoppm, '-f', str(page), '-l', str(page), '-scale-to', '1800', '-png', '-singlefile', str(pdf_path), str(output_path)],
+                capture_output=True, timeout=25, check=False,
+            )
+        except (OSError, subprocess.TimeoutExpired):
+            raise HTTPException(503, 'Could not render this PDF page.') from None
+        if rendered.returncode != 0 or not output_path.with_suffix('.png').exists():
+            raise HTTPException(422, 'Could not render this PDF page.')
+        image = output_path.with_suffix('.png').read_bytes()
+    return Response(content=image, media_type='image/png', headers={'Cache-Control': 'private, max-age=300'})
 
 @app.get('/equipment-category-documents/preview')
 def preview_equipment_category_document(category: str, document_type: str, db: Session = Depends(get_db), u=Depends(auth)):
