@@ -191,6 +191,17 @@ def _in_period(value, start, end):
     return start <= value <= end
 
 
+def _report_received_on_friday(report):
+    """Whether the daily report was received on Friday in Baghdad local time."""
+    received_at = report.submitted_at
+    if received_at is not None:
+        if received_at.tzinfo is None:
+            received_at = received_at.replace(tzinfo=timezone.utc)
+        return received_at.astimezone(timezone(timedelta(hours=3))).weekday() == 4
+    # Older reports may not have submission timestamps; use their report date.
+    return bool(report.report_date and report.report_date.weekday() == 4)
+
+
 def _blank_hours():
     return {name: 0.0 for name in HOUR_TYPES}
 
@@ -329,23 +340,32 @@ def compute_kpi(
             if report_by_id[row.report_id].status == 'Approved'
         ]
         hours = _blank_hours()
+        downtime_hours = _blank_hours()
         for row in accepted_items:
             kind = row.maintenance_type if row.maintenance_type in hours else 'Routine'
-            hours[kind] += _report_hours(row)
+            item_hours = _report_hours(row)
+            hours[kind] += item_hours
+            # Friday reports remain in maintenance-type percentages and records,
+            # while their shutdown time is omitted from downtime-based KPIs.
+            if not _report_received_on_friday(report_by_id[row.report_id]):
+                downtime_hours[kind] += item_hours
         for order in window_orders:
             if order.work_order_id in covered_orders:
                 continue
             kind = order.work_order_type if order.work_order_type in hours else 'Routine'
-            hours[kind] += _order_hours(order)
+            order_hours = _order_hours(order)
+            hours[kind] += order_hours
+            downtime_hours[kind] += order_hours
         for name in hours:
             hours[name] = round(hours[name], 2)
+            downtime_hours[name] = round(downtime_hours[name], 2)
         total_hours = round(sum(hours.values()), 2)
         order_counts = {name: 0 for name in HOUR_TYPES}
         for order in window_orders:
             kind = order.work_order_type if order.work_order_type in order_counts else 'Routine'
             order_counts[kind] += 1
-        scheduled_down = hours['Preventive']
-        unscheduled_down = round(hours['Corrective'] + hours['Emergency'], 2)
+        scheduled_down = downtime_hours['Preventive']
+        unscheduled_down = round(downtime_hours['Corrective'] + downtime_hours['Emergency'], 2)
         total_down = round(scheduled_down + unscheduled_down, 2)
 
         def report_counts_for_time(report):
@@ -387,9 +407,9 @@ def compute_kpi(
         ]
         failures = len(failure_orders) + len(extra_failures)
         corrective_orders = [row for row in failure_orders if row.work_order_type == 'Corrective']
-        corrective_hours = hours['Corrective']
+        corrective_hours = downtime_hours['Corrective']
         # MTTR uses total repair/failure downtime over all incidents in the filter scope.
-        repair_hours = round(hours['Corrective'] + hours['Emergency'], 2)
+        repair_hours = round(downtime_hours['Corrective'] + downtime_hours['Emergency'], 2)
         repair_events = failures
 
         late_pm_ids = set()
@@ -510,6 +530,8 @@ def compute_kpi(
 
         for row in accepted_items:
             if row.maintenance_type not in FAILURE_TYPES and row.maintenance_type != 'Preventive':
+                continue
+            if _report_received_on_friday(report_by_id[row.report_id]):
                 continue
             item_plant, item_line = located(row)
             add_downtime(chart_key(item_plant, item_line), report_by_id[row.report_id].report_date, _report_hours(row))
