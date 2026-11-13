@@ -4847,26 +4847,27 @@ async function compressReportPhoto(file) {
 
 function dailyPrintStyles() {
   return `
-@page{size:A4 portrait;margin:6mm}
+@page{size:A4 landscape;margin:7mm}
 *{box-sizing:border-box}
 html,body{margin:0;padding:0;background:#fff;color:#102d60;font:8pt Arial,sans-serif}
-.daily-paper{width:198mm;max-width:100%;margin:0 auto;color:#102d60}
+.daily-paper{width:283mm;max-width:none;margin:0 auto;color:#102d60}
 .no-print,.print-hide,.send-watch,.report-alert,.lube-actions,.daily-photos{display:none!important}
-.lube-head{display:grid;grid-template-columns:28mm minmax(0,1fr) 42mm;gap:2mm;align-items:center;padding-bottom:1.5mm;border-bottom:0.4mm solid #2a5287}
-.lube-head img{width:26mm;max-height:12mm;object-fit:contain;display:block;background:transparent!important;mix-blend-mode:multiply}
+.lube-head{display:grid;grid-template-columns:42mm minmax(0,1fr) 55mm;gap:3mm;align-items:center;padding-bottom:2mm;border-bottom:0.4mm solid #2a5287}
+.lube-head img{width:40mm;max-width:40mm;max-height:14mm;object-fit:contain;display:block;background:transparent!important;mix-blend-mode:multiply}
 .lube-head h2{margin:0;font-size:11pt;line-height:1.15;text-align:center}
 .lube-head p{margin:0.5mm 0 0;font-size:8pt;font-weight:800;text-align:center}
 .lube-head small{display:block;margin-top:0.3mm;font-size:7pt;text-align:center;color:#31517f}
 .lube-head dl{min-width:0;margin:0;border:0.3mm solid #2a5287;overflow:hidden}
-.lube-head dl div{display:grid;grid-template-columns:15mm minmax(0,1fr);align-items:center;gap:1mm;min-height:5.5mm;padding:0 1.5mm;font-size:7.5pt;font-weight:700;border-bottom:0.3mm solid #2a5287}
+.lube-head dl div{display:grid;grid-template-columns:20mm minmax(0,1fr);align-items:center;gap:1mm;min-height:6mm;padding:0 2mm;font-size:8pt;font-weight:700;border-bottom:0.3mm solid #2a5287}
 .lube-head dl div:last-child{border-bottom:0}
 .lube-head dt{grid-column:1;margin:0;color:#102d60;white-space:nowrap}
 .lube-head dd{grid-column:2;display:block;min-width:0;margin:0;color:#102d60!important;-webkit-text-fill-color:#102d60!important;text-align:end;font-weight:800;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.lube-meta{display:grid;grid-template-columns:1fr 1fr;gap:1mm 6mm;margin:2mm 0 1.5mm}
+.lube-meta{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:1mm 6mm;margin:2mm 0 1.5mm}
 .lube-meta label{display:grid;grid-template-columns:28mm minmax(0,1fr);gap:1.5mm;align-items:center;font-size:8pt;font-weight:800}
 .lube-meta input,.lube-meta select{width:100%;height:5mm;border:0;border-bottom:0.25mm solid #8eabda;background:transparent;font:8pt Arial,sans-serif;color:#102d60}
 .sheet-scroll{overflow:visible;max-height:none}
 .lube-table{width:100%;border-collapse:collapse;table-layout:fixed}
+.daily-paper .lube-table:has(#daily-rows) th:nth-child(1){width:6%}.daily-paper .lube-table:has(#daily-rows) th:nth-child(2){width:20%}.daily-paper .lube-table:has(#daily-rows) th:nth-child(3){width:14%}.daily-paper .lube-table:has(#daily-rows) th:nth-child(4){width:34%}.daily-paper .lube-table:has(#daily-rows) th:nth-child(5){width:9%}.daily-paper .lube-table:has(#daily-rows) th:nth-child(6){width:9%}.daily-paper .lube-table:has(#daily-rows) th:nth-child(7){width:8%}
 .lube-table th,.lube-table td{border:0.25mm solid #2a5287;padding:0.4mm 0.6mm;font-size:7pt;vertical-align:top;color:#102d60}
 .lube-table th{height:6mm;background:#e7f0ff;vertical-align:middle}
 .lube-table input,.lube-table select,.lube-table textarea{width:100%;border:0;background:transparent;font:7pt Arial,sans-serif;color:#102d60;padding:0;margin:0;height:3.6mm}
@@ -4903,7 +4904,7 @@ function freezeDailyPrintFields(root) {
   });
 }
 
-function printDailyReportSheet() {
+function printDailyReportSheet(exportPdf = false) {
   const form = document.getElementById('daily-form');
   if (!form) return;
   const clone = form.cloneNode(true);
@@ -4940,7 +4941,9 @@ function printDailyReportSheet() {
   document.body.appendChild(frame);
   const doc = frame.contentDocument;
   doc.open();
-  doc.write(`<!DOCTYPE html><html><head><meta charset="utf-8"><title>RAYAN CMMS - Daily Report</title><style>${dailyPrintStyles()}</style></head><body>${clone.outerHTML}</body></html>`);
+  const reportName = (form.dataset.reportId || document.getElementById('daily-date')?.value || 'daily-report').replace(/[^a-zA-Z0-9._-]+/g, '-');
+  const printTitle = exportPdf ? `RAYAN-CMMS-Daily-Report-${reportName}` : 'RAYAN CMMS - Daily Report';
+  doc.write(`<!DOCTYPE html><html><head><meta charset="utf-8"><title>${printTitle}</title><style>${dailyPrintStyles()}</style></head><body>${clone.outerHTML}</body></html>`);
   doc.close();
 
   const cleanup = () => {
@@ -5199,6 +5202,7 @@ async function drawDailyReport() {
   const workspace = document.getElementById('workspace');
   workspace.className = 'workspace lube-board';
   workspace.innerHTML = `<aside class="panel lube-list"><div class="lube-list-head"><b>${esc(t('Reports'))}</b><button type="button" class="detail-button" id="daily-new">${esc(t('New report'))}</button></div><label class="daily-filter"><span>${esc(t('Date'))}</span><input id="daily-filter" type="date" value="${esc(ui.dailyFilter || '')}"></label>${rejectedFieldHtml(dailyCache, report?.report_id || '')}<div id="daily-report-list">${list}</div></aside><form id="daily-form" class="lube-paper daily-paper" data-report-id="${esc(report?.report_id || '')}" data-status="${esc(report?.status || 'Draft')}">${windowLock ? `<div class="send-watch no-print" id="send-watch"><span>${esc(t('Time left before the next report'))}</span><b id="send-watch-time">00:00:00</b></div>` : ''}<div id="daily-alert" class="report-alert no-print" hidden role="alert"></div><header class="lube-head"><img src="logo-rayan.png?v=4" alt="Rayan"><div><h2>${esc(t('DAILY MAINTENANCE REPORT'))}</h2><p>${esc(t(report?.status || 'Draft report'))}</p><small>${esc(t('Mechanical Maintenance Department'))}</small></div><dl><div><dt>${esc(t('Form No.:'))}</dt><dd class="form-no">${esc(formNo('daily'))}</dd></div><div><dt>${esc(t('Approved by'))}</dt><dd class="approved-name">${esc(String(report?.approved_by || '').trim() || '—')}</dd></div></dl></header><div class="lube-meta"><label><span>${esc(t('Shift'))}</span><select id="daily-shift">${dailyShiftOptions(report?.shift)}</select></label><label><span>${esc(t("Technician's name"))}</span><input id="daily-tech" value="${esc(techName)}" readonly></label><label><span>${esc(t('Date'))}</span><input id="daily-date" type="date" value="${esc(reportDate)}" required></label></div><div class="sheet-scroll"><table class="lube-table"><thead><tr><th>${esc(t('Seq.'))}</th><th>${esc(t('Machine'))}</th><th>${esc(t('Maintenance Type'))}</th><th>${esc(t('Repair Actions'))}</th><th>${esc(t('Start Time'))}</th><th>${esc(t('End Time'))}</th><th>${esc(t('Downtime (hrs)'))}</th></tr></thead><tbody id="daily-rows">${items.map(dailyRow).join('')}</tbody></table></div><section class="daily-parts"><div class="lube-list-head"><h3>${esc(t('SPARE PARTS USED'))}</h3><button type="button" class="no-print" id="daily-add-part">${esc(t('Add part'))}</button></div><div class="sheet-scroll"><table class="lube-table"><thead><tr><th>${esc(t('No.'))}</th><th>${esc(t('Part'))}</th><th>${esc(t('Part No.'))}</th><th>${esc(t('Qty'))}</th></tr></thead><tbody id="daily-parts">${parts.map(dailyPartRow).join('')}</tbody></table></div></section><label class="daily-notes"><span>${esc(t('GENERAL NOTES'))}</span><div class="daily-note-box"><textarea id="daily-notes">${esc(report?.general_notes || '')}</textarea><b class="daily-tdt">${esc(t('TDT'))}: <span id="daily-total">0.00 ${esc(t('h'))}</span></b></div></label><section class="daily-photos no-print"><div class="lube-list-head"><h3>${esc(t('Photos'))}</h3><button type="button" id="daily-add-photo">${esc(t('Add photo'))}</button></div><p class="photo-hint">${esc(t('Each photo prints on a full A3 page.'))}</p><div class="photo-strip" id="daily-photo-strip"></div><input id="daily-photo-file" type="file" accept="image/*" multiple hidden></section><div class="lube-actions no-print"><button type="button" id="daily-add">${esc(t('Add row'))}</button>${returned && !windowLock ? `<button type="button" id="daily-resend">${esc(t('Resend the report'))}</button>` : ''}<button type="button" id="daily-print">${esc(t('Print'))}</button></div></form><div id="daily-photo-print"></div>`;
+  workspace.querySelector('#daily-print')?.insertAdjacentHTML('beforebegin', `<button type="button" class="no-print" id="daily-export">${esc(t('Export PDF'))}</button>`);
   workspace.insertAdjacentHTML('beforeend', spareDataLists());
   if (windowLock) startSendWatch(windowLock.opens);
   dailyPhotosEditable = !locked;
@@ -5261,6 +5265,7 @@ async function drawDailyReport() {
     body.insertAdjacentHTML('beforeend', dailyPartRow({}, body.children.length));
   });
   document.getElementById('daily-print')?.addEventListener('click', () => printDailyReportSheet());
+  document.getElementById('daily-export')?.addEventListener('click', () => printDailyReportSheet(true));
   document.getElementById('daily-add-photo')?.addEventListener('click', () => document.getElementById('daily-photo-file')?.click());
   document.getElementById('daily-photo-file')?.addEventListener('change', (event) => {
     const files = [...event.target.files];
