@@ -2661,7 +2661,7 @@ function openEquipmentCategoryFilePublish(selected) {
   if (!categories.length) return;
   const overlay = document.createElement('div');
   overlay.className = 'category-pm-overlay';
-  overlay.innerHTML = `<section class="category-pm-dialog equipment-category-file-dialog" role="dialog" aria-modal="true" aria-labelledby="equipment-category-file-title"><header><div><h2 id="equipment-category-file-title">${esc(t('Publish category document'))}</h2><p>${esc(t('Upload one manual or spare parts file. It will be available for every machine in the selected category.'))}</p></div><button type="button" class="category-pm-close" aria-label="${esc(t('Close'))}">×</button></header><form class="live-form" id="equipment-category-file-form"><label>${esc(t('Category'))}<select name="category" required>${categories.map((category) => `<option value="${esc(category)}"${category === selected.equipment_type ? ' selected' : ''}>${esc(category)}</option>`).join('')}</select></label><label>${esc(t('Document type'))}<select name="document_type" required><option value="manual">${esc(t('Equipment manual'))}</option><option value="spare-parts">${esc(t('Spare parts file'))}</option></select></label><label class="category-pm-task">${esc(t('Choose file'))}<input name="file" type="file" accept=".pdf,.xlsx,.xls,.docx,.doc,.png,.jpg,.jpeg,.txt,.csv" required></label><p class="live-note">${esc(t('Supported files: PDF, Excel, Word, images, CSV, and text. Maximum size: 15 MB. A new upload replaces the file for that category.'))}</p><p class="form-error" id="equipment-category-file-error"></p><footer><button type="button" class="detail-button" id="equipment-category-file-cancel">${esc(t('Cancel'))}</button><button class="detail-button primary" id="equipment-category-file-submit" type="submit">${esc(t('Upload file'))}</button></footer></form></section>`;
+  overlay.innerHTML = `<section class="category-pm-dialog equipment-category-file-dialog" role="dialog" aria-modal="true" aria-labelledby="equipment-category-file-title"><header><div><h2 id="equipment-category-file-title">${esc(t('Publish category document'))}</h2><p>${esc(t('Upload one manual or spare parts file. It will be available for every machine in the selected category.'))}</p></div><button type="button" class="category-pm-close" aria-label="${esc(t('Close'))}">×</button></header><form class="live-form" id="equipment-category-file-form"><label>${esc(t('Category'))}<select name="category" required>${categories.map((category) => `<option value="${esc(category)}"${category === selected?.equipment_type ? ' selected' : ''}>${esc(category)}</option>`).join('')}</select></label><label>${esc(t('Document type'))}<select name="document_type" required><option value="manual">${esc(t('Equipment manual'))}</option><option value="spare-parts">${esc(t('Spare parts file'))}</option></select></label><label class="category-pm-task">${esc(t('Choose file'))}<input name="file" type="file" accept=".pdf,.xlsx,.xls,.docx,.doc,.png,.jpg,.jpeg,.txt,.csv" required></label><p class="live-note">${esc(t('Supported files: PDF, Excel, Word, images, CSV, and text. Maximum size: 15 MB. A new upload replaces the file for that category.'))}</p><p class="form-error" id="equipment-category-file-error"></p><footer><button type="button" class="detail-button" id="equipment-category-file-cancel">${esc(t('Cancel'))}</button><button class="detail-button primary" id="equipment-category-file-submit" type="submit">${esc(t('Upload file'))}</button></footer></form></section>`;
   document.body.appendChild(overlay);
   const close = () => overlay.remove();
   overlay.querySelector('.category-pm-close').addEventListener('click', close);
@@ -2748,7 +2748,7 @@ function equipmentDetail(selected) {
     ? `<div class="equipment-actions"><button type="button" class="detail-button primary" id="equipment-edit">${esc(t('Edit'))}</button><button type="button" class="detail-button danger" data-delete="/equipment" data-delete-id="${esc(selected.equipment_id)}" data-delete-query="${esc(equipmentScopeQuery(selected).replace(/^\?/, ''))}" data-delete-note="Delete this equipment? Its maintenance history and KPI charts will be removed.">${esc(t('Delete'))}</button></div>`
     : '';
   const documents = selected?.equipment_id
-    ? `<div class="equipment-doc-actions"><button type="button" class="detail-button primary" id="equipment-open-sop">${esc(t('Open SOP'))}</button><button type="button" class="detail-button" id="equipment-open-manual">${esc(t('Open manual'))}</button><button type="button" class="detail-button" id="equipment-open-spare-file">${esc(t('Spare parts'))}</button><button type="button" class="detail-button" id="equipment-open-annual-plan">${esc(t('Open annual plan'))}</button>${canMaintain() ? `<button type="button" class="detail-button equipment-category-publish-button" id="equipment-publish-category-files">${esc(t('Publish category files'))}</button>` : ''}</div>`
+    ? `<div class="equipment-doc-actions"><button type="button" class="detail-button primary" id="equipment-open-sop">${esc(t('Open SOP'))}</button><button type="button" class="detail-button" id="equipment-open-manual">${esc(t('Open manual'))}</button><button type="button" class="detail-button" id="equipment-open-spare-file">${esc(t('Spare parts'))}</button><button type="button" class="detail-button" id="equipment-open-annual-plan">${esc(t('Open annual plan'))}</button></div>`
     : '';
   return `<aside class="panel detail"><h2>${esc(t('Equipment Details'))}</h2><div class="detail-top"><div class="machine">⚙</div>${liveBadge(selected?.status || '—')}<h3>${esc(selected?.equipment_id || '—')}</h3><p>${esc(selected?.name || '')}</p></div>${actions}<div class="detail-list">${detailRows([
     ['Category', selected?.equipment_type], ['Location', placeOf(selected)], ['Section', sectionName(selected?.section_id) || '—'], ['Area', selected?.area],
@@ -2888,6 +2888,9 @@ function drawEquipment() {
   const categoryAction = canMaintain() && categoryPlan.equipment.length
     ? `<div class="category-plan-action"><div><b>${esc(t('Category preventive plan'))}</b><small>${esc(categoryPlan.categories.join(' · '))} · ${categoryPlan.equipment.length} ${esc(t('equipment'))}</small></div><button type="button" class="detail-button primary" id="category-pm-open">${esc(t('Set preventive plan'))}</button></div>`
     : '';
+  const categoryDocumentAction = canMaintain()
+    ? `<div class="equipment-category-doc-publish"><div><b>${esc(t('Category manuals and spare parts'))}</b><small>${esc(t('Upload shared documents for a category. They appear in each machine’s document tabs.'))}</small></div><button type="button" class="detail-button" id="equipment-publish-category-files">${esc(t('Publish category files'))}</button></div>`
+    : '';
   const equipmentMetrics = [
     ['Total Equipment', String(all.length), '▣', 'blue', ''],
     ['Operational', String(all.filter((item) => item.status === 'Running' || item.status === 'Operational').length), '✓', 'green', ''],
@@ -2904,8 +2907,9 @@ function drawEquipment() {
       ? equipmentForm(selected)
       : equipmentDetail(selected);
   document.getElementById('workspace').className = 'workspace';
-  document.getElementById('workspace').innerHTML = `<section class="panel">${filtersHtml()}${categoryAction}${equipmentTabs()}${tableShell(['Equipment Code', 'Equipment Name', 'Category', 'Location (Plant / Line)', 'Status', 'Condition', 'Criticality'], body, shown(rows.length, all.length, 'equipment'))}</section>${detail}`;
+  document.getElementById('workspace').innerHTML = `<section class="panel">${categoryDocumentAction}${filtersHtml()}${categoryAction}${equipmentTabs()}${tableShell(['Equipment Code', 'Equipment Name', 'Category', 'Location (Plant / Line)', 'Status', 'Condition', 'Criticality'], body, shown(rows.length, all.length, 'equipment'))}</section>${detail}`;
   document.getElementById('category-pm-open')?.addEventListener('click', () => openCategoryPmPlan(categoryPlan.categories, categoryPlan.equipment));
+  document.getElementById('equipment-publish-category-files')?.addEventListener('click', () => openEquipmentCategoryFilePublish(selected));
   if (selected && ui.mode === 'view') {
     if (canMaintain()) {
       const sectionForm = lineSections(selected.line_id).length
@@ -2919,7 +2923,6 @@ function drawEquipment() {
     document.getElementById('equipment-open-manual')?.addEventListener('click', () => openEquipmentDocumentTab(selected, 'manual'));
     document.getElementById('equipment-open-spare-file')?.addEventListener('click', () => openEquipmentDocumentTab(selected, 'spare-parts'));
     document.getElementById('equipment-open-annual-plan')?.addEventListener('click', () => openEquipmentDocumentTab(selected, 'annual'));
-    document.getElementById('equipment-publish-category-files')?.addEventListener('click', () => openEquipmentCategoryFilePublish(selected));
   }
   bindFilters();
   bindRows();
