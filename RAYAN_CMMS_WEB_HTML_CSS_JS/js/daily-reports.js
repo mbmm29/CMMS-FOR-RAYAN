@@ -254,7 +254,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     layout?.classList.add('reviewing');
     sheet.innerHTML = `<div class="review-bar no-print"><button type="button" id="review-close">${escapeHtml(t('Back to reports'))}</button><button type="button" class="decision print" id="review-print">${escapeHtml(t('Print'))}</button>${remove}</div>
       <form class="lube-paper lube-sheet" id="review-paper">
-        <header class="lube-head"><img src="logo-rayan.png?v=2" alt="Rayan"><div><h2>${escapeHtml(t('Daily report for the lubrication technician'))}</h2><p>${escapeHtml(t('Approved'))}</p><small>${escapeHtml(t('Mechanical Maintenance Department'))}</small></div><dl><div><dt>${escapeHtml(t('Form No.:'))}</dt><dd>${escapeHtml(state.lubeFormNo || 'PMF 17-05 rev.a')}</dd></div><div><dt>${escapeHtml(t('Report No.'))}</dt><dd>${escapeHtml(detail.report_id || report.id)}</dd></div></dl></header>
+        <header class="lube-head"><img src="logo-rayan.png?v=4" alt="Rayan"><div><h2>${escapeHtml(t('Daily report for the lubrication technician'))}</h2><p>${escapeHtml(t('Approved'))}</p><small>${escapeHtml(t('Mechanical Maintenance Department'))}</small></div><dl><div><dt>${escapeHtml(t('Form No.:'))}</dt><dd>${escapeHtml(state.lubeFormNo || 'PMF 17-05 rev.a')}</dd></div><div><dt>${escapeHtml(t('Report No.'))}</dt><dd>${escapeHtml(detail.report_id || report.id)}</dd></div></dl></header>
         <div class="lube-meta">
           <label><span>${escapeHtml(t('Shift'))}</span><input value="${escapeHtml(t(detail.shift || ''))}" readonly></label>
           <label><span>${escapeHtml(t("Technician's name"))}</span><input value="${escapeHtml(detail.technician_name || report.technician)}" readonly></label>
@@ -303,7 +303,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     layout?.classList.add('reviewing');
     sheet.innerHTML = `<div class="review-bar no-print"><button type="button" id="review-close">${escapeHtml(t('Back to reports'))}</button><button type="button" class="decision print" id="review-print">${escapeHtml(t('Print'))}</button>${decisions}${remove}</div>
       <form class="lube-paper daily-paper" id="review-paper">
-        <header class="lube-head"><img src="logo-rayan.png?v=3" alt="Rayan"><div><h2>${escapeHtml(t('DAILY MAINTENANCE REPORT'))}</h2><p>${escapeHtml(t(report.status || 'Draft'))}</p><small>${escapeHtml(t('Mechanical Maintenance Department'))}</small></div><dl><div><dt>${escapeHtml(t('Form No.:'))}</dt><dd class="form-no">${escapeHtml(state.formNo || 'DR')}</dd></div><div><dt>${escapeHtml(t('Approved by'))}</dt><dd class="approved-name">${escapeHtml((report.approvedBy || report.shiftEngineer || '').trim() || '—')}</dd></div></dl></header>
+        <header class="lube-head"><img src="logo-rayan.png?v=4" alt="Rayan"><div><h2>${escapeHtml(t('DAILY MAINTENANCE REPORT'))}</h2><p>${escapeHtml(t(report.status || 'Draft'))}</p><small>${escapeHtml(t('Mechanical Maintenance Department'))}</small></div><dl><div><dt>${escapeHtml(t('Form No.:'))}</dt><dd class="form-no">${escapeHtml(state.formNo || 'DR')}</dd></div><div><dt>${escapeHtml(t('Approved by'))}</dt><dd class="approved-name">${escapeHtml((report.approvedBy || report.shiftEngineer || '').trim() || '—')}</dd></div></dl></header>
         <div class="lube-meta">
           <label><span>${escapeHtml(t('Shift'))}</span><input value="${escapeHtml(t(report.shift || ''))}" readonly></label>
           <label><span>${escapeHtml(t("Technician's name"))}</span><input value="${escapeHtml(report.technician)}" readonly></label>

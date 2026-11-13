@@ -724,12 +724,12 @@ body .detail-button.job-open-detail .job-open-glyph{font-size:16px;line-height:1
   body:has(.daily-paper) .lube-head p{font-size:8pt;margin-top:0.5mm;font-weight:800;text-align:center;color:#102d60!important}
   body:has(.daily-paper) .lube-head small{font-size:7pt;margin-top:0.3mm;text-align:center;color:#31517f!important}
   body:has(.daily-paper) .lube-head dl{width:100%!important;margin:0;border:0.3mm solid #2a5287;align-self:center!important;box-sizing:border-box!important;overflow:hidden!important}
-  body:has(.daily-paper) .lube-head dl div{display:flex!important;align-items:center!important;gap:2mm;min-height:5.5mm;height:5.5mm;padding:0 1.5mm;font-size:7.5pt;font-weight:700;border-bottom:0.3mm solid #2a5287;color:#102d60!important;box-sizing:border-box!important}
+  body:has(.daily-paper) .lube-head dl div{display:grid!important;grid-template-columns:15mm minmax(0,1fr)!important;align-items:center!important;gap:1mm;min-height:5.5mm;height:5.5mm;padding:0 1.5mm;font-size:7.5pt;font-weight:700;border-bottom:0.3mm solid #2a5287;color:#102d60!important;box-sizing:border-box!important}
   body:has(.daily-paper) .lube-head dl div:last-child{border-bottom:0}
-  body:has(.daily-paper) .lube-head dt{margin:0;flex:0 0 auto;color:#102d60!important;white-space:nowrap}
+  body:has(.daily-paper) .lube-head dt{margin:0;color:#102d60!important;white-space:nowrap}
   body:has(.daily-paper) .lube-head dd,
   body:has(.daily-paper) .lube-head dd.form-no,
-  body:has(.daily-paper) .lube-head dd.approved-name{margin:0;flex:1 1 auto;min-width:0!important;text-align:end;font-weight:800;font-size:7.5pt;line-height:1.15;white-space:nowrap!important;overflow:hidden!important;text-overflow:ellipsis;word-break:normal!important;overflow-wrap:normal!important;color:#000!important;-webkit-text-fill-color:#000!important;print-color-adjust:exact;-webkit-print-color-adjust:exact}
+  body:has(.daily-paper) .lube-head dd.approved-name{display:block!important;width:100%;box-sizing:border-box;margin:0;min-width:0!important;text-align:end;font-weight:800;font-size:7.5pt;line-height:1.15;white-space:nowrap!important;overflow:hidden!important;text-overflow:ellipsis;word-break:normal!important;overflow-wrap:normal!important;color:#000!important;-webkit-text-fill-color:#000!important;print-color-adjust:exact;-webkit-print-color-adjust:exact}
   body:has(.daily-paper) .lube-meta{display:grid!important;grid-template-columns:1fr 1fr!important;gap:1mm 6mm;margin:2mm 0 1.5mm;break-inside:avoid;page-break-inside:avoid}
   body:has(.daily-paper) .lube-meta label{display:grid!important;grid-template-columns:28mm minmax(0,1fr)!important;gap:1.5mm;align-items:center;font-size:8pt;color:#102d60!important}
   body:has(.daily-paper) .lube-meta input,
