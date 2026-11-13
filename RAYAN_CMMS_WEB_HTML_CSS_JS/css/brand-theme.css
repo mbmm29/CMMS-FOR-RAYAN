@@ -268,3 +268,30 @@ html body .shell .content .sop-category-action .detail-button{
   html body .shell .content .sop-category-action{grid-template-columns:minmax(0,1fr)!important}
   html body .shell .content .sop-category-action .detail-button{width:100%!important}
 }
+
+/* Gentle gold hover for rows and readable SOP paragraphs. */
+html body .shell .content .data-table tbody tr:hover>td,
+html body .shell .content .equipment-annual-sheet tbody tr:hover>td,
+html body .sop-manual-table tbody tr:hover>td{background:#fff4cc!important;color:#443914!important}
+html body .shell .content .asset:hover,html body .shell .content .asset.selected:hover{background:#fff4cc!important;color:#443914!important;border-color:#d8be59!important}
+html body .shell .content p:hover,html body .shell .content .detail-list>div:hover,
+html body .shell .content .equipment-extra li:hover{background:#fff4cc;color:#443914}
+html body .sop-manual-paragraph{padding:8px 10px;border-radius:6px;transition:background-color .12s ease,color .12s ease}
+html body .sop-manual-paragraph:hover{background:#fff4cc;color:#443914}
+html body .sop-manual-meta-row:hover,html body .sop-manual-section-title:hover{background:#fff4cc;color:#443914}
+html body .equipment-extra{margin-top:12px;border:1px solid #d6dfd3;border-radius:8px;background:#f8faf6;overflow:hidden}
+html body .equipment-extra>summary{padding:11px 12px;cursor:pointer;font-size:14px;font-weight:750;color:#2b4a35}
+html body .equipment-extra>summary:hover{background:#fff4cc;color:#443914}
+html body .equipment-extra>div{padding:10px 12px;border-top:1px solid #dce5db}
+html body .equipment-annual-controls{display:flex;align-items:end;flex-wrap:wrap;gap:8px;margin-bottom:10px}
+html body .equipment-annual-controls label{display:grid;gap:4px;font-size:12px;font-weight:700;color:#344b3a}
+html body .equipment-annual-controls input{width:110px;min-height:36px;padding:6px 8px}
+html body .equipment-annual-controls .detail-button{min-height:36px;width:auto;margin:0;padding:7px 11px;font-size:12px}
+html body .equipment-annual-scroll{max-width:100%;overflow:auto;border:1px solid #d6dfd3;border-radius:7px}
+html body .equipment-annual-sheet{min-width:2050px;margin:0;font-size:10px}
+html body .equipment-annual-sheet th{position:static;padding:5px 4px;font-size:10px;white-space:nowrap}
+html body .equipment-annual-sheet td{padding:4px;text-align:center;font-size:10px;white-space:nowrap}
+html body .equipment-annual-sheet tbody td:nth-child(6){min-width:190px;text-align:start;white-space:normal}
+html body .sop-category-summary{display:grid;gap:5px;padding:10px 12px;margin-bottom:10px;border:1px solid #dce5db;border-radius:8px;background:#f7f9f6;color:#344b3a}
+html body .sop-category-summary b{font-size:15px;color:#203b2a}
+html body .sop-category-summary small{font-size:12px;color:#536256}

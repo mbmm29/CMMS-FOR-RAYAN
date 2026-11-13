@@ -217,6 +217,18 @@ class SOPManual(Base):
     document: Mapped[str] = mapped_column(Text, default='{}')
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
+class SOPCategoryManual(Base):
+    """One published SOP workbook shared by all equipment in a category."""
+    __tablename__ = 'sop_category_manuals'
+    category: Mapped[str] = mapped_column(String(100), primary_key=True)
+    filename: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    title: Mapped[str | None] = mapped_column(String(300), nullable=True)
+    revision: Mapped[str] = mapped_column(String(30), default='01')
+    effective_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+    status: Mapped[str] = mapped_column(String(40), default='Published')
+    document: Mapped[str] = mapped_column(Text, default='{}')
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
 class WorkOrder(Base):
     __tablename__='work_orders'
     id: Mapped[int]=mapped_column(Integer,primary_key=True)

@@ -2662,13 +2662,73 @@ def save_annual_pm_days(data: AnnualDaySave, db: Session = Depends(get_db), u=De
 
 @app.get('/sops')
 def sops(equipment_id:str|None=None,db:Session=Depends(get_db),u=Depends(auth)):
-    q=db.query(SOP)
-    if equipment_id:q=q.filter(SOP.equipment_id==equipment_id)
-    return [as_dict(row) for row in q.order_by(SOP.sop_id).all()]
+    equipment_rows = db.query(Equipment).order_by(Equipment.equipment_type, Equipment.equipment_id).all()
+    by_category = {}
+    equipment_categories = {}
+    for item in equipment_rows:
+        category = (item.equipment_type or '').strip()
+        key = category.casefold()
+        if not key:
+            continue
+        by_category.setdefault(key, {'name': category, 'equipment_ids': []})['equipment_ids'].append(item.equipment_id)
+        equipment_categories[item.equipment_id] = key
+
+    category_manuals = {row.category.casefold(): row for row in db.query(SOPCategoryManual).all()}
+    legacy = {}
+    for row in db.query(SOP).order_by(SOP.id).all():
+        if not (row.document_path or re.search(r'Published|Approved', row.status or '', re.I)):
+            continue
+        category_key = equipment_categories.get(row.equipment_id)
+        if category_key and category_key not in legacy:
+            legacy[category_key] = row
+
+    result = []
+    for key, group in by_category.items():
+        source = category_manuals.get(key)
+        old = legacy.get(key) if source is None else None
+        if source is None and old is None:
+            continue
+        if equipment_id and equipment_id not in group['equipment_ids']:
+            continue
+        result.append({
+            'sop_id': f"SOP-CAT-{len(result) + 1:03d}",
+            'equipment_id': None,
+            'equipment_ids': group['equipment_ids'],
+            'category': group['name'],
+            'category_sop': True,
+            'title': source.title if source else old.title,
+            'sop_type': group['name'],
+            'revision': source.revision if source else old.revision,
+            'effective_date': source.effective_date.isoformat() if source and source.effective_date else (old.effective_date.isoformat() if old and old.effective_date else None),
+            'status': source.status if source else old.status,
+            'document_path': source.filename if source else old.document_path,
+            'source_equipment_id': None if source else old.equipment_id,
+        })
+    return result
+
+@app.get('/sop-category-manual')
+def get_sop_category_manual(category: str, db: Session = Depends(get_db), u=Depends(auth)):
+    row = db.query(SOPCategoryManual).filter(func.lower(SOPCategoryManual.category) == category.strip().lower()).first()
+    if row:
+        try:
+            document = json.loads(row.document or '{}')
+        except Exception:
+            document = {}
+        return {'category': row.category, 'filename': row.filename, 'title': row.title or document.get('title') or '',
+                'revision': row.revision, 'effective_date': row.effective_date.isoformat() if row.effective_date else None,
+                'status': row.status, 'document': document}
+    equipment = db.query(Equipment).filter(func.lower(Equipment.equipment_type) == category.strip().lower()).order_by(Equipment.equipment_id).all()
+    for item in equipment:
+        manual = db.query(SOPManual).filter_by(equipment_id=item.equipment_id).first()
+        if manual:
+            payload = sop_manual_payload(manual)
+            payload['category'] = category
+            return payload
+    raise HTTPException(404, 'No SOP is published for this category.')
 
 @app.post('/sops')
 def create_sop(data:SOPCreate,db:Session=Depends(get_db),u=Depends(role(*ENGINEER))):
-    raise HTTPException(400, 'Publish one SOP per equipment by importing an Excel file.')
+    raise HTTPException(400, 'Publish one Excel SOP file for a category.')
 
 def publish_equipment_sop(db, equipment_id, title, filename, u):
     """Keep exactly one published SOP registry row for the machine."""
@@ -2731,11 +2791,26 @@ def sop_paragraph_payload(equipment_id, rows, manual=None):
 
 @app.get('/equipment/{equipment_id}/sop-paragraphs')
 def get_sop_paragraphs(equipment_id:str, db:Session=Depends(get_db), u=Depends(auth)):
-    if not db.query(Equipment).filter_by(equipment_id=equipment_id).first():
+    equipment = db.query(Equipment).filter_by(equipment_id=equipment_id).first()
+    if not equipment:
         raise HTTPException(404, 'Equipment not found')
+    category_manual = db.query(SOPCategoryManual).filter(func.lower(SOPCategoryManual.category) == (equipment.equipment_type or '').strip().lower()).first()
+    if category_manual:
+        try:
+            document = json.loads(category_manual.document or '{}')
+        except Exception:
+            document = {}
+        return {'equipment_id': equipment_id, 'items': [], 'manual': {
+            'category': category_manual.category, 'filename': category_manual.filename,
+            'title': category_manual.title or document.get('title') or '', 'document': document,
+        }}
+    category_equipment = db.query(Equipment).filter(func.lower(Equipment.equipment_type) == (equipment.equipment_type or '').strip().lower()).order_by(Equipment.equipment_id).all()
+    for category_item in category_equipment:
+        shared_manual = db.query(SOPManual).filter_by(equipment_id=category_item.equipment_id).first()
+        if shared_manual:
+            return sop_paragraph_payload(equipment_id, [], shared_manual)
     rows = db.query(SOPParagraph).filter_by(equipment_id=equipment_id).order_by(SOPParagraph.position, SOPParagraph.id).all()
-    manual = db.query(SOPManual).filter_by(equipment_id=equipment_id).first()
-    return sop_paragraph_payload(equipment_id, rows, manual)
+    return sop_paragraph_payload(equipment_id, rows, None)
 
 SOP_IMPORT_MAX_BYTES = 2_000_000
 _SOP_SSML = '{http://schemas.openxmlformats.org/spreadsheetml/2006/main}'
@@ -3066,26 +3141,18 @@ async def import_sop_paragraphs(
 
 @app.post('/sops/publish-category')
 async def publish_category_sop(
-    equipment_ids: str = Form(...),
+    category: str = Form(...),
     file: UploadFile = File(...),
     db: Session = Depends(get_db),
     u=Depends(role(*ENGINEER)),
 ):
-    try:
-        ids = json.loads(equipment_ids)
-    except (TypeError, ValueError):
-        raise HTTPException(400, 'Choose equipment from one category.')
-    if not isinstance(ids, list):
-        raise HTTPException(400, 'Choose equipment from one category.')
-    ids = list(dict.fromkeys(str(value).strip() for value in ids if str(value).strip()))
-    if not ids or len(ids) > 1000:
-        raise HTTPException(400, 'Select between 1 and 1000 equipment items.')
-    equipment = db.query(Equipment).filter(Equipment.equipment_id.in_(ids)).all()
-    if len(equipment) != len(ids):
-        raise HTTPException(404, 'Some selected equipment could not be found.')
-    categories = {(row.equipment_type or '').strip().casefold() for row in equipment}
-    if len(categories) != 1 or not next(iter(categories), ''):
-        raise HTTPException(400, 'All selected equipment must belong to the same category.')
+    category = category.strip()
+    if not category or len(category) > 100:
+        raise HTTPException(400, 'Choose a valid equipment category.')
+    canonical_category = db.query(Equipment.equipment_type).filter(func.lower(Equipment.equipment_type) == category.lower()).order_by(Equipment.equipment_type).first()
+    if not canonical_category:
+        raise HTTPException(404, 'No equipment was found in this category.')
+    category = canonical_category[0].strip()
     raw = await file.read(SOP_IMPORT_MAX_BYTES + 1)
     await file.close()
     if not raw:
@@ -3093,17 +3160,28 @@ async def publish_category_sop(
     if len(raw) > SOP_IMPORT_MAX_BYTES:
         raise HTTPException(400, 'The file must be smaller than 2 MB.')
     manual, cleaned = extract_sop_import(file.filename or '', raw)
+    manual = dict(manual or {})
+    if not manual:
+        manual['title'] = Path(file.filename or '').stem or 'Standard operating procedure'
+        manual['paragraphs'] = cleaned
     try:
-        for row in equipment:
-            replace_sop_paragraphs(
-                db, row.equipment_id, cleaned, u, action='IMPORT',
-                manual=manual, filename=file.filename or '', commit=False,
-            )
+        row = db.query(SOPCategoryManual).filter(func.lower(SOPCategoryManual.category) == category.lower()).first()
+        if row is None:
+            row = SOPCategoryManual(category=category)
+            db.add(row)
+        row.filename = (file.filename or '')[:255] or None
+        row.title = (manual.get('title') or '')[:300] or None
+        row.revision = row.revision or '01'
+        row.effective_date = row.effective_date or date.today()
+        row.status = 'Published'
+        row.document = json.dumps(manual, ensure_ascii=False)
+        row.updated_at = datetime.utcnow()
+        audit(db, u, 'PUBLISH', 'SOPCategory', category, new={'title': row.title, 'filename': row.filename})
         db.commit()
     except Exception:
         db.rollback()
         raise
-    return {'published': len(equipment), 'category': equipment[0].equipment_type}
+    return {'published': True, 'category': category}
 
 @app.delete('/equipment/{equipment_id}/sop')
 def delete_equipment_sop(equipment_id: str, db: Session = Depends(get_db), u=Depends(role(*ENGINEER))):
