@@ -911,6 +911,20 @@ body .workspace .schedule-shift{display:inline-block;min-width:70px;padding:7px 
 body .workspace .schedule-shift.off{background:#fff1d6;color:#765315}
 body .workspace .schedule-empty{text-align:center!important;color:#69766b!important;padding:24px!important}
 body .workspace .schedule-panel>.form-error{min-height:0;margin:10px 0 0;color:#b42318}
+body .workspace .schedule-panel .schedule-table{min-width:1450px;table-layout:fixed}
+body .workspace .schedule-panel .schedule-table thead th:first-child,
+body .workspace .schedule-panel .schedule-table tbody th{width:130px;min-width:130px}
+body .workspace .schedule-panel .schedule-table thead th:not(:first-child){width:220px;min-width:220px;color:#284c37;background:#f4f6df;border-color:#e4d994}
+body .workspace .schedule-panel .schedule-table tbody td{padding:6px;vertical-align:top;background:#fff}
+body .workspace .schedule-panel .schedule-tech-list{display:grid;gap:2px;max-height:150px;min-height:64px;overflow:auto;padding:4px;border:1px solid #d9e2cf;border-radius:7px;background:#fbfcf8;text-align:start}
+body .workspace .schedule-panel .schedule-tech-list label{display:flex;align-items:center;gap:6px;min-height:24px;padding:3px 5px;border-radius:4px;color:#24352a;font-size:11px;cursor:pointer}
+body .workspace .schedule-panel .schedule-tech-list label:hover{background:#fff3bf}
+body .workspace .schedule-panel .schedule-tech-list input{flex:0 0 auto;width:15px;height:15px;margin:0;accent-color:#287747}
+body .workspace .schedule-panel .schedule-tech-list label span{min-width:0;overflow-wrap:anywhere}
+body .workspace .schedule-panel .schedule-tech-list label small{display:block;color:#69766b;font-size:10px}
+body .workspace .schedule-panel .schedule-no-tech{padding:8px;color:#69766b;font-size:11px}
+body .workspace .schedule-panel .schedule-shift{white-space:normal;line-height:1.4}
+body .workspace .schedule-panel .schedule-shift.off{background:#fff1d6;color:#765315}
 @media(max-width:760px){body .workspace .schedule-panel{padding:10px}body .workspace .schedule-toolbar{align-items:start;flex-direction:column}body .workspace .schedule-toolbar input{width:100%}}
 @media(max-width:760px){
   body .workspace .iso-form .iso-head{display:none}

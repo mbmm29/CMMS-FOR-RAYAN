@@ -1918,7 +1918,14 @@ def save_work_schedule(data: WorkScheduleWeekIn, db: Session = Depends(get_db), 
     week_end = data.week_start + timedelta(days=6)
     entries = []
     seen = set()
-    valid_shifts = {'Morning', 'Evening', 'Night', 'Off'}
+    valid_shifts = {
+        'Morning', 'Evening', 'Night', 'Off',
+        'Morning (07:00 - 15:00)',
+        'Evening (15:00 - 23:00)',
+        'Night (23:00 - 07:00)',
+        'Morning 12h (07:00 - 19:00)',
+        'Night 12h (19:00 - 07:00)',
+    }
     for item in data.entries:
         technician_id = item.technician_id.strip()
         if item.work_date < data.week_start or item.work_date > week_end:

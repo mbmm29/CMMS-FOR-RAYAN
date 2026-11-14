@@ -6237,32 +6237,75 @@ async function drawWorkSchedule() {
   const days = scheduleDays(weekStart);
   const technicianMode = isTechnician();
   const currentTechId = getSavedUser()?.technician_id;
-  const technicians = (store.technicians || []).filter((item) => item.status !== 'Inactive' && (!technicianMode || item.technician_id === currentTechId));
+  const technicians = (store.technicians || []).filter((item) => technicianMode
+    ? item.technician_id === currentTechId
+    : item.status !== 'Inactive');
   const entries = await apiRequest(`/work-schedule?week_start=${encodeURIComponent(weekStart)}`);
-  const entryMap = new Map(entries.map((item) => [`${item.technician_id}|${String(item.work_date).slice(0, 10)}`, item.shift]));
-  const shifts = ['', 'Morning', 'Evening', 'Night', 'Off'];
-  const cells = (technician) => days.map((day) => {
-    const value = entryMap.get(`${technician.technician_id}|${day}`) || '';
-    return technicianMode
-      ? `<td><span class="schedule-shift${value === 'Off' ? ' off' : ''}">${esc(t(value || 'Not set'))}</span></td>`
-      : `<td><select aria-label="${esc(technician.name)} ${esc(day)}" data-schedule-tech="${esc(technician.technician_id)}" data-schedule-date="${esc(day)}">${shifts.map((shift) => `<option value="${esc(shift)}"${shift === value ? ' selected' : ''}>${esc(t(shift || 'Not set'))}</option>`).join('')}</select></td>`;
-  }).join('');
-  const rows = technicians.map((technician) => `<tr><th scope="row"><b>${esc(technician.name)}</b><small>${esc(technician.technician_id)}</small></th>${cells(technician)}</tr>`).join('');
+  const entryMap = new Map();
+  const legacyShiftNames = {
+    Morning: 'Morning (07:00 - 15:00)',
+    Evening: 'Evening (15:00 - 23:00)',
+    Night: 'Night (23:00 - 07:00)',
+  };
+  entries.forEach((item) => {
+    const key = `${String(item.work_date).slice(0, 10)}|${legacyShiftNames[item.shift] || item.shift}`;
+    if (!entryMap.has(key)) entryMap.set(key, new Set());
+    entryMap.get(key).add(String(item.technician_id));
+  });
+  const shifts = [
+    'Morning (07:00 - 15:00)',
+    'Evening (15:00 - 23:00)',
+    'Night (23:00 - 07:00)',
+    'Morning 12h (07:00 - 19:00)',
+    'Night 12h (19:00 - 07:00)',
+    'Off',
+  ];
+  const selectShift = (day, shift) => {
+    const selected = entryMap.get(`${day}|${shift}`) || new Set();
+    if (technicianMode) {
+      const assigned = technicians.find((technician) => selected.has(String(technician.technician_id)));
+      return `<span class="schedule-shift${shift === 'Off' ? ' off' : ''}">${esc(assigned ? t(shift) : t('Not set'))}</span>`;
+    }
+    const options = technicians.map((technician) => `<label><input type="checkbox" value="${esc(technician.technician_id)}" data-schedule-shift="${esc(shift)}" data-schedule-date="${esc(day)}"${selected.has(String(technician.technician_id)) ? ' checked' : ''}><span>${esc(technician.name)}<small>${esc(technician.technician_id)}</small></span></label>`).join('');
+    return `<div class="schedule-tech-list" aria-label="${esc(t(shift))} ${esc(day)}">${options || `<span class="schedule-no-tech">${esc(t('No active technicians found.'))}</span>`}</div>`;
+  };
+  const rows = days.map((day, index) => `<tr><th scope="row"><b>${esc(t(WEEKDAYS[(index + 1) % 7]))}</b><small>${esc(fmtDate(day))}</small></th>${shifts.map((shift) => `<td>${selectShift(day, shift)}</td>`).join('')}</tr>`).join('');
   document.getElementById('metric-grid').innerHTML = '';
   document.getElementById('workspace').className = 'workspace';
-  document.getElementById('workspace').innerHTML = `<section class="panel schedule-panel"><div class="schedule-toolbar"><label>${esc(t('Week starting Monday'))}<input id="schedule-week" type="date" value="${esc(weekStart)}"></label><p>${esc(fmtDate(days[0]))} – ${esc(fmtDate(days[6]))}</p></div><div class="schedule-scroll"><table class="schedule-table"><thead><tr><th>${esc(t('Technician'))}</th>${days.map((day, index) => `<th>${esc(t(WEEKDAYS[(index + 1) % 7]))}<small>${esc(fmtDate(day))}</small></th>`).join('')}</tr></thead><tbody>${rows || `<tr><td colspan="8" class="schedule-empty">${esc(t(technicianMode ? 'No schedule is linked to this account.' : 'No active technicians found.'))}</td></tr>`}</tbody></table></div>${technicianMode ? `<p class="live-note">${esc(t('Your weekly work schedule is shown here. Contact the engineer if it needs to change.'))}</p>` : `<p id="schedule-message" class="form-error" role="status"></p>`}</section>`;
+  document.getElementById('workspace').innerHTML = `<section class="panel schedule-panel"><div class="schedule-toolbar"><label>${esc(t('Week starting Monday'))}<input id="schedule-week" type="date" value="${esc(weekStart)}"></label><p>${esc(fmtDate(days[0]))} – ${esc(fmtDate(days[6]))}</p></div>${technicianMode ? '' : `<p class="live-note">${esc(t('Choose one or more technicians for each shift. A technician can only be assigned to one shift per day.'))}</p>`}<div class="schedule-scroll"><table class="schedule-table"><thead><tr><th>${esc(t('Day'))}</th>${shifts.map((shift) => `<th>${esc(t(shift))}</th>`).join('')}</tr></thead><tbody>${rows || `<tr><td colspan="${shifts.length + 1}" class="schedule-empty">${esc(t(technicianMode ? 'No schedule is linked to this account.' : 'No active technicians found.'))}</td></tr>`}</tbody></table></div>${technicianMode ? `<p class="live-note">${esc(t('Your weekly work schedule is shown here. Contact the engineer if it needs to change.'))}</p>` : `<p id="schedule-message" class="form-error" role="status"></p>`}</section>`;
   document.getElementById('schedule-week')?.addEventListener('change', (event) => {
     ui.scheduleWeek = scheduleMonday(event.currentTarget.value);
     drawWorkSchedule().catch((error) => screenNotice(error.message, 'error'));
   });
+  if (!technicianMode) {
+    document.querySelectorAll('[data-schedule-shift]').forEach((field) => field.addEventListener('change', () => {
+      if (!field.checked) return;
+      document.querySelectorAll('[data-schedule-shift]:checked').forEach((other) => {
+        if (other !== field && other.dataset.scheduleDate === field.dataset.scheduleDate && other.value === field.value) other.checked = false;
+      });
+    }));
+  }
 }
 
 async function saveWorkSchedule() {
   if (!canMaintain()) return;
   const weekStart = ui.scheduleWeek || scheduleMonday();
-  const entries = [...document.querySelectorAll('[data-schedule-tech]')]
-    .filter((field) => field.value)
-    .map((field) => ({ technician_id: field.dataset.scheduleTech, work_date: field.dataset.scheduleDate, shift: field.value }));
+  const entries = [];
+  const assignedByDay = new Map();
+  let hasDuplicateAssignment = false;
+  document.querySelectorAll('[data-schedule-shift]:checked').forEach((field) => {
+    const key = `${field.dataset.scheduleDate}|${field.value}`;
+    if (assignedByDay.has(key)) {
+      hasDuplicateAssignment = true;
+      return;
+    }
+    assignedByDay.set(key, field.dataset.scheduleShift);
+    entries.push({ technician_id: field.value, work_date: field.dataset.scheduleDate, shift: field.dataset.scheduleShift });
+  });
+  if (hasDuplicateAssignment) {
+    screenNotice(t('A technician can only be assigned to one shift per day.'), 'error');
+    return;
+  }
   try {
     await apiRequest('/work-schedule', { method: 'PUT', body: JSON.stringify({ week_start: weekStart, entries }) });
     toast(t('Work schedule saved.'));
