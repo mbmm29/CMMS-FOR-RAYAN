@@ -95,6 +95,13 @@ def ensure_additive_columns():
         if 'technician_plants' not in tables:
             TechnicianPlant.__table__.create(bind=engine, checkfirst=True)
             tables = set(inspect(engine).get_table_names())
+        if 'work_schedules' in tables:
+            existing = {c['name'] for c in inspector.get_columns('work_schedules')}
+            if 'plant_id' not in existing:
+                with engine.begin() as conn:
+                    conn.execute(text('ALTER TABLE work_schedules ADD COLUMN plant_id VARCHAR(50)'))
+            with engine.begin() as conn:
+                conn.execute(text('CREATE INDEX IF NOT EXISTS ix_work_schedules_plant_id ON work_schedules (plant_id)'))
         for table in (AppSecret.__table__, PushSubscription.__table__, PushDelivery.__table__):
             if table.name not in tables:
                 table.create(bind=engine, checkfirst=True)
@@ -1899,13 +1906,15 @@ def normalize_schedule_week_start(value: date) -> date:
 
 
 @app.get('/work-schedule')
-def get_work_schedule(week_start: date, db: Session = Depends(get_db), u=Depends(auth)):
+def get_work_schedule(week_start: date, plant_id: str | None = None, db: Session = Depends(get_db), u=Depends(auth)):
     week_start = normalize_schedule_week_start(week_start)
     week_end = week_start + timedelta(days=6)
     query = db.query(WorkSchedule).filter(
         WorkSchedule.work_date >= week_start,
         WorkSchedule.work_date < week_end,
     )
+    if plant_id:
+        query = query.filter(WorkSchedule.plant_id == plant_id)
     if is_technician_account(u):
         if not u.technician_id:
             raise HTTPException(403, 'This account is not linked to a technician')
@@ -1913,7 +1922,7 @@ def get_work_schedule(week_start: date, db: Session = Depends(get_db), u=Depends
     elif u.role not in ENGINEER:
         raise HTTPException(403, 'Insufficient permission')
     return [
-        {'technician_id': row.technician_id, 'work_date': row.work_date.isoformat(), 'shift': row.shift}
+        {'technician_id': row.technician_id, 'plant_id': row.plant_id, 'work_date': row.work_date.isoformat(), 'shift': row.shift}
         for row in query.order_by(WorkSchedule.work_date, WorkSchedule.technician_id).all()
     ]
 
@@ -1922,6 +1931,9 @@ def get_work_schedule(week_start: date, db: Session = Depends(get_db), u=Depends
 def save_work_schedule(data: WorkScheduleWeekIn, db: Session = Depends(get_db), u=Depends(role(*ENGINEER))):
     week_start = normalize_schedule_week_start(data.week_start)
     week_end = week_start + timedelta(days=6)
+    plant_id = (data.plant_id or '').strip() or None
+    if plant_id and not db.query(Plant).filter_by(plant_id=plant_id, active=True).first():
+        raise HTTPException(404, 'Active plant not found')
     entries = []
     weekly_assignments = {}
     valid_shifts = {
@@ -1940,28 +1952,59 @@ def save_work_schedule(data: WorkScheduleWeekIn, db: Session = Depends(get_db), 
             raise HTTPException(400, 'Invalid shift')
         if not db.query(Technician).filter_by(technician_id=technician_id).first():
             raise HTTPException(404, f'Technician not found: {technician_id}')
+        if plant_id:
+            allowed_plants = technician_allowed_plants(db, technician_id)
+            if allowed_plants is not None and plant_id not in allowed_plants:
+                raise HTTPException(400, f'Technician {technician_id} is not assigned to this plant')
         existing_shift = weekly_assignments.get(technician_id)
         if existing_shift and existing_shift != item.shift:
             raise HTTPException(400, 'A technician can only be assigned to one shift per week')
         if existing_shift:
             continue
         weekly_assignments[technician_id] = item.shift
+    if weekly_assignments:
+        if plant_id:
+            db.query(WorkSchedule).filter(
+                WorkSchedule.work_date >= week_start,
+                WorkSchedule.work_date < week_end,
+                WorkSchedule.technician_id.in_(weekly_assignments.keys()),
+                WorkSchedule.plant_id.is_(None),
+            ).delete(synchronize_session=False)
+        assigned_query = db.query(WorkSchedule).filter(
+            WorkSchedule.work_date >= week_start,
+            WorkSchedule.work_date < week_end,
+            WorkSchedule.technician_id.in_(weekly_assignments.keys()),
+        )
+        if plant_id:
+            assigned_query = assigned_query.filter(
+                or_(WorkSchedule.plant_id != plant_id, WorkSchedule.plant_id.is_(None)),
+            )
+        else:
+            assigned_query = assigned_query.filter(WorkSchedule.plant_id.isnot(None))
+        assigned_elsewhere = assigned_query.first()
+        if assigned_elsewhere:
+            raise HTTPException(400, 'A technician is already scheduled at another plant this week')
     for technician_id, shift in weekly_assignments.items():
         for day_offset in range(6):
             entries.append(WorkSchedule(
                 technician_id=technician_id,
+                plant_id=plant_id,
                 work_date=week_start + timedelta(days=day_offset),
                 shift=shift,
                 updated_by=u.id,
             ))
-    db.query(WorkSchedule).filter(
+    schedule_to_replace = db.query(WorkSchedule).filter(
         WorkSchedule.work_date >= week_start,
         WorkSchedule.work_date <= week_end,
-    ).delete(synchronize_session=False)
+    )
+    schedule_to_replace = schedule_to_replace.filter(
+        WorkSchedule.plant_id == plant_id if plant_id else WorkSchedule.plant_id.is_(None),
+    )
+    schedule_to_replace.delete(synchronize_session=False)
     db.add_all(entries)
     audit(db, u, 'UPDATE', 'WorkSchedule', week_start.isoformat(), new={'entries': len(entries)})
     db.commit()
-    return {'ok': True, 'week_start': week_start.isoformat(), 'entries': len(entries)}
+    return {'ok': True, 'week_start': week_start.isoformat(), 'plant_id': plant_id, 'entries': len(entries)}
 
 
 @app.post('/technicians',response_model=TechnicianOut)

@@ -184,6 +184,7 @@ class WorkScheduleEntryIn(BaseModel):
 
 class WorkScheduleWeekIn(BaseModel):
     week_start: date
+    plant_id: str | None = None
     entries: list[WorkScheduleEntryIn] = Field(default_factory=list)
 
 

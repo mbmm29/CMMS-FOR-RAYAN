@@ -97,6 +97,7 @@ class WorkSchedule(Base):
     __table_args__=(UniqueConstraint('technician_id','work_date',name='uq_work_schedule_technician_date'),)
     id: Mapped[int]=mapped_column(Integer,primary_key=True)
     technician_id: Mapped[str]=mapped_column(String(50),ForeignKey('technicians.technician_id'),index=True)
+    plant_id: Mapped[str|None]=mapped_column(String(50),nullable=True,index=True)
     work_date: Mapped[date]=mapped_column(Date,index=True)
     shift: Mapped[str]=mapped_column(String(30))
     updated_by: Mapped[int|None]=mapped_column(Integer,nullable=True)

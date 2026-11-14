@@ -931,9 +931,9 @@ body .workspace .schedule-panel .schedule-roster-names{display:flex;flex-wrap:wr
 body .workspace .schedule-panel .schedule-roster-names span{display:inline-flex;align-items:center;padding:5px 8px;border:1px solid #cbdcc9;border-radius:999px;background:#edf5e9;color:#294c34;font-size:11px;font-weight:700}
 body .workspace .schedule-panel .schedule-roster-names small,body .workspace .schedule-unassigned{color:#879286;font-size:11px}
 body .workspace .schedule-editor{margin-top:16px;padding:14px;border:1px solid #d8c765;border-radius:12px;background:#fffdf3;box-shadow:0 8px 22px #283c2914}
-body .workspace .schedule-editor-heading{display:flex;align-items:center;gap:12px;margin-bottom:10px}
-body .workspace .schedule-editor-heading h3{margin:0;color:#254a31;font-size:15px}
-body .workspace .schedule-editor-heading p{flex:1;margin:0;color:#5d6b5e;font-size:12px}
+body .workspace .schedule-editor-heading{display:grid;grid-template-columns:minmax(160px,max-content) minmax(0,1fr) auto;align-items:center;gap:12px;margin-bottom:10px}
+body .workspace .schedule-editor-heading h3{margin:0;color:#254a31;font-size:15px;white-space:nowrap}
+body .workspace .schedule-editor-heading p{min-width:0;margin:0;color:#5d6b5e;font-size:12px;line-height:1.5;overflow-wrap:normal;word-break:normal}
 body .workspace .schedule-editor .schedule-scroll{border:1px solid #e3e4d5;border-radius:8px}
 body .workspace .schedule-panel .schedule-table{min-width:760px;table-layout:auto}
 body .workspace .schedule-panel .schedule-table thead th:first-child,
@@ -941,7 +941,7 @@ body .workspace .schedule-panel .schedule-table tbody th{width:240px;min-width:2
 body .workspace .schedule-panel .schedule-table thead th:not(:first-child){width:auto;min-width:380px}
 body .workspace .schedule-editor .schedule-table{min-width:760px}
 @media(max-width:760px){body .workspace .schedule-panel{padding:10px}body .workspace .schedule-toolbar{align-items:start;flex-direction:column}body .workspace .schedule-toolbar input{width:100%}}
-@media(max-width:760px){body .workspace .schedule-editor-heading{align-items:flex-start;flex-direction:column}}
+@media(max-width:760px){body .workspace .schedule-editor-heading{grid-template-columns:minmax(0,1fr);align-items:start}}
 @media(max-width:760px){
   body .workspace .iso-form .iso-head{display:none}
   body .workspace .iso-form .iso-row{grid-template-columns:minmax(0,1fr);gap:6px}
