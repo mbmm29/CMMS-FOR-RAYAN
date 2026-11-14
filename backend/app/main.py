@@ -5821,7 +5821,13 @@ def delete_plant(plant_id: str, db: Session = Depends(get_db), u=Depends(role(*E
     plans = db.query(AnnualPMPlan).filter_by(plant_id=plant_id).all()
     plan_ids = [plan.id for plan in plans]
     if plan_ids:
-        db.query(AnnualPMDayTask).filter(AnnualPMDayTask.plan_id.in_(plan_ids)).delete(synchronize_session=False)
+        task_ids = [row.id for row in db.query(AnnualPMDayTask.id).filter(AnnualPMDayTask.plan_id.in_(plan_ids)).all()]
+        if task_ids:
+            dispatch_ids = [row.id for row in db.query(PreventiveDispatch.id).filter(PreventiveDispatch.annual_task_id.in_(task_ids)).all()]
+            if dispatch_ids:
+                db.query(PreventiveDispatchAssignment).filter(PreventiveDispatchAssignment.dispatch_id.in_(dispatch_ids)).delete(synchronize_session=False)
+                db.query(PreventiveDispatch).filter(PreventiveDispatch.id.in_(dispatch_ids)).delete(synchronize_session=False)
+            db.query(AnnualPMDayTask).filter(AnnualPMDayTask.id.in_(task_ids)).delete(synchronize_session=False)
         db.query(AnnualPMItem).filter(AnnualPMItem.plan_id.in_(plan_ids)).delete(synchronize_session=False)
         db.query(AnnualPMPlan).filter(AnnualPMPlan.id.in_(plan_ids)).delete(synchronize_session=False)
     line_ids = [row.line_id for row in db.query(PlantLine).filter_by(plant_id=plant_id).all()]
@@ -5834,6 +5840,11 @@ def delete_plant(plant_id: str, db: Session = Depends(get_db), u=Depends(role(*E
     db.flush()
     if equipment_ids:
         db.query(Equipment).filter(Equipment.equipment_id.in_(equipment_ids)).delete(synchronize_session=False)
+    # Remove plant-scoped settings and technician access before deleting the plant;
+    # these tables carry foreign keys to plants and otherwise reject the delete.
+    db.query(WorkShiftTime).filter_by(plant_id=plant_id).delete(synchronize_session=False)
+    db.query(TechnicianPlant).filter_by(plant_id=plant_id).delete(synchronize_session=False)
+    db.query(WorkSchedule).filter_by(plant_id=plant_id).delete(synchronize_session=False)
     db.query(PlantLine).filter_by(plant_id=plant_id).delete(synchronize_session=False)
     db.delete(plant)
     audit(db, u, 'DELETE', 'Plant', plant_id)
