@@ -935,7 +935,11 @@ body .workspace .schedule-editor-heading{display:flex;align-items:center;gap:12p
 body .workspace .schedule-editor-heading h3{margin:0;color:#254a31;font-size:15px}
 body .workspace .schedule-editor-heading p{flex:1;margin:0;color:#5d6b5e;font-size:12px}
 body .workspace .schedule-editor .schedule-scroll{border:1px solid #e3e4d5;border-radius:8px}
-body .workspace .schedule-editor .schedule-table{min-width:1450px}
+body .workspace .schedule-panel .schedule-table{min-width:760px;table-layout:auto}
+body .workspace .schedule-panel .schedule-table thead th:first-child,
+body .workspace .schedule-panel .schedule-table tbody th{width:240px;min-width:240px}
+body .workspace .schedule-panel .schedule-table thead th:not(:first-child){width:auto;min-width:380px}
+body .workspace .schedule-editor .schedule-table{min-width:760px}
 @media(max-width:760px){body .workspace .schedule-panel{padding:10px}body .workspace .schedule-toolbar{align-items:start;flex-direction:column}body .workspace .schedule-toolbar input{width:100%}}
 @media(max-width:760px){body .workspace .schedule-editor-heading{align-items:flex-start;flex-direction:column}}
 @media(max-width:760px){

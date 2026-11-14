@@ -1923,7 +1923,7 @@ def save_work_schedule(data: WorkScheduleWeekIn, db: Session = Depends(get_db), 
     week_start = normalize_schedule_week_start(data.week_start)
     week_end = week_start + timedelta(days=6)
     entries = []
-    seen = set()
+    weekly_assignments = {}
     valid_shifts = {
         'Morning', 'Evening', 'Night', 'Off',
         'Morning (07:00 - 15:00)',
@@ -1935,16 +1935,25 @@ def save_work_schedule(data: WorkScheduleWeekIn, db: Session = Depends(get_db), 
     for item in data.entries:
         technician_id = item.technician_id.strip()
         if item.work_date < week_start or item.work_date >= week_end:
-            raise HTTPException(400, 'Schedule dates must be Saturday through Thursday; Friday is excluded')
+            raise HTTPException(400, 'Schedule assignments must belong to the selected seven-day week')
         if item.shift not in valid_shifts:
             raise HTTPException(400, 'Invalid shift')
-        key = (technician_id, item.work_date)
-        if key in seen:
-            raise HTTPException(400, 'Duplicate technician and date in schedule')
         if not db.query(Technician).filter_by(technician_id=technician_id).first():
             raise HTTPException(404, f'Technician not found: {technician_id}')
-        seen.add(key)
-        entries.append(WorkSchedule(technician_id=technician_id, work_date=item.work_date, shift=item.shift, updated_by=u.id))
+        existing_shift = weekly_assignments.get(technician_id)
+        if existing_shift and existing_shift != item.shift:
+            raise HTTPException(400, 'A technician can only be assigned to one shift per week')
+        if existing_shift:
+            continue
+        weekly_assignments[technician_id] = item.shift
+    for technician_id, shift in weekly_assignments.items():
+        for day_offset in range(6):
+            entries.append(WorkSchedule(
+                technician_id=technician_id,
+                work_date=week_start + timedelta(days=day_offset),
+                shift=shift,
+                updated_by=u.id,
+            ))
     db.query(WorkSchedule).filter(
         WorkSchedule.work_date >= week_start,
         WorkSchedule.work_date <= week_end,
