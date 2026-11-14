@@ -92,6 +92,16 @@ class Technician(Base):
     shift: Mapped[str|None]=mapped_column(String(20),nullable=True)
     status: Mapped[str]=mapped_column(String(30),default='Active')
 
+class WorkSchedule(Base):
+    __tablename__='work_schedules'
+    __table_args__=(UniqueConstraint('technician_id','work_date',name='uq_work_schedule_technician_date'),)
+    id: Mapped[int]=mapped_column(Integer,primary_key=True)
+    technician_id: Mapped[str]=mapped_column(String(50),ForeignKey('technicians.technician_id'),index=True)
+    work_date: Mapped[date]=mapped_column(Date,index=True)
+    shift: Mapped[str]=mapped_column(String(30))
+    updated_by: Mapped[int|None]=mapped_column(Integer,nullable=True)
+    updated_at: Mapped[datetime]=mapped_column(DateTime,default=datetime.utcnow,onupdate=datetime.utcnow)
+
 class TechnicianPlant(Base):
     """Plants a technician may select on daily and lubrication reports."""
     __tablename__ = 'technician_plants'

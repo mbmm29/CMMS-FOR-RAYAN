@@ -176,6 +176,17 @@ class PlantTechniciansIn(BaseModel):
     technician_ids: list[str] = Field(default_factory=list)
 
 
+class WorkScheduleEntryIn(BaseModel):
+    technician_id: str
+    work_date: date
+    shift: str
+
+
+class WorkScheduleWeekIn(BaseModel):
+    week_start: date
+    entries: list[WorkScheduleEntryIn] = Field(default_factory=list)
+
+
 class PMCreate(BaseModel):
     equipment_id: str | None = None
     manual_equipment_code: str | None = None

@@ -825,6 +825,24 @@ def update_user(user_id:int, data:UserUpdate, db:Session=Depends(get_db), u=Depe
     audit(db, u, 'UPDATE', 'User', account.username, old=old, new=data.model_dump(exclude={'password'}, exclude_unset=True))
     db.commit(); db.refresh(account); return account
 
+@app.delete('/users/{user_id}')
+def delete_user(user_id: int, db: Session = Depends(get_db), u=Depends(role(*DEVELOPER))):
+    account = db.get(User, user_id)
+    if not account:
+        raise HTTPException(404, 'User not found')
+    if account.id == u.id:
+        raise HTTPException(400, 'You cannot delete your own account')
+    if account.role == 'SYSTEM_DEVELOPER' and db.query(User).filter(User.role == 'SYSTEM_DEVELOPER').count() <= 1:
+        raise HTTPException(400, 'The last system administrator cannot be deleted')
+    username = account.username
+    audit(db, u, 'DELETE', 'User', username, old={'username': username, 'full_name': account.full_name, 'role': account.role})
+    db.query(PushSubscription).filter_by(user_id=account.id).delete(synchronize_session=False)
+    db.query(PushDelivery).filter_by(user_id=account.id).delete(synchronize_session=False)
+    db.query(Notification).filter_by(user_id=account.id).delete(synchronize_session=False)
+    db.delete(account)
+    db.commit()
+    return {'ok': True, 'deleted': username}
+
 @app.get('/plants')
 def plants(db:Session=Depends(get_db),u=Depends(auth)): return [as_dict(row) for row in db.query(Plant).order_by(Plant.name).all()]
 @app.post('/plants')
@@ -1874,6 +1892,54 @@ def technician_out(db: Session, row: Technician) -> dict:
 def technicians(db:Session=Depends(get_db),u=Depends(auth)):
     rows = db.query(Technician).order_by(Technician.name).all()
     return [technician_out(db, row) for row in rows]
+
+
+@app.get('/work-schedule')
+def get_work_schedule(week_start: date, db: Session = Depends(get_db), u=Depends(auth)):
+    week_end = week_start + timedelta(days=6)
+    query = db.query(WorkSchedule).filter(
+        WorkSchedule.work_date >= week_start,
+        WorkSchedule.work_date <= week_end,
+    )
+    if is_technician_account(u):
+        if not u.technician_id:
+            raise HTTPException(403, 'This account is not linked to a technician')
+        query = query.filter(WorkSchedule.technician_id == u.technician_id)
+    elif u.role not in ENGINEER:
+        raise HTTPException(403, 'Insufficient permission')
+    return [
+        {'technician_id': row.technician_id, 'work_date': row.work_date.isoformat(), 'shift': row.shift}
+        for row in query.order_by(WorkSchedule.work_date, WorkSchedule.technician_id).all()
+    ]
+
+
+@app.put('/work-schedule')
+def save_work_schedule(data: WorkScheduleWeekIn, db: Session = Depends(get_db), u=Depends(role(*ENGINEER))):
+    week_end = data.week_start + timedelta(days=6)
+    entries = []
+    seen = set()
+    valid_shifts = {'Morning', 'Evening', 'Night', 'Off'}
+    for item in data.entries:
+        technician_id = item.technician_id.strip()
+        if item.work_date < data.week_start or item.work_date > week_end:
+            raise HTTPException(400, 'Schedule dates must be within the selected week')
+        if item.shift not in valid_shifts:
+            raise HTTPException(400, 'Invalid shift')
+        key = (technician_id, item.work_date)
+        if key in seen:
+            raise HTTPException(400, 'Duplicate technician and date in schedule')
+        if not db.query(Technician).filter_by(technician_id=technician_id).first():
+            raise HTTPException(404, f'Technician not found: {technician_id}')
+        seen.add(key)
+        entries.append(WorkSchedule(technician_id=technician_id, work_date=item.work_date, shift=item.shift, updated_by=u.id))
+    db.query(WorkSchedule).filter(
+        WorkSchedule.work_date >= data.week_start,
+        WorkSchedule.work_date <= week_end,
+    ).delete(synchronize_session=False)
+    db.add_all(entries)
+    audit(db, u, 'UPDATE', 'WorkSchedule', data.week_start.isoformat(), new={'entries': len(entries)})
+    db.commit()
+    return {'ok': True, 'week_start': data.week_start.isoformat(), 'entries': len(entries)}
 
 
 @app.post('/technicians',response_model=TechnicianOut)

@@ -1,8 +1,9 @@
-const LIVE_PAGES = new Set(['dashboard', 'work-orders', 'pm-schedule', 'plants', 'new-equipment', 'equipment', 'sop', 'machine-records', 'lubrication', 'daily-reports', 'motor-condition', 'iso', 'spare-parts']);
+const LIVE_PAGES = new Set(['dashboard', 'work-orders', 'pm-schedule', 'work-schedule', 'plants', 'new-equipment', 'equipment', 'sop', 'machine-records', 'lubrication', 'daily-reports', 'motor-condition', 'iso', 'spare-parts']);
 const DEFAULT_TAB = {
   dashboard: 'All',
   'work-orders': 'All Work Orders',
   'pm-schedule': 'Annual plan',
+  'work-schedule': 'Week',
   plants: 'All Plants',
   'new-equipment': 'Pending',
   equipment: 'All Equipment',
@@ -15,7 +16,7 @@ const DEFAULT_TAB = {
   'spare-parts': 'All parts',
 };
 const shellRender = render;
-const ui = { page: 'dashboard', tab: 'All', rowKey: '', mode: 'view', plantId: '', plantIds: [], lineId: '', sectionId: '', equipmentId: '', sopCategory: '', equipmentQuery: '', workOrderQuery: '', spareEquipment: '', spareQuery: '', technicianId: '', dateFrom: '', dateTo: '', annualPlant: '', annualYear: new Date().getFullYear(), annualItems: [], annualWeek: '', annualCopy: null, weekTasks: [], lubeId: '', dailyId: '', dailyFilter: '' };
+const ui = { page: 'dashboard', tab: 'All', rowKey: '', mode: 'view', plantId: '', plantIds: [], lineId: '', sectionId: '', equipmentId: '', sopCategory: '', equipmentQuery: '', workOrderQuery: '', spareEquipment: '', spareQuery: '', technicianId: '', dateFrom: '', dateTo: '', annualPlant: '', annualYear: new Date().getFullYear(), annualItems: [], annualWeek: '', annualCopy: null, weekTasks: [], scheduleWeek: '', lubeId: '', dailyId: '', dailyFilter: '' };
 const ANNUAL_MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 const WEEKDAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 const DAY_MAINTENANCE_TYPES = ['Preventive', 'Corrective', 'Emergency', 'Routine', 'Inspection', 'Lubrication', 'Motor condition'];
@@ -536,6 +537,9 @@ function setHeader(page) {
   });
   document.querySelectorAll('.motor-nav').forEach((link) => {
     link.hidden = !canSeeMotor();
+  });
+  document.querySelectorAll('.schedule-nav').forEach((link) => {
+    link.hidden = !canMaintain() && !isTechnician();
   });
   document.querySelectorAll('.nav-link').forEach((link) => link.classList.toggle('active', link.dataset.page === page));
   if (location.hash !== `#${page}`) location.hash = page;
@@ -6209,6 +6213,65 @@ function drawIso() {
   });
 }
 
+function scheduleMonday(value = '') {
+  const date = value ? new Date(`${value}T00:00:00`) : new Date();
+  date.setHours(0, 0, 0, 0);
+  const offset = (date.getDay() + 6) % 7;
+  date.setDate(date.getDate() - offset);
+  return isoDate(date);
+}
+
+function scheduleDays(weekStart) {
+  const monday = new Date(`${weekStart}T00:00:00`);
+  return Array.from({ length: 7 }, (_, index) => {
+    const day = new Date(monday);
+    day.setDate(day.getDate() + index);
+    return isoDate(day);
+  });
+}
+
+async function drawWorkSchedule() {
+  if (!ui.scheduleWeek) ui.scheduleWeek = scheduleMonday();
+  const weekStart = scheduleMonday(ui.scheduleWeek);
+  ui.scheduleWeek = weekStart;
+  const days = scheduleDays(weekStart);
+  const technicianMode = isTechnician();
+  const currentTechId = getSavedUser()?.technician_id;
+  const technicians = (store.technicians || []).filter((item) => item.status !== 'Inactive' && (!technicianMode || item.technician_id === currentTechId));
+  const entries = await apiRequest(`/work-schedule?week_start=${encodeURIComponent(weekStart)}`);
+  const entryMap = new Map(entries.map((item) => [`${item.technician_id}|${String(item.work_date).slice(0, 10)}`, item.shift]));
+  const shifts = ['', 'Morning', 'Evening', 'Night', 'Off'];
+  const cells = (technician) => days.map((day) => {
+    const value = entryMap.get(`${technician.technician_id}|${day}`) || '';
+    return technicianMode
+      ? `<td><span class="schedule-shift${value === 'Off' ? ' off' : ''}">${esc(t(value || 'Not set'))}</span></td>`
+      : `<td><select aria-label="${esc(technician.name)} ${esc(day)}" data-schedule-tech="${esc(technician.technician_id)}" data-schedule-date="${esc(day)}">${shifts.map((shift) => `<option value="${esc(shift)}"${shift === value ? ' selected' : ''}>${esc(t(shift || 'Not set'))}</option>`).join('')}</select></td>`;
+  }).join('');
+  const rows = technicians.map((technician) => `<tr><th scope="row"><b>${esc(technician.name)}</b><small>${esc(technician.technician_id)}</small></th>${cells(technician)}</tr>`).join('');
+  document.getElementById('metric-grid').innerHTML = '';
+  document.getElementById('workspace').className = 'workspace';
+  document.getElementById('workspace').innerHTML = `<section class="panel schedule-panel"><div class="schedule-toolbar"><label>${esc(t('Week starting Monday'))}<input id="schedule-week" type="date" value="${esc(weekStart)}"></label><p>${esc(fmtDate(days[0]))} – ${esc(fmtDate(days[6]))}</p></div><div class="schedule-scroll"><table class="schedule-table"><thead><tr><th>${esc(t('Technician'))}</th>${days.map((day, index) => `<th>${esc(t(WEEKDAYS[(index + 1) % 7]))}<small>${esc(fmtDate(day))}</small></th>`).join('')}</tr></thead><tbody>${rows || `<tr><td colspan="8" class="schedule-empty">${esc(t(technicianMode ? 'No schedule is linked to this account.' : 'No active technicians found.'))}</td></tr>`}</tbody></table></div>${technicianMode ? `<p class="live-note">${esc(t('Your weekly work schedule is shown here. Contact the engineer if it needs to change.'))}</p>` : `<p id="schedule-message" class="form-error" role="status"></p>`}</section>`;
+  document.getElementById('schedule-week')?.addEventListener('change', (event) => {
+    ui.scheduleWeek = scheduleMonday(event.currentTarget.value);
+    drawWorkSchedule().catch((error) => screenNotice(error.message, 'error'));
+  });
+}
+
+async function saveWorkSchedule() {
+  if (!canMaintain()) return;
+  const weekStart = ui.scheduleWeek || scheduleMonday();
+  const entries = [...document.querySelectorAll('[data-schedule-tech]')]
+    .filter((field) => field.value)
+    .map((field) => ({ technician_id: field.dataset.scheduleTech, work_date: field.dataset.scheduleDate, shift: field.value }));
+  try {
+    await apiRequest('/work-schedule', { method: 'PUT', body: JSON.stringify({ week_start: weekStart, entries }) });
+    toast(t('Work schedule saved.'));
+    await drawWorkSchedule();
+  } catch (error) {
+    screenNotice(error.message, 'error');
+  }
+}
+
 async function saveIsoForms() {
   const form = document.getElementById('iso-form');
   if (!form || !canMaintain()) return;
@@ -6229,6 +6292,7 @@ async function draw(page) {
   if (page === 'dashboard') await drawDashboard();
   else if (page === 'work-orders') await drawWorkOrders();
   else if (page === 'pm-schedule') await drawPlans();
+  else if (page === 'work-schedule') await drawWorkSchedule();
   else if (page === 'plants') drawPlants();
   else if (page === 'new-equipment' || page === 'equipment') drawEquipment();
   else if (page === 'sop') await drawSops();
@@ -6273,7 +6337,7 @@ function liveSyncEditing() {
   if (ui.mode === 'create' || ui.mode === 'job') return true;
   if (ui.page === 'daily-reports' || ui.page === 'lubrication' || ui.page === 'motor-condition') return true;
   if (ui.page === 'pm-schedule' && (document.getElementById('annual-rows') || document.querySelector('.week-day'))) return true;
-  if (ui.page === 'iso' || ui.page === 'spare-parts') return true;
+  if (ui.page === 'iso' || ui.page === 'spare-parts' || ui.page === 'work-schedule') return true;
   return false;
 }
 
@@ -6419,6 +6483,7 @@ document.getElementById('primary-action').addEventListener('click', (event) => {
   event.preventDefault();
   event.stopImmediatePropagation();
   if (ui.page === 'machine-records') exportRecords();
+  else if (ui.page === 'work-schedule' && canMaintain()) saveWorkSchedule();
   else if (ui.page === 'dashboard') (document.getElementById('plant-menu-toggle') || document.querySelector('[data-filter="plant"]'))?.focus();
   else if (ui.page === 'pm-schedule' && isTechnician()) return;
   else if (ui.page === 'pm-schedule' && document.querySelector('.week-day')) saveWeekTasks();
@@ -6471,8 +6536,8 @@ render = function liveRender(page) {
     return;
   }
   let name = LIVE_PAGES.has(page) ? page : 'dashboard';
-  const lubricationPages = ['lubrication', 'work-orders', 'sop', 'motor-condition', 'equipment'];
-  const maintenancePages = ['daily-reports', 'work-orders', 'pm-schedule', 'sop', 'equipment'];
+  const lubricationPages = ['lubrication', 'work-orders', 'sop', 'motor-condition', 'equipment', 'work-schedule'];
+  const maintenancePages = ['daily-reports', 'work-orders', 'pm-schedule', 'sop', 'equipment', 'work-schedule'];
   const openReports = name === 'new-equipment' && canMaintain();
   if (isLubricationTechnician()) {
     if (!lubricationPages.includes(name)) name = 'lubrication';
