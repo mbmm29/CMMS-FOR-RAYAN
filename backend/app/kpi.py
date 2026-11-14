@@ -303,8 +303,10 @@ def compute_kpi(
     hours_by_date = load_work_day_hours(db, previous_start, end)
     # Days without an explicit row follow today's 16/24 choice so the KPI toggle recalculates the period.
     basis_hours = day_work_hours(hours_by_date, date.today(), DEFAULT_WORK_DAY_HOURS)
-    shift_time_rows = db.query(WorkShiftTime).all()
-    shift_time_by_key = {(row.plant_id, row.week_start, row.shift): row for row in shift_time_rows}
+    shift_time_rows = db.query(WorkShiftTime).order_by(WorkShiftTime.updated_at.desc(), WorkShiftTime.id.desc()).all()
+    shift_time_by_key = {}
+    for row in shift_time_rows:
+        shift_time_by_key.setdefault((row.plant_id, row.shift), row)
 
     def report_shift_duration(report):
         raw = str(report.shift or '')
@@ -322,8 +324,7 @@ def compute_kpi(
             report_plant_id = next(iter(plants_for_report)) if len(plants_for_report) == 1 else None
         if not report_plant_id or not report.report_date:
             return defaults[shift]
-        week_start = report.report_date - timedelta(days=(report.report_date.weekday() - 5) % 7)
-        row = shift_time_by_key.get((report_plant_id, week_start, shift))
+        row = shift_time_by_key.get((report_plant_id, shift))
         if not row:
             return defaults[shift]
         start_minutes = row.start_time.hour * 60 + row.start_time.minute

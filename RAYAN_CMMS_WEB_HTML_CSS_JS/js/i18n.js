@@ -38,7 +38,7 @@ const CMMS_AR = {
   'Your weekly work schedule is shown here. Contact the engineer if it needs to change.': 'يظهر جدول دوامك الأسبوعي هنا. تواصل مع المهندس عند الحاجة إلى تغييره.',
   'Work schedule saved.': 'تم حفظ جدول الدوام.',
   'Shift times': 'أوقات الشفتات',
-  'Set when each shift starts and ends. These times are saved for this plant and week.': 'حدد وقت بداية ونهاية كل شفت. تُحفظ الأوقات لهذا المصنع وهذا الأسبوع.',
+  'Set when each shift starts and ends. This optional setting stays active for this plant until changed.': 'حدد وقت بداية ونهاية كل شفت. هذا الإعداد اختياري ويبقى فعالًا لهذا المصنع إلى أن تغيّره.',
   'Save shift times': 'حفظ أوقات الشفتات',
   'Shift duration': 'مدة الشفت',
   'hours': 'ساعة',

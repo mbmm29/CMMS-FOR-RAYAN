@@ -1950,8 +1950,10 @@ DEFAULT_WORK_SHIFT_TIMES = {
 
 
 def work_shift_times_payload(db: Session, week_start: date, plant_id: str) -> dict:
-    rows = db.query(WorkShiftTime).filter_by(week_start=week_start, plant_id=plant_id).all()
-    saved = {row.shift: row for row in rows}
+    rows = db.query(WorkShiftTime).filter_by(plant_id=plant_id).order_by(WorkShiftTime.updated_at.desc(), WorkShiftTime.id.desc()).all()
+    saved = {}
+    for row in rows:
+        saved.setdefault(row.shift, row)
     result = {}
     for shift, (default_start, default_end) in DEFAULT_WORK_SHIFT_TIMES.items():
         row = saved.get(shift)
@@ -2000,10 +2002,11 @@ def save_work_shift_times(data: dict, db: Session = Depends(get_db), u=Depends(r
         if start == end:
             raise HTTPException(400, 'A shift cannot have the same start and end time')
         parsed[shift] = (start, end)
-    db.query(WorkShiftTime).filter_by(plant_id=plant_id, week_start=week_start).delete(synchronize_session=False)
+    # Shift hours are optional plant settings. Keep the last choice active until the engineer changes it.
+    db.query(WorkShiftTime).filter_by(plant_id=plant_id).delete(synchronize_session=False)
     for shift, (start, end) in parsed.items():
         db.add(WorkShiftTime(plant_id=plant_id, week_start=week_start, shift=shift, start_time=start, end_time=end, updated_by=u.id))
-    audit(db, u, 'UPDATE', 'WorkShiftTime', f'{plant_id}:{week_start.isoformat()}', new={key: (value[0].strftime('%H:%M'), value[1].strftime('%H:%M')) for key, value in parsed.items()})
+    audit(db, u, 'UPDATE', 'WorkShiftTime', plant_id, new={key: (value[0].strftime('%H:%M'), value[1].strftime('%H:%M')) for key, value in parsed.items()})
     db.commit()
     return {'ok': True, 'week_start': week_start.isoformat(), 'plant_id': plant_id, 'shifts': work_shift_times_payload(db, week_start, plant_id)}
 
