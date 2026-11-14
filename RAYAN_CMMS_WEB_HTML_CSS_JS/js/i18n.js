@@ -25,6 +25,8 @@ const CMMS_AR = {
   'No active technicians found.': 'لم يتم العثور على فنيين نشطين.',
   'Your weekly work schedule is shown here. Contact the engineer if it needs to change.': 'يظهر جدول دوامك الأسبوعي هنا. تواصل مع المهندس عند الحاجة إلى تغييره.',
   'Work schedule saved.': 'تم حفظ جدول الدوام.',
+  'Work schedule reminder': 'تذكير بجدول الدوام',
+  'Please set the technician shifts for the week starting Saturday.': 'يرجى إعداد شفتات الفنيين للأسبوع القادم الذي يبدأ يوم السبت.',
   'Delete account': 'حذف الحساب',
   'This cannot be undone.': 'لا يمكن التراجع عن هذا الإجراء.',
   'Account deleted successfully.': 'تم حذف الحساب بنجاح.',

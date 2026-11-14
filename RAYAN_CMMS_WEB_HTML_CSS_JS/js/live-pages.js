@@ -6477,7 +6477,11 @@ async function pollLiveUpdates(force) {
     liveSync.dispatchMark = dispatchMark;
     liveSync.noticeMark = noticeMark;
     if (store) store.orders = orders;
-    if (firstPass) return;
+    if (firstPass) {
+      const weeklyReminder = (notices || []).find((row) => row.kind === 'work_schedule_reminder' && !row.is_read);
+      if (weeklyReminder) screenNotice(`${t(weeklyReminder.title || 'Work schedule reminder')} — ${t(weeklyReminder.message || 'Please set the technician shifts for the week starting Saturday.')}`, 'ok');
+      return;
+    }
     if (ordersChanged) {
       announceLiveWorkOrders(orders, previousOrders);
     }
@@ -6485,8 +6489,8 @@ async function pollLiveUpdates(force) {
     if (noticesChanged) {
       const newest = (notices || []).find((row) => !row.is_read);
       if (newest) {
-        screenNotice(`${newest.title || t('New notice')}${newest.message ? ` — ${newest.message}` : ''}`, 'ok');
-        showLivePhoneNotice(newest.title || t('New notice'), newest.message || '');
+        screenNotice(`${t(newest.title || 'New notice')}${newest.message ? ` — ${t(newest.message)}` : ''}`, 'ok');
+        showLivePhoneNotice(t(newest.title || 'New notice'), t(newest.message || ''));
       }
     }
   } catch (_) {

@@ -1894,10 +1894,13 @@ def technicians(db:Session=Depends(get_db),u=Depends(auth)):
     return [technician_out(db, row) for row in rows]
 
 
+def normalize_schedule_week_start(value: date) -> date:
+    return value - timedelta(days=(value.weekday() - 5) % 7)
+
+
 @app.get('/work-schedule')
 def get_work_schedule(week_start: date, db: Session = Depends(get_db), u=Depends(auth)):
-    if week_start.weekday() != 5:
-        raise HTTPException(400, 'The work schedule week must start on Saturday')
+    week_start = normalize_schedule_week_start(week_start)
     week_end = week_start + timedelta(days=6)
     query = db.query(WorkSchedule).filter(
         WorkSchedule.work_date >= week_start,
@@ -1917,9 +1920,8 @@ def get_work_schedule(week_start: date, db: Session = Depends(get_db), u=Depends
 
 @app.put('/work-schedule')
 def save_work_schedule(data: WorkScheduleWeekIn, db: Session = Depends(get_db), u=Depends(role(*ENGINEER))):
-    if data.week_start.weekday() != 5:
-        raise HTTPException(400, 'The work schedule week must start on Saturday')
-    week_end = data.week_start + timedelta(days=6)
+    week_start = normalize_schedule_week_start(data.week_start)
+    week_end = week_start + timedelta(days=6)
     entries = []
     seen = set()
     valid_shifts = {
@@ -1932,7 +1934,7 @@ def save_work_schedule(data: WorkScheduleWeekIn, db: Session = Depends(get_db), 
     }
     for item in data.entries:
         technician_id = item.technician_id.strip()
-        if item.work_date < data.week_start or item.work_date >= week_end:
+        if item.work_date < week_start or item.work_date >= week_end:
             raise HTTPException(400, 'Schedule dates must be Saturday through Thursday; Friday is excluded')
         if item.shift not in valid_shifts:
             raise HTTPException(400, 'Invalid shift')
@@ -1944,13 +1946,13 @@ def save_work_schedule(data: WorkScheduleWeekIn, db: Session = Depends(get_db), 
         seen.add(key)
         entries.append(WorkSchedule(technician_id=technician_id, work_date=item.work_date, shift=item.shift, updated_by=u.id))
     db.query(WorkSchedule).filter(
-        WorkSchedule.work_date >= data.week_start,
+        WorkSchedule.work_date >= week_start,
         WorkSchedule.work_date <= week_end,
     ).delete(synchronize_session=False)
     db.add_all(entries)
-    audit(db, u, 'UPDATE', 'WorkSchedule', data.week_start.isoformat(), new={'entries': len(entries)})
+    audit(db, u, 'UPDATE', 'WorkSchedule', week_start.isoformat(), new={'entries': len(entries)})
     db.commit()
-    return {'ok': True, 'week_start': data.week_start.isoformat(), 'entries': len(entries)}
+    return {'ok': True, 'week_start': week_start.isoformat(), 'entries': len(entries)}
 
 
 @app.post('/technicians',response_model=TechnicianOut)
@@ -5786,7 +5788,37 @@ def iso_records(db:Session=Depends(get_db),u=Depends(auth)): return db.query(ISO
 def create_iso(data:ISOCreate,db:Session=Depends(get_db),u=Depends(role(*ENGINEER))):
     o=ISORecord(**data.model_dump()); db.add(o); audit(db,u,'CREATE','ISORecord',data.document_number,new=data.model_dump()); db.commit(); db.refresh(o); return o
 @app.get('/notifications')
-def notifications(db:Session=Depends(get_db),u=Depends(auth)): return db.query(Notification).filter(or_(Notification.user_id==u.id,Notification.user_id==None)).order_by(Notification.created_at.desc()).limit(100).all()
+def notifications(db: Session = Depends(get_db), u=Depends(auth)):
+    today = plant_today()
+    if u.role in ENGINEER and today.weekday() == 3:
+        next_saturday = today + timedelta(days=(5 - today.weekday()) % 7)
+        schedule_week = next_saturday.isoformat()
+        already_sent = db.query(Notification).filter_by(
+            kind='work_schedule_reminder', related_id=schedule_week,
+        ).first()
+        if not already_sent:
+            engineers = db.query(User).filter(
+                User.role.in_(ENGINEER), User.is_active == True,
+            ).all()
+            for engineer in engineers:
+                notify(
+                    db, engineer.id, 'Work schedule reminder',
+                    'Please set the technician shifts for the week starting Saturday.',
+                    kind='work_schedule_reminder', related_id=schedule_week,
+                )
+            if engineers:
+                schedule_engineer_push(
+                    db,
+                    kind='work_schedule_reminder',
+                    ref=schedule_week,
+                    title='Work schedule reminder',
+                    body='Please set the technician shifts for the week starting Saturday.',
+                    url='/index.html?page=work-schedule',
+                )
+                db.commit()
+    return db.query(Notification).filter(
+        or_(Notification.user_id == u.id, Notification.user_id == None),
+    ).order_by(Notification.created_at.desc()).limit(100).all()
 @app.post('/notifications/{nid}/read')
 def notification_read(nid:int,db:Session=Depends(get_db),u=Depends(auth)):
     n=db.get(Notification,nid)
