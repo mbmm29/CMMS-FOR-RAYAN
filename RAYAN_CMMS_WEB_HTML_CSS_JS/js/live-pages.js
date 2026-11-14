@@ -501,6 +501,7 @@ async function loadStore() {
 }
 
 function setHeader(page) {
+  if (page !== 'work-schedule') ui.scheduleEditing = false;
   const spec = pages[page] || pages.dashboard;
   document.getElementById('page-title').textContent = t(spec.title);
   const subtitle = page === 'equipment' && isTechnician()
@@ -525,6 +526,9 @@ function setHeader(page) {
     action.hidden = true;
   } else if (page === 'sop') {
     action.hidden = true;
+  } else if (page === 'work-schedule' && canMaintain()) {
+    action.hidden = !ui.scheduleEditing;
+    action.textContent = t('Save schedule');
   } else if (isTechnician()) {
     action.hidden = true;
     action.textContent = t('+ Add Equipment');
@@ -6264,19 +6268,39 @@ async function drawWorkSchedule() {
     'Night 12h (19:00 - 07:00)',
     'Off',
   ];
+  const assignedTechnicians = (day, shift) => {
+    const selected = entryMap.get(`${day}|${shift}`) || new Set();
+    return (store.technicians || []).filter((technician) => selected.has(String(technician.technician_id)));
+  };
   const selectShift = (day, shift) => {
     const selected = entryMap.get(`${day}|${shift}`) || new Set();
-    if (technicianMode) {
-      const assigned = technicians.find((technician) => selected.has(String(technician.technician_id)));
-      return `<span class="schedule-shift${shift === 'Off' ? ' off' : ''}">${esc(assigned ? t(shift) : t('Not set'))}</span>`;
-    }
     const options = technicians.map((technician) => `<label><input type="checkbox" value="${esc(technician.technician_id)}" data-schedule-shift="${esc(shift)}" data-schedule-date="${esc(day)}"${selected.has(String(technician.technician_id)) ? ' checked' : ''}><span>${esc(technician.name)}<small>${esc(technician.technician_id)}</small></span></label>`).join('');
     return `<div class="schedule-tech-list" aria-label="${esc(t(shift))} ${esc(day)}">${options || `<span class="schedule-no-tech">${esc(t('No active technicians found.'))}</span>`}</div>`;
   };
-  const rows = days.map((day) => `<tr><th scope="row"><b>${esc(t(WEEKDAYS[new Date(`${day}T00:00:00`).getDay()]))}</b><small>${esc(fmtDate(day))}</small></th>${shifts.map((shift) => `<td>${selectShift(day, shift)}</td>`).join('')}</tr>`).join('');
+  const scheduleEditing = !technicianMode && Boolean(ui.scheduleEditing);
+  const dayRows = (editor) => days.map((day) => `<tr><th scope="row"><b>${esc(t(WEEKDAYS[new Date(`${day}T00:00:00`).getDay()]))}</b><small>${esc(fmtDate(day))}</small></th>${shifts.map((shift) => {
+    if (editor) return `<td>${selectShift(day, shift)}</td>`;
+    const assigned = assignedTechnicians(day, shift);
+    if (technicianMode) return `<td>${assigned.some((item) => String(item.technician_id) === String(currentTechId)) ? `<span class="schedule-shift${shift === 'Off' ? ' off' : ''}">${esc(t(shift))}</span>` : '<span class="schedule-unassigned">—</span>'}</td>`;
+    return `<td><div class="schedule-roster-names">${assigned.map((item) => `<span>${esc(item.name)}</span>`).join('') || `<small>${esc(t('No technicians assigned'))}</small>`}</div></td>`;
+  }).join('')}</tr>`).join('');
   document.getElementById('metric-grid').innerHTML = '';
   document.getElementById('workspace').className = 'workspace';
-  document.getElementById('workspace').innerHTML = `<section class="panel schedule-panel"><div class="schedule-toolbar"><label>${esc(t('Schedule week starts Saturday'))}<input id="schedule-week" type="date" value="${esc(weekStart)}"></label><p>${esc(fmtDate(days[0]))} – ${esc(fmtDate(days[days.length - 1]))} · ${esc(t('Friday is excluded'))}</p></div>${technicianMode ? '' : `<p class="live-note">${esc(t('Choose one or more technicians for each shift. A technician can only be assigned to one shift per day.'))}</p>`}<div class="schedule-scroll"><table class="schedule-table"><thead><tr><th>${esc(t('Day'))}</th>${shifts.map((shift) => `<th>${esc(t(shift))}</th>`).join('')}</tr></thead><tbody>${rows || `<tr><td colspan="${shifts.length + 1}" class="schedule-empty">${esc(t(technicianMode ? 'No schedule is linked to this account.' : 'No active technicians found.'))}</td></tr>`}</tbody></table></div>${technicianMode ? `<p class="live-note">${esc(t('Your weekly work schedule is shown here. Contact the engineer if it needs to change.'))}</p>` : `<p id="schedule-message" class="form-error" role="status"></p>`}</section>`;
+  const table = (editor) => `<div class="schedule-scroll"><table class="schedule-table"><thead><tr><th>${esc(t('Day'))}</th>${shifts.map((shift) => `<th>${esc(t(shift))}</th>`).join('')}</tr></thead><tbody>${dayRows(editor) || `<tr><td colspan="${shifts.length + 1}" class="schedule-empty">${esc(t(technicianMode ? 'No schedule is linked to this account.' : 'No active technicians found.'))}</td></tr>`}</tbody></table></div>`;
+  document.getElementById('workspace').innerHTML = `<section class="panel schedule-panel"><div class="schedule-toolbar"><label>${esc(t('Schedule week starts Saturday'))}<input id="schedule-week" type="date" value="${esc(weekStart)}"></label><p>${esc(fmtDate(days[0]))} – ${esc(fmtDate(days[days.length - 1]))} · ${esc(t('Friday is excluded'))}</p></div>${technicianMode ? '' : `<div class="schedule-view-actions"><p>${esc(t('Weekly technician roster'))}</p><button id="schedule-edit" class="detail-button primary" type="button">${esc(t(scheduleEditing ? 'Close editor' : 'Edit schedule'))}</button></div>`}${table(false)}${scheduleEditing ? `<section class="schedule-editor"><div class="schedule-editor-heading"><h3>${esc(t('Edit weekly shifts'))}</h3><p>${esc(t('Choose one or more technicians for each shift. A technician can only be assigned to one shift per day.'))}</p><button id="schedule-edit-cancel" class="detail-button" type="button">${esc(t('Cancel'))}</button></div>${table(true)}</section>` : ''}${technicianMode ? `<p class="live-note">${esc(t('Your weekly work schedule is shown here. Contact the engineer if it needs to change.'))}</p>` : `<p id="schedule-message" class="form-error" role="status"></p>`}</section>`;
+  const primaryAction = document.getElementById('primary-action');
+  if (canMaintain()) {
+    primaryAction.hidden = !scheduleEditing;
+    primaryAction.textContent = t('Save schedule');
+  }
+  document.getElementById('schedule-edit')?.addEventListener('click', () => {
+    ui.scheduleEditing = !ui.scheduleEditing;
+    drawWorkSchedule();
+  });
+  document.getElementById('schedule-edit-cancel')?.addEventListener('click', () => {
+    ui.scheduleEditing = false;
+    drawWorkSchedule();
+  });
   document.getElementById('schedule-week')?.addEventListener('change', (event) => {
     ui.scheduleWeek = scheduleSaturday(event.currentTarget.value);
     drawWorkSchedule().catch((error) => screenNotice(error.message, 'error'));
@@ -6312,6 +6336,7 @@ async function saveWorkSchedule() {
   }
   try {
     await apiRequest('/work-schedule', { method: 'PUT', body: JSON.stringify({ week_start: weekStart, entries }) });
+    ui.scheduleEditing = false;
     toast(t('Work schedule saved.'));
     await drawWorkSchedule();
   } catch (error) {
