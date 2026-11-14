@@ -103,6 +103,19 @@ class WorkSchedule(Base):
     updated_by: Mapped[int|None]=mapped_column(Integer,nullable=True)
     updated_at: Mapped[datetime]=mapped_column(DateTime,default=datetime.utcnow,onupdate=datetime.utcnow)
 
+class WorkShiftTime(Base):
+    """Plant-specific shift boundaries, retained by schedule week for history."""
+    __tablename__ = 'work_shift_times'
+    __table_args__ = (UniqueConstraint('plant_id', 'week_start', 'shift', name='uq_work_shift_time_plant_week_shift'),)
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    plant_id: Mapped[str] = mapped_column(String(50), ForeignKey('plants.plant_id'), index=True)
+    week_start: Mapped[date] = mapped_column(Date, index=True)
+    shift: Mapped[str] = mapped_column(String(30))
+    start_time: Mapped[time] = mapped_column(Time)
+    end_time: Mapped[time] = mapped_column(Time)
+    updated_by: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
 class TechnicianPlant(Base):
     """Plants a technician may select on daily and lubrication reports."""
     __tablename__ = 'technician_plants'

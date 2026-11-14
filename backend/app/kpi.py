@@ -23,7 +23,7 @@ from sqlalchemy.orm import Session
 
 from .models import (
     AnnualPMDayTask, AnnualPMPlan, Component, DailyReport, DailyReportItem, Equipment, KpiTarget, KpiWorkDay,
-    MachineRecord, Plant, PlantLine, PMPlan, PreventiveDispatch, WorkOrder, WorkOrderAssignment,
+    MachineRecord, Plant, PlantLine, PMPlan, PreventiveDispatch, WorkOrder, WorkOrderAssignment, WorkShiftTime,
 )
 
 FAILURE_TYPES = {'Corrective', 'Emergency'}
@@ -303,6 +303,33 @@ def compute_kpi(
     hours_by_date = load_work_day_hours(db, previous_start, end)
     # Days without an explicit row follow today's 16/24 choice so the KPI toggle recalculates the period.
     basis_hours = day_work_hours(hours_by_date, date.today(), DEFAULT_WORK_DAY_HOURS)
+    shift_time_rows = db.query(WorkShiftTime).all()
+    shift_time_by_key = {(row.plant_id, row.week_start, row.shift): row for row in shift_time_rows}
+
+    def report_shift_duration(report):
+        raw = str(report.shift or '')
+        shift = ('Morning12' if raw.startswith('Morning 12h') else
+                 'Night12' if raw.startswith('Night 12h') else
+                 'Morning' if raw.startswith('Morning') else
+                 'Evening' if raw.startswith('Evening') else
+                 'Night' if raw.startswith('Night') else None)
+        if not shift:
+            return float(REPORT_SHIFT_HOURS)
+        defaults = {'Morning': 8.0, 'Evening': 8.0, 'Night': 8.0, 'Morning12': 12.0, 'Night12': 12.0}
+        report_plant_id = report.plant_id
+        if not report_plant_id and report.id in items_by_report:
+            plants_for_report = {item.plant_id for item in items_by_report[report.id] if item.plant_id}
+            report_plant_id = next(iter(plants_for_report)) if len(plants_for_report) == 1 else None
+        if not report_plant_id or not report.report_date:
+            return defaults[shift]
+        week_start = report.report_date - timedelta(days=(report.report_date.weekday() - 5) % 7)
+        row = shift_time_by_key.get((report_plant_id, week_start, shift))
+        if not row:
+            return defaults[shift]
+        start_minutes = row.start_time.hour * 60 + row.start_time.minute
+        end_minutes = row.end_time.hour * 60 + row.end_time.minute
+        minutes = (end_minutes - start_minutes) % (24 * 60)
+        return minutes / 60.0 if minutes else defaults[shift]
     annual_due_end = min(end, today)
     annual_occurrences_all = db.query(AnnualPMDayTask, AnnualPMPlan.plant_id).join(
         AnnualPMPlan, AnnualPMPlan.id == AnnualPMDayTask.plan_id,
@@ -380,8 +407,9 @@ def compute_kpi(
                 return False
             return report.plant_id in plant_ids
 
-        utilization_reports = len([row for row in reports if report_counts_for_time(row)])
-        utilization_available = round(utilization_reports * REPORT_SHIFT_HOURS, 2)
+        utilization_reports_rows = [row for row in reports if report_counts_for_time(row)]
+        utilization_reports = len(utilization_reports_rows)
+        utilization_available = round(sum(report_shift_duration(row) for row in utilization_reports_rows), 2)
         utilization_operating = round(max(utilization_available - total_down, 0), 2)
 
         asset_count = len(equipment_ids) if scoped else len({row.equipment_id for row in equipment})

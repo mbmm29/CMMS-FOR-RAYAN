@@ -4691,11 +4691,19 @@ const DAILY_SHIFTS = [
   'Night 12h (19:00 - 07:00)',
 ];
 
-function dailyShiftOptions(selected) {
+function dailyShiftOptions(selected, times = null) {
   const chosen = String(selected || '').trim();
   const shifts = [...DAILY_SHIFTS];
   if (chosen && !shifts.includes(chosen)) shifts.unshift(chosen);
-  return shifts.map((shift) => `<option value="${esc(shift)}"${shift === (chosen || DAILY_SHIFTS[0]) ? ' selected' : ''}>${esc(t(shift))}</option>`).join('');
+  const keys = ['Morning', 'Evening', 'Night', 'Morning12', 'Night12'];
+  return shifts.map((shift) => {
+    const key = shift.startsWith('Morning 12h') ? 'Morning12'
+      : shift.startsWith('Night 12h') ? 'Night12'
+        : keys.find((name) => !name.endsWith('12') && shift.startsWith(name));
+    const range = key && times?.[key] ? ` (${times[key].start} - ${times[key].end})` : '';
+    const title = range ? `${t(key === 'Morning12' ? 'Morning 12h' : key === 'Night12' ? 'Night 12h' : key)}${range}` : t(shift);
+    return `<option value="${esc(shift)}"${shift === (chosen || DAILY_SHIFTS[0]) ? ' selected' : ''}>${esc(title)}</option>`;
+  }).join('');
 }
 let lubeCache = [];
 let dailyCache = [];
@@ -5620,6 +5628,17 @@ async function drawDailyReport() {
     if (!sendButton.hidden) sendButton.textContent = t('Send report');
   }
   const reportDate = String(report?.report_date || openReportDate(dailyCache)).slice(0, 10);
+  let reportShiftTimes = null;
+  const reportPlantId = report?.plant_id || (() => {
+    const itemPlants = [...new Set(items.map((item) => String(item.plant_id || '')).filter(Boolean))];
+    return itemPlants.length === 1 ? itemPlants[0] : '';
+  })();
+  if (reportPlantId) {
+    try {
+      const shiftResult = await apiRequest(`/work-schedule/shift-times?week_start=${encodeURIComponent(reportDate)}&plant_id=${encodeURIComponent(reportPlantId)}`);
+      reportShiftTimes = shiftResult.shifts || null;
+    } catch (_) { reportShiftTimes = null; }
+  }
   const techName = report?.technician_name || getSavedUser()?.full_name || '';
   const visibleReports = () => (ui.dailyFilter
     ? dailyCache.filter((row) => String(row.report_date).slice(0, 10) === ui.dailyFilter)
@@ -5627,7 +5646,7 @@ async function drawDailyReport() {
   const list = dailyListHtml(visibleReports(), report?.report_id || '', techName);
   const workspace = document.getElementById('workspace');
   workspace.className = 'workspace lube-board';
-  workspace.innerHTML = `<aside class="panel lube-list"><div class="lube-list-head"><b>${esc(t('Reports'))}</b><button type="button" class="detail-button" id="daily-new">${esc(t('New report'))}</button></div><label class="daily-filter"><span>${esc(t('Date'))}</span><input id="daily-filter" type="date" value="${esc(ui.dailyFilter || '')}"></label>${rejectedFieldHtml(dailyCache, report?.report_id || '')}<div id="daily-report-list">${list}</div></aside><form id="daily-form" class="lube-paper daily-paper" data-report-id="${esc(report?.report_id || '')}" data-status="${esc(report?.status || 'Draft')}">${windowLock ? `<div class="send-watch no-print" id="send-watch"><span>${esc(t('Time left before the next report'))}</span><b id="send-watch-time">00:00:00</b></div>` : ''}<div id="daily-alert" class="report-alert no-print" hidden role="alert"></div><header class="lube-head"><img src="logo-rayan.png?v=4" alt="Rayan"><div><h2>${esc(t('DAILY MAINTENANCE REPORT'))}</h2><p>${esc(t(report?.status || 'Draft report'))}</p><small>${esc(t('Mechanical Maintenance Department'))}</small></div><dl><div><dt>${esc(t('Form No.:'))}</dt><dd class="form-no">${esc(formNo('daily'))}</dd></div><div><dt>${esc(t('Approved by'))}</dt><dd class="approved-name">${esc(String(report?.approved_by || '').trim() || '—')}</dd></div></dl></header><div class="lube-meta"><label><span>${esc(t('Shift'))}</span><select id="daily-shift">${dailyShiftOptions(report?.shift)}</select></label><label><span>${esc(t("Technician's name"))}</span><input id="daily-tech" value="${esc(techName)}" readonly></label><label><span>${esc(t('Date'))}</span><input id="daily-date" type="date" value="${esc(reportDate)}" required></label></div><div class="sheet-scroll"><table class="lube-table"><thead><tr><th>${esc(t('Seq.'))}</th><th>${esc(t('Machine'))}</th><th>${esc(t('Maintenance Type'))}</th><th>${esc(t('Repair Actions'))}</th><th>${esc(t('Start Time'))}</th><th>${esc(t('End Time'))}</th><th>${esc(t('Downtime (hrs)'))}</th></tr></thead><tbody id="daily-rows">${items.map(dailyRow).join('')}</tbody></table></div><section class="daily-parts"><div class="lube-list-head"><h3>${esc(t('SPARE PARTS USED'))}</h3><button type="button" class="no-print" id="daily-add-part">${esc(t('Add part'))}</button></div><div class="sheet-scroll"><table class="lube-table"><thead><tr><th>${esc(t('No.'))}</th><th>${esc(t('Part'))}</th><th>${esc(t('Part No.'))}</th><th>${esc(t('Qty'))}</th></tr></thead><tbody id="daily-parts">${parts.map(dailyPartRow).join('')}</tbody></table></div></section><label class="daily-notes"><span>${esc(t('GENERAL NOTES'))}</span><div class="daily-note-box"><textarea id="daily-notes">${esc(report?.general_notes || '')}</textarea><b class="daily-tdt">${esc(t('TDT'))}: <span id="daily-total">0.00 ${esc(t('h'))}</span></b></div></label><section class="daily-photos no-print"><div class="lube-list-head"><h3>${esc(t('Photos'))}</h3><button type="button" id="daily-add-photo">${esc(t('Add photo'))}</button></div><p class="photo-hint">${esc(t('Each photo prints on a full A3 page.'))}</p><div class="photo-strip" id="daily-photo-strip"></div><input id="daily-photo-file" type="file" accept="image/*" multiple hidden></section><div class="lube-actions no-print"><button type="button" id="daily-add">${esc(t('Add row'))}</button>${returned && !windowLock ? `<button type="button" id="daily-resend">${esc(t('Resend the report'))}</button>` : ''}<button type="button" id="daily-print">${esc(t('Print'))}</button></div></form><div id="daily-photo-print"></div>`;
+  workspace.innerHTML = `<aside class="panel lube-list"><div class="lube-list-head"><b>${esc(t('Reports'))}</b><button type="button" class="detail-button" id="daily-new">${esc(t('New report'))}</button></div><label class="daily-filter"><span>${esc(t('Date'))}</span><input id="daily-filter" type="date" value="${esc(ui.dailyFilter || '')}"></label>${rejectedFieldHtml(dailyCache, report?.report_id || '')}<div id="daily-report-list">${list}</div></aside><form id="daily-form" class="lube-paper daily-paper" data-report-id="${esc(report?.report_id || '')}" data-status="${esc(report?.status || 'Draft')}">${windowLock ? `<div class="send-watch no-print" id="send-watch"><span>${esc(t('Time left before the next report'))}</span><b id="send-watch-time">00:00:00</b></div>` : ''}<div id="daily-alert" class="report-alert no-print" hidden role="alert"></div><header class="lube-head"><img src="logo-rayan.png?v=4" alt="Rayan"><div><h2>${esc(t('DAILY MAINTENANCE REPORT'))}</h2><p>${esc(t(report?.status || 'Draft report'))}</p><small>${esc(t('Mechanical Maintenance Department'))}</small></div><dl><div><dt>${esc(t('Form No.:'))}</dt><dd class="form-no">${esc(formNo('daily'))}</dd></div><div><dt>${esc(t('Approved by'))}</dt><dd class="approved-name">${esc(String(report?.approved_by || '').trim() || '—')}</dd></div></dl></header><div class="lube-meta"><label><span>${esc(t('Shift'))}</span><select id="daily-shift">${dailyShiftOptions(report?.shift, reportShiftTimes)}</select></label><label><span>${esc(t("Technician's name"))}</span><input id="daily-tech" value="${esc(techName)}" readonly></label><label><span>${esc(t('Date'))}</span><input id="daily-date" type="date" value="${esc(reportDate)}" required></label></div><div class="sheet-scroll"><table class="lube-table"><thead><tr><th>${esc(t('Seq.'))}</th><th>${esc(t('Machine'))}</th><th>${esc(t('Maintenance Type'))}</th><th>${esc(t('Repair Actions'))}</th><th>${esc(t('Start Time'))}</th><th>${esc(t('End Time'))}</th><th>${esc(t('Downtime (hrs)'))}</th></tr></thead><tbody id="daily-rows">${items.map(dailyRow).join('')}</tbody></table></div><section class="daily-parts"><div class="lube-list-head"><h3>${esc(t('SPARE PARTS USED'))}</h3><button type="button" class="no-print" id="daily-add-part">${esc(t('Add part'))}</button></div><div class="sheet-scroll"><table class="lube-table"><thead><tr><th>${esc(t('No.'))}</th><th>${esc(t('Part'))}</th><th>${esc(t('Part No.'))}</th><th>${esc(t('Qty'))}</th></tr></thead><tbody id="daily-parts">${parts.map(dailyPartRow).join('')}</tbody></table></div></section><label class="daily-notes"><span>${esc(t('GENERAL NOTES'))}</span><div class="daily-note-box"><textarea id="daily-notes">${esc(report?.general_notes || '')}</textarea><b class="daily-tdt">${esc(t('TDT'))}: <span id="daily-total">0.00 ${esc(t('h'))}</span></b></div></label><section class="daily-photos no-print"><div class="lube-list-head"><h3>${esc(t('Photos'))}</h3><button type="button" id="daily-add-photo">${esc(t('Add photo'))}</button></div><p class="photo-hint">${esc(t('Each photo prints on a full A3 page.'))}</p><div class="photo-strip" id="daily-photo-strip"></div><input id="daily-photo-file" type="file" accept="image/*" multiple hidden></section><div class="lube-actions no-print"><button type="button" id="daily-add">${esc(t('Add row'))}</button>${returned && !windowLock ? `<button type="button" id="daily-resend">${esc(t('Resend the report'))}</button>` : ''}<button type="button" id="daily-print">${esc(t('Print'))}</button></div></form><div id="daily-photo-print"></div>`;
   const dailyHeaderDl = workspace.querySelector('#daily-form .lube-head dl');
   if (dailyHeaderDl) {
     const headerBox = document.createElement('div');
@@ -6266,6 +6285,18 @@ async function drawWorkSchedule() {
   const entries = selectedPlantId
     ? await apiRequest(`/work-schedule?week_start=${encodeURIComponent(weekStart)}&plant_id=${encodeURIComponent(selectedPlantId)}`)
     : [];
+  const shiftTimeResult = selectedPlantId
+    ? await apiRequest(`/work-schedule/shift-times?week_start=${encodeURIComponent(weekStart)}&plant_id=${encodeURIComponent(selectedPlantId)}`)
+    : { shifts: {} };
+  const shiftTimes = shiftTimeResult.shifts || {};
+  const shiftKeys = ['Morning', 'Evening', 'Night', 'Morning12', 'Night12', 'Off'];
+  const shiftNames = { Morning: 'Morning', Evening: 'Evening', Night: 'Night', Morning12: 'Morning 12h', Night12: 'Night 12h' };
+  const savedShiftValue = { Morning: 'Morning (07:00 - 15:00)', Evening: 'Evening (15:00 - 23:00)', Night: 'Night (23:00 - 07:00)', Morning12: 'Morning 12h (07:00 - 19:00)', Night12: 'Night 12h (19:00 - 07:00)' };
+  const shiftText = (key) => {
+    if (key === 'Off') return t('Off');
+    const times = shiftTimes[key] || {};
+    return `${t(shiftNames[key])} (${times.start || '—'} - ${times.end || '—'})`;
+  };
   const entryMap = new Map();
   const shiftVotesByTechnician = new Map();
   const legacyShiftNames = {
@@ -6274,7 +6305,12 @@ async function drawWorkSchedule() {
     Night: 'Night (23:00 - 07:00)',
   };
   entries.forEach((item) => {
-    const key = legacyShiftNames[item.shift] || item.shift;
+    const rawShift = legacyShiftNames[item.shift] || item.shift;
+    const key = rawShift.startsWith('Morning 12h') ? 'Morning12'
+      : rawShift.startsWith('Night 12h') ? 'Night12'
+        : rawShift.startsWith('Morning') ? 'Morning'
+          : rawShift.startsWith('Evening') ? 'Evening'
+            : rawShift.startsWith('Night') ? 'Night' : rawShift;
     const technicianId = String(item.technician_id);
     if (!shiftVotesByTechnician.has(technicianId)) shiftVotesByTechnician.set(technicianId, new Map());
     const votes = shiftVotesByTechnician.get(technicianId);
@@ -6286,14 +6322,7 @@ async function drawWorkSchedule() {
     if (!entryMap.has(shift)) entryMap.set(shift, new Set());
     entryMap.get(shift).add(technicianId);
   });
-  const shifts = [
-    'Morning (07:00 - 15:00)',
-    'Evening (15:00 - 23:00)',
-    'Night (23:00 - 07:00)',
-    'Morning 12h (07:00 - 19:00)',
-    'Night 12h (19:00 - 07:00)',
-    'Off',
-  ];
+  const shifts = shiftKeys;
   const assignedTechnicians = (shift) => {
     const selected = entryMap.get(shift) || new Set();
     return (store.technicians || []).filter((technician) => selected.has(String(technician.technician_id)));
@@ -6306,18 +6335,22 @@ async function drawWorkSchedule() {
   const scheduleEditing = !technicianMode && Boolean(ui.scheduleEditing);
   const rosterRows = (editor) => shifts.map((shift) => {
     const assigned = assignedTechnicians(shift);
-    if (editor) return `<tr><th scope="row">${esc(t(shift))}</th><td>${esc(selectedPlant?.name || t('No plant selected'))}</td><td>${selectShift(shift)}</td></tr>`;
+    if (editor) return `<tr><th scope="row">${esc(shiftText(shift))}</th><td>${esc(selectedPlant?.name || t('No plant selected'))}</td><td>${selectShift(savedShiftValue[shift] || shift)}</td></tr>`;
     if (technicianMode) {
       if (!assigned.some((item) => String(item.technician_id) === String(currentTechId))) return '';
-      return `<tr><th scope="row">${esc(t(shift))}</th><td>${esc(selectedPlant?.name || t('No plant selected'))}</td><td><span class="schedule-shift${shift === 'Off' ? ' off' : ''}">${esc(t('Assigned to you for the whole week'))}</span></td></tr>`;
+      return `<tr><th scope="row">${esc(shiftText(shift))}</th><td>${esc(selectedPlant?.name || t('No plant selected'))}</td><td><span class="schedule-shift${shift === 'Off' ? ' off' : ''}">${esc(t('Assigned to you for the whole week'))}</span></td></tr>`;
     }
-    return `<tr><th scope="row">${esc(t(shift))}</th><td>${esc(selectedPlant?.name || t('No plant selected'))}</td><td><div class="schedule-roster-names">${assigned.map((item) => `<span>${esc(item.name)}</span>`).join('') || `<small>${esc(t('No technicians assigned'))}</small>`}</div></td></tr>`;
+    return `<tr><th scope="row">${esc(shiftText(shift))}</th><td>${esc(selectedPlant?.name || t('No plant selected'))}</td><td><div class="schedule-roster-names">${assigned.map((item) => `<span>${esc(item.name)}</span>`).join('') || `<small>${esc(t('No technicians assigned'))}</small>`}</div></td></tr>`;
   }).join('');
   document.getElementById('metric-grid').innerHTML = '';
-  document.getElementById('workspace').className = 'workspace';
+  document.getElementById('workspace').className = 'workspace schedule-workspace';
   const plantOptions = visiblePlants.map((plant) => `<option value="${esc(plant.plant_id)}"${String(plant.plant_id) === selectedPlantId ? ' selected' : ''}>${esc(plant.name)}</option>`).join('');
   const table = (editor) => `<div class="schedule-scroll"><table class="schedule-table"><thead><tr><th>${esc(t('Shift'))}</th><th>${esc(t('Plant'))}</th><th>${esc(t('Technicians'))}</th></tr></thead><tbody>${rosterRows(editor) || `<tr><td colspan="3" class="schedule-empty">${esc(t(technicianMode ? 'No schedule is linked to this account.' : 'No active technicians found.'))}</td></tr>`}</tbody></table></div>`;
-  document.getElementById('workspace').innerHTML = `<section class="panel schedule-panel"><div class="schedule-toolbar"><label>${esc(t('Schedule week starts Saturday'))}<input id="schedule-week" type="date" value="${esc(weekStart)}"></label><label>${esc(t('Plant'))}<select id="schedule-plant"${scheduleEditing ? ' disabled' : ''}>${plantOptions || `<option value="">${esc(t('No plants available'))}</option>`}</select></label><p>${esc(fmtDate(days[0]))} – ${esc(fmtDate(days[days.length - 1]))} · ${esc(t('Seven-day period; Friday has no shift'))}</p></div>${technicianMode ? '' : `<div class="schedule-view-actions"><p>${esc(t('Weekly technician roster'))} · ${esc(selectedPlant?.name || '')}</p><button id="schedule-edit" class="detail-button primary" type="button">${esc(t(scheduleEditing ? 'Close editor' : 'Edit schedule'))}</button></div>`}${table(false)}${scheduleEditing ? `<section class="schedule-editor"><div class="schedule-editor-heading"><h3>${esc(t('Edit weekly shifts'))}</h3><p>${esc(t('Choose a plant, then select technicians once for each shift. Repeat for each plant; assignments stay active all week.'))}</p><button id="schedule-edit-cancel" class="detail-button" type="button">${esc(t('Cancel'))}</button></div>${table(true)}</section>` : ''}${technicianMode ? `<p class="live-note">${esc(t('Your weekly work schedule is shown here. Contact the engineer if it needs to change.'))}</p>` : `<p id="schedule-message" class="form-error" role="status"></p>`}</section>`;
+  const timeFields = ['Morning', 'Evening', 'Night', 'Morning12', 'Night12'].map((shift) => {
+    const values = shiftTimes[shift] || {};
+    return `<label class="shift-time-row"><span>${esc(t(shiftNames[shift]))}<small>${esc(t('Shift duration'))}: ${esc(String(values.duration_hours ?? '—'))} ${esc(t('hours'))}</small></span><div><input type="time" data-shift-time-start="${shift}" value="${esc(values.start || '')}"${technicianMode ? ' readonly' : ''} aria-label="${esc(t(shiftNames[shift]))} ${esc(t('Start time'))}"><b>–</b><input type="time" data-shift-time-end="${shift}" value="${esc(values.end || '')}"${technicianMode ? ' readonly' : ''} aria-label="${esc(t(shiftNames[shift]))} ${esc(t('End time'))}"></div></label>`;
+  }).join('');
+  document.getElementById('workspace').innerHTML = `<section class="panel schedule-panel"><div class="schedule-toolbar"><label>${esc(t('Schedule week starts Saturday'))}<input id="schedule-week" type="date" value="${esc(weekStart)}"></label><label>${esc(t('Plant'))}<select id="schedule-plant"${scheduleEditing ? ' disabled' : ''}>${plantOptions || `<option value="">${esc(t('No plants available'))}</option>`}</select></label><p>${esc(fmtDate(days[0]))} – ${esc(fmtDate(days[days.length - 1]))} · ${esc(t('Seven-day period; Friday has no shift'))}</p></div>${technicianMode ? '' : `<div class="schedule-view-actions"><p>${esc(t('Weekly technician roster'))} · ${esc(selectedPlant?.name || '')}</p><button id="schedule-edit" class="detail-button primary" type="button">${esc(t(scheduleEditing ? 'Close editor' : 'Edit schedule'))}</button></div>`}${table(false)}${scheduleEditing ? `<section class="schedule-editor"><div class="schedule-editor-heading"><h3>${esc(t('Edit weekly shifts'))}</h3><p>${esc(t('Choose a plant, then select technicians once for each shift. Repeat for each plant; assignments stay active all week.'))}</p><button id="schedule-edit-cancel" class="detail-button" type="button">${esc(t('Cancel'))}</button></div>${table(true)}</section>` : ''}${technicianMode ? `<p class="live-note">${esc(t('Your weekly work schedule is shown here. Contact the engineer if it needs to change.'))}</p>` : `<p id="schedule-message" class="form-error" role="status"></p>`}</section><aside class="panel schedule-times-panel"><h2>${esc(t('Shift times'))}</h2><p>${esc(t('Set when each shift starts and ends. These times are saved for this plant and week.'))}</p><div class="shift-time-list">${timeFields}</div>${technicianMode ? '' : `<button id="save-shift-times" class="detail-button primary" type="button">${esc(t('Save shift times'))}</button>`}<small>${esc(t('Overnight shifts can end on the next day.'))}</small><p id="shift-time-message" class="form-error" role="status"></p></aside>`;
   const primaryAction = document.getElementById('primary-action');
   if (canMaintain()) {
     primaryAction.hidden = !scheduleEditing;
@@ -6338,6 +6371,23 @@ async function drawWorkSchedule() {
   document.getElementById('schedule-plant')?.addEventListener('change', (event) => {
     ui.schedulePlant = event.currentTarget.value;
     drawWorkSchedule().catch((error) => screenNotice(error.message, 'error'));
+  });
+  document.getElementById('save-shift-times')?.addEventListener('click', async () => {
+    const shifts = {};
+    ['Morning', 'Evening', 'Night', 'Morning12', 'Night12'].forEach((shift) => {
+      shifts[shift] = {
+        start: document.querySelector(`[data-shift-time-start="${shift}"]`)?.value,
+        end: document.querySelector(`[data-shift-time-end="${shift}"]`)?.value,
+      };
+    });
+    const message = document.getElementById('shift-time-message');
+    try {
+      await apiRequest('/work-schedule/shift-times', { method: 'PUT', body: JSON.stringify({ week_start: weekStart, plant_id: selectedPlantId, shifts }) });
+      toast(t('Shift times saved.'));
+      await drawWorkSchedule();
+    } catch (error) {
+      if (message) message.textContent = error.message;
+    }
   });
   if (!technicianMode) {
     document.querySelectorAll('[data-schedule-shift]').forEach((field) => field.addEventListener('change', () => {

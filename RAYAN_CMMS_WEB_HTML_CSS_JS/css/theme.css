@@ -942,6 +942,21 @@ body .workspace .schedule-panel .schedule-table thead th:not(:first-child){width
 body .workspace .schedule-editor .schedule-table{min-width:760px}
 @media(max-width:760px){body .workspace .schedule-panel{padding:10px}body .workspace .schedule-toolbar{align-items:start;flex-direction:column}body .workspace .schedule-toolbar input{width:100%}}
 @media(max-width:760px){body .workspace .schedule-editor-heading{grid-template-columns:minmax(0,1fr);align-items:start}}
+@media(min-width:1100px){body .workspace.schedule-workspace{grid-template-columns:minmax(0,1fr) minmax(270px,320px);align-items:start}}
+body .workspace .schedule-times-panel{min-width:0;padding:16px;align-self:stretch}
+body .workspace .schedule-times-panel h2{margin:0 0 8px;color:#203a2b;font-size:17px}
+body .workspace .schedule-times-panel>p:first-of-type{margin:0 0 14px;color:#59685b;font-size:12px;line-height:1.55}
+body .workspace .shift-time-list{display:grid;gap:8px}
+body .workspace .shift-time-row{display:grid;gap:7px;padding:9px;border:1px solid #d9e4d4;border-radius:8px;background:#fbfcf8}
+body .workspace .shift-time-row>span{display:flex;justify-content:space-between;gap:8px;align-items:center;color:#263c2b;font-size:12px;font-weight:800}
+body .workspace .shift-time-row small{color:#6a786b;font-size:10px;font-weight:600}
+body .workspace .shift-time-row>div{display:grid;grid-template-columns:minmax(0,1fr) 12px minmax(0,1fr);align-items:center;gap:5px}
+body .workspace .shift-time-row input{width:100%;min-width:0;height:36px;padding:4px 7px;border:1px solid #cbd8ca;border-radius:6px;background:#fff;color:#17251c;color-scheme:light;font:13px inherit}
+body .workspace .shift-time-row b{text-align:center;color:#69766b}
+body .workspace .schedule-times-panel>.detail-button{margin:12px 0 6px}
+body .workspace .schedule-times-panel>small{display:block;color:#657367;font-size:11px;line-height:1.5}
+body .workspace .schedule-times-panel .form-error{min-height:0;color:#b42318;font-size:12px}
+@media(max-width:1099px){body .workspace.schedule-workspace{grid-template-columns:minmax(0,1fr)}}
 @media(max-width:760px){
   body .workspace .iso-form .iso-head{display:none}
   body .workspace .iso-form .iso-row{grid-template-columns:minmax(0,1fr);gap:6px}

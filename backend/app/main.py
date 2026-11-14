@@ -1930,6 +1930,74 @@ def get_work_schedule(week_start: date, plant_id: str | None = None, db: Session
     ]
 
 
+DEFAULT_WORK_SHIFT_TIMES = {
+    'Morning': ('07:00', '15:00'),
+    'Evening': ('15:00', '23:00'),
+    'Night': ('23:00', '07:00'),
+    'Morning12': ('07:00', '19:00'),
+    'Night12': ('19:00', '07:00'),
+}
+
+
+def work_shift_times_payload(db: Session, week_start: date, plant_id: str) -> dict:
+    rows = db.query(WorkShiftTime).filter_by(week_start=week_start, plant_id=plant_id).all()
+    saved = {row.shift: row for row in rows}
+    result = {}
+    for shift, (default_start, default_end) in DEFAULT_WORK_SHIFT_TIMES.items():
+        row = saved.get(shift)
+        start = row.start_time.strftime('%H:%M') if row else default_start
+        end = row.end_time.strftime('%H:%M') if row else default_end
+        start_minutes = int(start[:2]) * 60 + int(start[3:])
+        end_minutes = int(end[:2]) * 60 + int(end[3:])
+        duration = (end_minutes - start_minutes) % (24 * 60)
+        result[shift] = {'start': start, 'end': end, 'duration_hours': round(duration / 60, 2)}
+    return result
+
+
+@app.get('/work-schedule/shift-times')
+def get_work_shift_times(week_start: date, plant_id: str, db: Session = Depends(get_db), u=Depends(auth)):
+    normalized_week = normalize_schedule_week_start(week_start)
+    if not db.query(Plant).filter_by(plant_id=plant_id).first():
+        raise HTTPException(404, 'Plant not found')
+    if is_technician_account(u):
+        if not u.technician_id:
+            raise HTTPException(403, 'This account is not linked to a technician')
+    elif u.role not in ENGINEER:
+        raise HTTPException(403, 'Insufficient permission')
+    return {'week_start': normalized_week.isoformat(), 'plant_id': plant_id, 'shifts': work_shift_times_payload(db, normalized_week, plant_id)}
+
+
+@app.put('/work-schedule/shift-times')
+def save_work_shift_times(data: dict, db: Session = Depends(get_db), u=Depends(role(*ENGINEER))):
+    try:
+        week_start = normalize_schedule_week_start(date.fromisoformat(str(data.get('week_start', ''))))
+    except ValueError:
+        raise HTTPException(400, 'Select a valid schedule week')
+    plant_id = str(data.get('plant_id') or '').strip()
+    if not plant_id or not db.query(Plant).filter_by(plant_id=plant_id, active=True).first():
+        raise HTTPException(404, 'Active plant not found')
+    submitted = data.get('shifts') or {}
+    if set(submitted) != set(DEFAULT_WORK_SHIFT_TIMES):
+        raise HTTPException(400, 'Enter start and end times for all five shifts')
+    parsed = {}
+    for shift in DEFAULT_WORK_SHIFT_TIMES:
+        values = submitted.get(shift) or {}
+        try:
+            start = datetime.strptime(str(values.get('start', '')), '%H:%M').time()
+            end = datetime.strptime(str(values.get('end', '')), '%H:%M').time()
+        except ValueError:
+            raise HTTPException(400, 'Enter valid 24-hour start and end times')
+        if start == end:
+            raise HTTPException(400, 'A shift cannot have the same start and end time')
+        parsed[shift] = (start, end)
+    db.query(WorkShiftTime).filter_by(plant_id=plant_id, week_start=week_start).delete(synchronize_session=False)
+    for shift, (start, end) in parsed.items():
+        db.add(WorkShiftTime(plant_id=plant_id, week_start=week_start, shift=shift, start_time=start, end_time=end, updated_by=u.id))
+    audit(db, u, 'UPDATE', 'WorkShiftTime', f'{plant_id}:{week_start.isoformat()}', new={key: (value[0].strftime('%H:%M'), value[1].strftime('%H:%M')) for key, value in parsed.items()})
+    db.commit()
+    return {'ok': True, 'week_start': week_start.isoformat(), 'plant_id': plant_id, 'shifts': work_shift_times_payload(db, week_start, plant_id)}
+
+
 @app.put('/work-schedule')
 def save_work_schedule(data: WorkScheduleWeekIn, db: Session = Depends(get_db), u=Depends(role(*ENGINEER))):
     week_start = normalize_schedule_week_start(data.week_start)
@@ -4825,6 +4893,23 @@ def report_to_dict(r, items, db: Session):
     report['technician_code'] = r.technician_id
     report['technician_name'] = technician.name if technician else None
     report['technician_id'] = technician.name if technician else None
+    report['shift_window'] = None
+    report_plant_id = r.plant_id
+    if not report_plant_id:
+        item_plants = {item.plant_id for item in items if item.plant_id}
+        report_plant_id = next(iter(item_plants)) if len(item_plants) == 1 else None
+    if report_plant_id and r.report_date and r.shift:
+        raw_shift = str(r.shift)
+        shift_key = ('Morning12' if raw_shift.startswith('Morning 12h') else
+                     'Night12' if raw_shift.startswith('Night 12h') else
+                     'Morning' if raw_shift.startswith('Morning') else
+                     'Evening' if raw_shift.startswith('Evening') else
+                     'Night' if raw_shift.startswith('Night') else None)
+        if shift_key:
+            normalized_week = normalize_schedule_week_start(r.report_date)
+            window = work_shift_times_payload(db, normalized_week, report_plant_id).get(shift_key)
+            if window:
+                report['shift_window'] = window
     linked_ids = list({item.wo_id for item in items if item.wo_id})
     numbered_orders = {
         order.work_order_id: order.work_order_number
