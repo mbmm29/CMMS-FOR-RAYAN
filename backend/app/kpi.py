@@ -259,7 +259,7 @@ def compute_kpi(
 
     reports = db.query(DailyReport).all()
     if technician_id:
-        reports = [row for row in reports if row.technician_id == technician_id]
+        reports = [row for row in reports if row.technician_id == technician_id or technician_id in (row.team_technician_ids or '').split(',')]
     report_by_id = {row.id: row for row in reports}
     items = db.query(DailyReportItem).all() if reports else []
     items = [row for row in items if row.report_id in report_by_id]
@@ -278,7 +278,7 @@ def compute_kpi(
         orders = [row for row in orders if row.work_order_id in assigned or row.assigned_technician_id == technician_id]
     records = db.query(MachineRecord).all()
     if technician_id:
-        records = [row for row in records if row.technician_id == technician_id]
+        records = [row for row in records if row.technician_id == technician_id or technician_id in (row.team_technician_ids or '').split(',')]
     plans = [row for row in db.query(PMPlan).all() if row.active is not False]
     components = db.query(Component).all()
 

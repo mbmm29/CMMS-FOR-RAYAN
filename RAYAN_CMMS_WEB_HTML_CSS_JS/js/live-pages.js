@@ -3480,7 +3480,7 @@ function machineLogPaper(equipment, rows) {
     const reason = kind === 'Oil change' ? t('Oil change') : (row.cause || '—');
     const downtime = row.downtime_h == null || row.downtime_h === '' ? '—' : numberText(row.downtime_h, 2);
     const remove = canMaintain() ? `<td class="no-print"><button type="button" class="detail-button danger log-delete" data-delete="/machine-records" data-delete-id="${esc(row.id)}" data-delete-keep="1">${esc(t('Delete'))}</button></td>` : '';
-    return `<tr><td>${index + 1}</td><td>${esc(fmtDate(row.record_date))}</td><td>${esc(logCode(kind))}</td><td>${esc(reason)}</td><td>${esc(parts.work)}</td><td>${esc(workOrderNumber(row) || '—')}</td><td>${esc(parts.names)}</td><td>${esc(parts.numbers)}</td><td>${esc(parts.quantity)}</td><td>${esc(downtime)}</td><td>${esc(technicianName(row.technician_id) || '—')}</td>${remove}</tr>`;
+    return `<tr><td>${index + 1}</td><td>${esc(fmtDate(row.record_date))}</td><td>${esc(logCode(kind))}</td><td>${esc(reason)}</td><td>${esc(parts.work)}</td><td>${esc(workOrderNumber(row) || '—')}</td><td>${esc(parts.names)}</td><td>${esc(parts.numbers)}</td><td>${esc(parts.quantity)}</td><td>${esc(downtime)}</td><td>${esc([technicianName(row.technician_id), row.team_technicians].filter(Boolean).join(', ') || '—')}</td>${remove}</tr>`;
   }).join('') || `<tr><td colspan="${canMaintain() ? 12 : 11}">${esc(t('No log lines for this machine yet.'))}</td></tr>`;
   const commissioned = String(equipment?.commissioning_date || '').slice(0, 10);
   const lock = canMaintain() ? '' : ' readonly';

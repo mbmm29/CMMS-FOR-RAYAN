@@ -130,6 +130,10 @@ def ensure_additive_columns():
                         ))
         if 'daily_reports' in tables:
             existing = {c['name'] for c in inspector.get_columns('daily_reports')}
+            for name in ('team_technician_ids', 'team_technicians'):
+                if name not in existing:
+                    with engine.begin() as conn:
+                        conn.execute(text(f'ALTER TABLE daily_reports ADD COLUMN {name} TEXT'))
             if 'general_notes' not in existing:
                 with engine.begin() as conn:
                     conn.execute(text('ALTER TABLE daily_reports ADD COLUMN general_notes TEXT'))
@@ -162,6 +166,12 @@ def ensure_additive_columns():
                         "AND report.status = 'Returned' "
                         "AND report.returned_at IS NULL"
                     ))
+        if 'machine_records' in tables:
+            existing = {c['name'] for c in inspector.get_columns('machine_records')}
+            with engine.begin() as conn:
+                for name in ('team_technician_ids', 'team_technicians'):
+                    if name not in existing:
+                        conn.execute(text(f'ALTER TABLE machine_records ADD COLUMN {name} TEXT'))
         for table in ('work_orders', 'pm_plans'):
             if table not in tables:
                 continue
@@ -3822,12 +3832,16 @@ def collapse_duplicate_machine_logs(db: Session) -> int:
     return removed
 
 
-def record_high_machine(db, work_order, technician_id, action=None):
+def record_high_machine(db, work_order, technician_id, action=None, teammate_ids=None):
     """Machine history is kept only for High corrective or emergency work."""
     if work_order.work_order_type not in {'Corrective', 'Emergency'} or work_order.priority != 'High':
         return None
     existing = merge_machine_records_for_wo(db, work_order.work_order_id)
     if existing:
+        if teammate_ids:
+            names = technician_names(db, teammate_ids)
+            existing.team_technician_ids = ','.join(teammate_ids)
+            existing.team_technicians = ', '.join(names)
         if action:
             existing.action = action
             existing.description = action
@@ -3842,6 +3856,8 @@ def record_high_machine(db, work_order, technician_id, action=None):
         wo_id=work_order.work_order_id,
         pm_id=work_order.pm_id,
         technician_id=technician_id,
+        team_technician_ids=','.join(teammate_ids or []) or None,
+        team_technicians=', '.join(technician_names(db, teammate_ids or [])) or None,
         description=work_order.problem_description or work_order.work_description,
         cause=work_order.failure_cause or work_order.problem_description,
         action=action,
@@ -4051,10 +4067,12 @@ def expire_pending_assignments(db):
 def release_other_technicians(db, work_order, technician_id):
     """The technician who accepts owns the order. Remove it from every other technician."""
     rows = db.query(WorkOrderAssignment).filter_by(work_order_id=work_order.work_order_id).all()
-    if any(row.response == 'Accepted' and row.technician_id != technician_id for row in rows):
+    teammate_ids, _names, _shift = work_order_team(db, work_order, technician_id, date.today())
+    retained_team = set(teammate_ids)
+    if any(row.response == 'Accepted' and row.technician_id != technician_id and row.technician_id not in retained_team for row in rows):
         raise HTTPException(409, 'Another technician already accepted this work order')
     for row in rows:
-        if row.technician_id == technician_id:
+        if row.technician_id == technician_id or row.technician_id in retained_team:
             continue
         retract_assignment(db, work_order, row.technician_id)
         account = db.query(User).filter(User.technician_id == row.technician_id, User.is_active == True).first()
@@ -4065,13 +4083,13 @@ def release_other_technicians(db, work_order, technician_id):
         retract_assignment(db, work_order, work_order.assigned_technician_id)
     work_order.assigned_technician_id = technician_id
 
-def commit_accepted_work(db, actor, work_order, technician_id):
+def commit_accepted_work(db, actor, work_order, technician_id, teammate_ids=None):
     """Write the accepted order into the technician report and the shared records."""
     issue_work_order_number(db, work_order)
     deliver_to_technician(db, actor, work_order, technician_id)
     if not work_order.records_committed:
         consume_annual_plan(db, work_order, date.today())
-        record_high_machine(db, work_order, technician_id)
+        record_high_machine(db, work_order, technician_id, teammate_ids=teammate_ids)
         work_order.records_committed = True
     if work_order.status in ('Open', 'Overdue'):
         work_order.status = 'In Progress'
@@ -4268,7 +4286,30 @@ def accept_saved_job(db, actor, work_order):
         release_other_technicians(db, work_order, technician_id)
         row.response = 'Accepted'
         row.responded_at = datetime.utcnow()
-        commit_accepted_work(db, actor, work_order, technician_id)
+        teammate_ids, teammate_names, scheduled_shift = work_order_team(db, work_order, technician_id, date.today())
+        for teammate_id in teammate_ids:
+            assignment = db.query(WorkOrderAssignment).filter_by(work_order_id=work_order.work_order_id, technician_id=teammate_id).first()
+            if assignment is None:
+                assignment = WorkOrderAssignment(work_order_id=work_order.work_order_id, technician_id=teammate_id, response='Accepted', assigned_at=datetime.utcnow(), responded_at=datetime.utcnow())
+                db.add(assignment)
+            else:
+                assignment.response = 'Accepted'
+                assignment.responded_at = assignment.responded_at or datetime.utcnow()
+            account = db.query(User).filter(User.technician_id == teammate_id, User.is_active == True).first()
+            if account:
+                notify(db, account.id, 'Work Order Team', f'{work_order.work_order_number or "Work order"} was accepted by your shift teammate. You were added to the same-shift work team.', 'work_order', work_order.work_order_id)
+        commit_accepted_work(db, actor, work_order, technician_id, teammate_ids=teammate_ids)
+        plant = db.query(Equipment).filter_by(equipment_id=work_order.equipment_id).first() if work_order.equipment_id else None
+        report = db.query(DailyReport).filter_by(report_date=date.today(), technician_id=technician_id).filter(DailyReport.status.in_(('Draft', 'Returned'))).order_by(DailyReport.id.desc()).first()
+        if report:
+            report.plant_id = report.plant_id or (plant.plant_id if plant else work_order.manual_plant_id)
+            report.team_technician_ids = ','.join(teammate_ids) or None
+            report.team_technicians = ', '.join(teammate_names) or None
+            if not report.shift and scheduled_shift:
+                report.shift = canonical_shift_label(scheduled_shift)
+            for machine_record in db.query(MachineRecord).filter_by(wo_id=work_order.work_order_id).all():
+                machine_record.team_technician_ids = report.team_technician_ids
+                machine_record.team_technicians = report.team_technicians
         refresh_work_order_response(db, work_order)
     else:
         release_other_technicians(db, work_order, technician_id)
@@ -4755,6 +4796,8 @@ def upsert_machine_log_from_daily_item(db: Session, report, row):
     record.wo_id = wo_id
     record.pm_id = getattr(row, 'pm_id', None)
     record.technician_id = report.technician_id
+    record.team_technician_ids = report.team_technician_ids
+    record.team_technicians = report.team_technicians
     record.description = getattr(row, 'action_taken', None)
     record.cause = getattr(row, 'failure_reason', None)
     record.action = getattr(row, 'action_taken', None)
@@ -4891,7 +4934,8 @@ def report_to_dict(r, items, db: Session):
     }
     # A printed report identifies the person, never their user login or code.
     report['technician_code'] = r.technician_id
-    report['technician_name'] = technician.name if technician else None
+    team_names = [name.strip() for name in (r.team_technicians or '').split(',') if name.strip()]
+    report['technician_name'] = ', '.join(([technician.name] if technician else []) + team_names) or None
     report['technician_id'] = technician.name if technician else None
     report['shift_window'] = None
     report_plant_id = r.plant_id
@@ -5130,6 +5174,7 @@ def create_report(
         )
         db.add(r)
         db.flush()
+        store_report_team(db, r, technician_id=technician_id, shift=r.shift)
 
         linked_wos = []
         machine_records = []
@@ -5214,6 +5259,10 @@ def create_report(
         r.action_taken = first.action_taken
         r.general_notes = data.general_notes
         r.labor_hours = None
+        if not r.plant_id and first.plant_id:
+            r.plant_id = first.plant_id
+        store_report_team(db, r, technician_id=technician_id, shift=r.shift)
+        sync_machine_log_from_daily_report(db, r, db.query(DailyReportItem).filter_by(report_id=r.id).all())
 
         apply_spare_stock(db, '', spare_text_from_items(db.query(DailyReportItem).filter_by(report_id=r.id).all()))
 
@@ -5285,6 +5334,11 @@ def update_report(
                 r.general_notes = data.general_notes
             if data.plant_id is not None:
                 r.plant_id = data.plant_id
+
+        current_team_ids, current_team_names, _scheduled_shift = store_report_team(db, r, technician_id=r.technician_id, shift=r.shift)
+        for machine_record in db.query(MachineRecord).filter_by(daily_report_id=r.id).all():
+            machine_record.team_technician_ids = ','.join(current_team_ids) or None
+            machine_record.team_technicians = ', '.join(current_team_names) or None
 
         if data.items is not None:
             if not data.items:
@@ -5381,6 +5435,12 @@ def update_report(
             sync_machine_log_from_daily_report(db, r, saved_rows)
 
             first = data.items[0]
+            if not r.plant_id and saved_rows:
+                item_plants = {item.plant_id for item in saved_rows if item.plant_id}
+                if len(item_plants) == 1:
+                    r.plant_id = next(iter(item_plants))
+            store_report_team(db, r, technician_id=r.technician_id, shift=r.shift)
+            sync_machine_log_from_daily_report(db, r, saved_rows)
             r.equipment_id = first.equipment_id
             r.work_summary = first.action_taken
             r.finding = first.failure_reason
@@ -6048,6 +6108,71 @@ def normalize_daily_shift(value: str | None) -> str | None:
     if text in DAILY_SHIFTS or text in DAILY_SHIFTS_LEGACY:
         return text
     raise HTTPException(400, 'Choose a valid daily maintenance shift')
+
+
+def shift_category(value: str | None) -> str | None:
+    text_value = (value or '').strip()
+    if text_value.startswith(('Morning 12h', 'Morning (07:00 - 19:00)')):
+        return 'Morning12'
+    if text_value.startswith(('Night 12h', 'Night (19:00 - 07:00)')):
+        return 'Night12'
+    if text_value.startswith('Morning'):
+        return 'Morning'
+    if text_value.startswith('Evening'):
+        return 'Evening'
+    if text_value.startswith('Night'):
+        return 'Night'
+    return None
+
+
+def canonical_shift_label(value: str | None) -> str | None:
+    return {
+        'Morning': 'Morning (07:00 - 15:00)',
+        'Evening': 'Evening (15:00 - 23:00)',
+        'Night': 'Night (23:00 - 07:00)',
+        'Morning12': 'Morning 12h (07:00 - 19:00)',
+        'Night12': 'Night 12h (19:00 - 07:00)',
+    }.get(shift_category(value))
+
+
+def scheduled_team_details(db, technician_id, work_date, plant_id, shift=None):
+    if not technician_id or not work_date or not plant_id:
+        return [], [], None
+    rows = db.query(WorkSchedule).filter_by(plant_id=plant_id, work_date=work_date).all()
+    own = next((row for row in rows if row.technician_id == technician_id), None)
+    if not own or (shift and shift_category(own.shift) != shift_category(shift)):
+        return [], [], own.shift if own else None
+    own_shift = shift_category(own.shift)
+    team_ids = sorted({row.technician_id for row in rows if row.technician_id != technician_id and shift_category(row.shift) == own_shift})
+    names = db.query(Technician).filter(Technician.technician_id.in_(team_ids)).order_by(Technician.name).all() if team_ids else []
+    return team_ids, [row.name for row in names], own.shift
+
+
+def store_report_team(db, report, technician_id=None, shift=None):
+    ids, names, scheduled_shift = scheduled_team_details(
+        db,
+        technician_id or report.technician_id,
+        report.report_date,
+        report.plant_id,
+    )
+    if scheduled_shift:
+        report.shift = canonical_shift_label(scheduled_shift) or report.shift
+    report.team_technician_ids = ','.join(ids) if ids else None
+    report.team_technicians = ', '.join(names) if names else None
+    return ids, names, scheduled_shift
+
+
+def work_order_team(db, work_order, technician_id, work_date=None):
+    equipment = db.query(Equipment).filter_by(equipment_id=work_order.equipment_id).first() if work_order.equipment_id else None
+    plant_id = equipment.plant_id if equipment else work_order.manual_plant_id
+    return scheduled_team_details(db, technician_id, work_date or date.today(), plant_id)
+
+
+def technician_names(db, technician_ids):
+    ids = [value for value in (technician_ids or []) if value]
+    rows = db.query(Technician).filter(Technician.technician_id.in_(ids)).all() if ids else []
+    names_by_id = {row.technician_id: row.name for row in rows}
+    return [names_by_id[value] for value in ids if value in names_by_id]
 
 
 def propose_lubrication_equipment(db, report, technician_id, code, name):

@@ -380,6 +380,8 @@ class DailyReport(Base):
         String(30), default='Draft', index=True
     )
     shift: Mapped[str | None] = mapped_column(String(60), nullable=True)
+    team_technician_ids: Mapped[str | None] = mapped_column(Text, nullable=True)
+    team_technicians: Mapped[str | None] = mapped_column(Text, nullable=True)
     shift_engineer: Mapped[str | None] = mapped_column(String(150), nullable=True)
 
     created_at: Mapped[datetime] = mapped_column(
@@ -530,6 +532,8 @@ class MachineRecord(Base):
     wo_id: Mapped[str|None]=mapped_column(String(60),nullable=True)
     pm_id: Mapped[str|None]=mapped_column(String(60),nullable=True)
     technician_id: Mapped[str|None]=mapped_column(String(50),nullable=True)
+    team_technician_ids: Mapped[str|None]=mapped_column(Text,nullable=True)
+    team_technicians: Mapped[str|None]=mapped_column(Text,nullable=True)
     description: Mapped[str|None]=mapped_column(Text,nullable=True)
     cause: Mapped[str|None]=mapped_column(Text,nullable=True)
     action: Mapped[str|None]=mapped_column(Text,nullable=True)
