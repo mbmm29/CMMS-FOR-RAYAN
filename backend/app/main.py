@@ -102,6 +102,9 @@ def ensure_additive_columns():
                     conn.execute(text('ALTER TABLE work_schedules ADD COLUMN plant_id VARCHAR(50)'))
             with engine.begin() as conn:
                 conn.execute(text('CREATE INDEX IF NOT EXISTS ix_work_schedules_plant_id ON work_schedules (plant_id)'))
+                if engine.dialect.name == 'postgresql':
+                    conn.execute(text('ALTER TABLE work_schedules DROP CONSTRAINT IF EXISTS uq_work_schedule_technician_date'))
+                    conn.execute(text('CREATE UNIQUE INDEX IF NOT EXISTS uq_work_schedule_technician_date_plant ON work_schedules (technician_id, work_date, plant_id)'))
         for table in (AppSecret.__table__, PushSubscription.__table__, PushDelivery.__table__):
             if table.name not in tables:
                 table.create(bind=engine, checkfirst=True)
@@ -1970,20 +1973,6 @@ def save_work_schedule(data: WorkScheduleWeekIn, db: Session = Depends(get_db), 
                 WorkSchedule.technician_id.in_(weekly_assignments.keys()),
                 WorkSchedule.plant_id.is_(None),
             ).delete(synchronize_session=False)
-        assigned_query = db.query(WorkSchedule).filter(
-            WorkSchedule.work_date >= week_start,
-            WorkSchedule.work_date < week_end,
-            WorkSchedule.technician_id.in_(weekly_assignments.keys()),
-        )
-        if plant_id:
-            assigned_query = assigned_query.filter(
-                or_(WorkSchedule.plant_id != plant_id, WorkSchedule.plant_id.is_(None)),
-            )
-        else:
-            assigned_query = assigned_query.filter(WorkSchedule.plant_id.isnot(None))
-        assigned_elsewhere = assigned_query.first()
-        if assigned_elsewhere:
-            raise HTTPException(400, 'A technician is already scheduled at another plant this week')
     for technician_id, shift in weekly_assignments.items():
         for day_offset in range(6):
             entries.append(WorkSchedule(

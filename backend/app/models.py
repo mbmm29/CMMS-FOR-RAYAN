@@ -94,7 +94,7 @@ class Technician(Base):
 
 class WorkSchedule(Base):
     __tablename__='work_schedules'
-    __table_args__=(UniqueConstraint('technician_id','work_date',name='uq_work_schedule_technician_date'),)
+    __table_args__=(UniqueConstraint('technician_id','work_date','plant_id',name='uq_work_schedule_technician_date_plant'),)
     id: Mapped[int]=mapped_column(Integer,primary_key=True)
     technician_id: Mapped[str]=mapped_column(String(50),ForeignKey('technicians.technician_id'),index=True)
     plant_id: Mapped[str|None]=mapped_column(String(50),nullable=True,index=True)
