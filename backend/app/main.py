@@ -1896,10 +1896,12 @@ def technicians(db:Session=Depends(get_db),u=Depends(auth)):
 
 @app.get('/work-schedule')
 def get_work_schedule(week_start: date, db: Session = Depends(get_db), u=Depends(auth)):
+    if week_start.weekday() != 5:
+        raise HTTPException(400, 'The work schedule week must start on Saturday')
     week_end = week_start + timedelta(days=6)
     query = db.query(WorkSchedule).filter(
         WorkSchedule.work_date >= week_start,
-        WorkSchedule.work_date <= week_end,
+        WorkSchedule.work_date < week_end,
     )
     if is_technician_account(u):
         if not u.technician_id:
@@ -1915,6 +1917,8 @@ def get_work_schedule(week_start: date, db: Session = Depends(get_db), u=Depends
 
 @app.put('/work-schedule')
 def save_work_schedule(data: WorkScheduleWeekIn, db: Session = Depends(get_db), u=Depends(role(*ENGINEER))):
+    if data.week_start.weekday() != 5:
+        raise HTTPException(400, 'The work schedule week must start on Saturday')
     week_end = data.week_start + timedelta(days=6)
     entries = []
     seen = set()
@@ -1928,8 +1932,8 @@ def save_work_schedule(data: WorkScheduleWeekIn, db: Session = Depends(get_db), 
     }
     for item in data.entries:
         technician_id = item.technician_id.strip()
-        if item.work_date < data.week_start or item.work_date > week_end:
-            raise HTTPException(400, 'Schedule dates must be within the selected week')
+        if item.work_date < data.week_start or item.work_date >= week_end:
+            raise HTTPException(400, 'Schedule dates must be Saturday through Thursday; Friday is excluded')
         if item.shift not in valid_shifts:
             raise HTTPException(400, 'Invalid shift')
         key = (technician_id, item.work_date)
