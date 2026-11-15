@@ -6135,11 +6135,11 @@ function setSpareImportProgress(percent, phase) {
   if (label) {
     const equipmentMode = ui.page === 'equipment';
     if (phase === 'done') {
-      label.textContent = t(equipmentMode ? 'Updating equipment list…' : 'Updating spare parts list…');
+      label.textContent = t(equipmentMode ? 'Updating equipment list…' : 'Saving spare part updates…');
     } else if (phase === 'processing') {
-      label.textContent = t(equipmentMode ? 'Reading the file and adding equipment…' : 'Reading the file and updating stock…');
+      label.textContent = t(equipmentMode ? 'Reading the file and adding equipment…' : 'Reading rows, fixing Arabic names, and updating stock…');
     } else {
-      label.textContent = t('Reading the file…');
+      label.textContent = t(equipmentMode ? 'Uploading equipment file…' : 'Uploading stock PDF…');
     }
   }
 }
@@ -6152,18 +6152,51 @@ function showSpareImportOverlay() {
     overlay.className = 'spare-import-overlay';
     overlay.setAttribute('role', 'status');
     overlay.setAttribute('aria-live', 'polite');
-    overlay.innerHTML = `<div class="spare-import-card">
-      <div class="spare-import-spinner" aria-hidden="true"></div>
-      <p class="spare-import-label">${esc(t('Reading the file…'))}</p>
-      <div class="spare-import-bar"><span class="spare-import-fill"></span></div>
-      <b class="spare-import-pct">0%</b>
-    </div>`;
     document.body.appendChild(overlay);
   }
+  overlay.innerHTML = `<div class="spare-import-card">
+    <div class="spare-import-mark" aria-hidden="true">▤</div>
+    <p class="spare-import-label">${esc(t('Reading the file…'))}</p>
+    <p class="spare-import-detail">${esc(t(ui.page === 'equipment' ? 'The system reads equipment details from this file.' : 'The system reads material numbers, Arabic names, shelf, column, and final balance.'))}</p>
+    <div class="spare-import-bar"><span class="spare-import-fill"></span></div>
+    <b class="spare-import-pct">0%</b>
+  </div>`;
+  overlay.classList.remove('spare-import-report-mode');
   overlay.hidden = false;
   setSpareImportProgress(0, 'upload');
   const importBtn = document.getElementById('import-file-action');
   if (importBtn) importBtn.disabled = true;
+}
+
+function showSpareImportReport(result, filename) {
+  let overlay = document.getElementById('spare-import-overlay');
+  if (!overlay) return;
+  const links = result?.category_links || {};
+  const metrics = [
+    ['Rows read', result?.rows],
+    ['New materials', result?.created],
+    ['Updated materials', result?.updated],
+    ['Rows skipped', result?.skipped],
+    ['Rows with shelf', result?.with_shelf],
+    ['Rows with column', result?.with_column],
+    ['Category matches', links?.matched_parts],
+    ['Equipment in matched categories', links?.equipment_matched],
+    ['New equipment links', links?.links_added],
+  ];
+  overlay.classList.add('spare-import-report-mode');
+  overlay.innerHTML = `<section class="spare-import-report" role="dialog" aria-modal="true" aria-labelledby="spare-import-report-title">
+    <div class="spare-import-report-head"><span class="spare-import-mark">✓</span><div><h2 id="spare-import-report-title">${esc(t('Stock import complete'))}</h2><p>${esc(filename || t('Stock PDF'))}</p></div></div>
+    <p class="spare-import-report-note">${esc(t('Arabic names were normalized. Existing materials were matched by material number; new numbers were added.'))}</p>
+    <div class="spare-import-report-grid">${metrics.map(([label, value]) => `<div><span>${esc(t(label))}</span><b>${esc(value == null ? '0' : Number(value).toLocaleString())}</b></div>`).join('')}</div>
+    <p class="spare-import-report-foot">${esc(t('Parts are linked to equipment when their category is identified in the material data.'))}</p>
+    <button class="primary spare-import-report-close" type="button">${esc(t('Done'))}</button>
+  </section>`;
+  overlay.hidden = false;
+  overlay.querySelector('.spare-import-report-close')?.addEventListener('click', () => {
+    overlay.hidden = true;
+    overlay.classList.remove('spare-import-report-mode');
+  });
+  overlay.querySelector('.spare-import-report-close')?.focus();
 }
 
 function hideSpareImportOverlay() {
@@ -6190,13 +6223,7 @@ async function uploadSpareStockPdf(file) {
     setSpareImportProgress(100, 'done');
     await drawSpareParts();
     hideSpareImportOverlay();
-    const created = Number(result?.created) || 0;
-    const updated = Number(result?.updated) || 0;
-    const linked = Number(result?.category_links?.links_added) || 0;
-    toast(t('Stock PDF imported: {created} new Part No., {updated} existing Part No. updated (no duplicates), {linked} Category links.')
-      .replace('{created}', String(created))
-      .replace('{updated}', String(updated))
-      .replace('{linked}', String(linked)));
+    showSpareImportReport(result, file.name);
   } catch (exception) {
     hideSpareImportOverlay();
     toast(t(exception.message) || t('Could not import the stock PDF.'));

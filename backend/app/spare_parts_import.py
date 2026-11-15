@@ -107,17 +107,27 @@ def _next_part_seq(db: Session) -> int:
 
 
 def _equipment_by_category(db: Session) -> dict[str, set[str]]:
-    """Map Category (equipment_type / model) → equipment codes."""
+    """Map equipment Category labels/codes → equipment codes."""
     by_category: dict[str, set[str]] = {}
     for row in db.query(Equipment).all():
         code = (row.equipment_id or '').strip()
         if not code:
             continue
         for raw in (row.equipment_type, row.model):
-            cat = _clean(raw).upper()
-            if len(cat) < 3 or not re.fullmatch(r'[A-Z0-9]{3,12}', cat):
+            cat = _clean(raw)
+            if len(cat) < 3:
                 continue
-            by_category.setdefault(cat, set()).add(code)
+            if re.fullmatch(r'[A-Za-z0-9]{3,12}', cat):
+                aliases = {cat.upper()}
+            elif raw == row.equipment_type:
+                # Equipment type is the actual Category field. Keep its full
+                # label so natural-language categories can match descriptions.
+                aliases = {cat.casefold()}
+                aliases.update(token.upper() for token in re.findall(r'(?<![A-Za-z0-9])[A-Z][A-Z0-9]{2,11}(?![A-Za-z0-9])', cat))
+            else:
+                aliases = set()
+            for alias in aliases:
+                by_category.setdefault(alias, set()).add(code)
     return by_category
 
 
@@ -137,6 +147,7 @@ def link_spare_parts_by_category(
         'matched_parts': 0,
         'links_added': 0,
         'equipment_linked': 0,
+        'equipment_matched': 0,
     }
     if not by_category:
         return empty
@@ -144,10 +155,19 @@ def link_spare_parts_by_category(
     categories = sorted(by_category.keys(), key=len, reverse=True)
     if not categories:
         return empty
-    pattern = re.compile(
-        r'(?<![A-Za-z0-9])(' + '|'.join(re.escape(cat) for cat in categories) + r')(?![A-Za-z0-9])',
-        re.IGNORECASE,
-    )
+    ascii_categories = [cat for cat in categories if re.fullmatch(r'[A-Z0-9]{3,12}', cat)]
+    text_categories = [cat for cat in categories if cat not in ascii_categories]
+    patterns = []
+    if ascii_categories:
+        patterns.append(re.compile(
+            r'(?<![A-Za-z0-9])(' + '|'.join(re.escape(cat) for cat in ascii_categories) + r')(?![A-Za-z0-9])',
+            re.IGNORECASE,
+        ))
+    if text_categories:
+        patterns.append(re.compile(
+            r'(?<!\w)(' + '|'.join(re.escape(cat) for cat in text_categories) + r')(?!\w)',
+            re.IGNORECASE,
+        ))
 
     query = db.query(SparePart)
     if part_ids is not None:
@@ -167,15 +187,20 @@ def link_spare_parts_by_category(
     matched_parts = 0
     links_added = 0
     equipment_hit: set[str] = set()
+    equipment_matched: set[str] = set()
 
     for part in parts:
         text = f'{part.part_number or ""} {part.name or ""}'
-        found = {match.group(1).upper() for match in pattern.finditer(text)}
+        found = {
+            match.group(1).upper() if match.group(1).isascii() else match.group(1).casefold()
+            for pattern in patterns for match in pattern.finditer(text)
+        }
         if not found:
             continue
         matched_parts += 1
         for cat in found:
             for equipment_id in by_category.get(cat, ()):
+                equipment_matched.add(equipment_id)
                 key = (part.part_id, equipment_id)
                 if key in existing_links:
                     continue
@@ -193,6 +218,7 @@ def link_spare_parts_by_category(
         'matched_parts': matched_parts,
         'links_added': links_added,
         'equipment_linked': len(equipment_hit),
+        'equipment_matched': len(equipment_matched),
     }
 
 
@@ -289,7 +315,8 @@ def parse_mekanik_stock_text(text: str) -> list[dict]:
 
     Text order from pdftotext -raw:
       part no → unit → name → [optional nums] → مخزن → رف/عمود → columns → الرصيد النهائي
-    Stock is the last numeric field before the next material (column الرصيد النهائي).
+    The final balance is the first numeric field before the warehouse block in
+    pdftotext's RTL reading order (leftmost الرصيد النهائي in the printed table).
     """
     lines = [line.strip() for line in (text or '').splitlines()]
     parts: list[dict] = []
@@ -348,10 +375,10 @@ def parse_mekanik_stock_text(text: str) -> list[dict]:
                 continue
             break
 
-        if after_numbers:
-            stock = after_numbers[-1]
-        elif pre_warehouse_numbers:
+        if pre_warehouse_numbers:
             stock = _parse_stock_number(pre_warehouse_numbers[-1])
+        elif after_numbers:
+            stock = after_numbers[-1]
         else:
             stock = None
         name_fixed = _fix_name(name_lines)
@@ -522,6 +549,7 @@ def import_spare_rows(
         'matched_parts': 0,
         'links_added': 0,
         'equipment_linked': 0,
+        'equipment_matched': 0,
     }
     try:
         links = link_spare_parts_by_category(db, commit=True, part_ids=touched_ids)
@@ -538,6 +566,8 @@ def import_spare_rows(
         'updated': updated,
         'skipped': skipped,
         'skipped_existing': skipped_existing,
+        'with_shelf': sum(bool(row.get('shelf')) for row in rows),
+        'with_column': sum(bool(row.get('column_code')) for row in rows),
         'dedupe': dedupe,
         'category_links': links,
         'touched_ids': touched_ids,

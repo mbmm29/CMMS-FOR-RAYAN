@@ -1033,15 +1033,28 @@ body .equipment-motor .live-form input{width:100%;max-width:none;height:38px;mar
 @media(min-width:1100px){
   body[data-live-page="spare-parts"] .workspace{grid-template-columns:minmax(0,1fr) minmax(320px,440px)}
 }
-.spare-import-overlay{position:fixed;inset:0;z-index:1200;display:flex;align-items:center;justify-content:center;padding:20px;background:rgba(4,18,42,.72);backdrop-filter:blur(2px)}
+.spare-import-overlay{position:fixed;inset:0;z-index:1200;display:flex;align-items:center;justify-content:center;padding:20px;background:rgba(13,35,27,.52);backdrop-filter:blur(2px)}
 .spare-import-overlay[hidden]{display:none!important}
-.spare-import-card{width:min(360px,100%);padding:28px 24px 22px;border:1px solid #2a4d86;border-radius:14px;background:linear-gradient(165deg,#0c2d5e,#081f42);box-shadow:0 18px 40px rgba(0,0,0,.35);text-align:center;color:#e8f0ff}
-.spare-import-spinner{width:52px;height:52px;margin:0 auto 16px;border:4px solid #23406e;border-top-color:#4ea1ff;border-radius:50%;animation:spare-import-spin .8s linear infinite}
-.spare-import-label{margin:0 0 16px;font-size:15px;line-height:1.45;color:#d5e4ff}
-.spare-import-bar{height:10px;border-radius:999px;background:#14325f;overflow:hidden;margin:0 0 10px}
-.spare-import-fill{display:block;height:100%;width:0;border-radius:inherit;background:linear-gradient(90deg,#2f7fff,#5ec8ff);transition:width .25s ease}
-.spare-import-pct{display:block;font-size:22px;letter-spacing:.02em;color:#fff}
-@keyframes spare-import-spin{to{transform:rotate(360deg)}}
+.spare-import-card,.spare-import-report{width:min(520px,100%);padding:24px;border:1px solid #c8d9c7;border-top:3px solid #d4ad28;border-radius:14px;background:#fbfcf8;box-shadow:0 18px 44px rgba(18,45,32,.24);color:#173b2c}
+.spare-import-card{text-align:center}
+.spare-import-mark{display:grid;place-items:center;width:44px;height:44px;margin:0 auto 12px;border-radius:50%;background:#e9f3e8;color:#28764c;font-size:24px;font-weight:800}
+.spare-import-label{margin:0 0 6px;font-size:16px;line-height:1.45;color:#173b2c;font-weight:800}
+.spare-import-detail{margin:0 auto 16px;max-width:400px;font-size:13px;line-height:1.55;color:#526759}
+.spare-import-bar{height:10px;border-radius:999px;background:#e4ebe1;overflow:hidden;margin:0 0 10px}
+.spare-import-fill{display:block;height:100%;width:0;border-radius:inherit;background:linear-gradient(90deg,#28764c,#d5b333);transition:width .25s ease}
+.spare-import-pct{display:block;font-size:18px;letter-spacing:.02em;color:#28764c}
+.spare-import-report-mode{align-items:center}
+.spare-import-report-head{display:flex;align-items:center;gap:12px;padding-bottom:14px;border-bottom:1px solid #dce6d8}
+.spare-import-report-head .spare-import-mark{flex:0 0 44px;margin:0;background:#e5f3e9}
+.spare-import-report-head h2{margin:0;color:#173b2c;font-size:19px}
+.spare-import-report-head p{margin:4px 0 0;color:#68786c;font-size:12px;overflow-wrap:anywhere}
+.spare-import-report-note,.spare-import-report-foot{color:#526759;font-size:13px;line-height:1.55}
+.spare-import-report-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;margin:14px 0}
+.spare-import-report-grid>div{display:flex;justify-content:space-between;gap:8px;padding:10px 12px;border:1px solid #d8e3d3;border-radius:9px;background:#f1f6ee}
+.spare-import-report-grid span{font-size:12px;color:#526759}
+.spare-import-report-grid b{font-size:14px;color:#173b2c}
+.spare-import-report-close{width:100%;margin-top:8px}
+@media(max-width:420px){.spare-import-card,.spare-import-report{padding:18px}.spare-import-report-grid{grid-template-columns:1fr}}
 .equipment-import-report{position:fixed;inset:0;z-index:1210;display:flex;align-items:center;justify-content:center;padding:18px;background:rgba(4,18,42,.72);backdrop-filter:blur(2px)}
 .equipment-import-card{width:min(920px,100%);max-height:min(86vh,780px);display:flex;flex-direction:column;border:1px solid #2a4d86;border-radius:14px;background:linear-gradient(165deg,#0c2d5e,#081f42);box-shadow:0 18px 40px rgba(0,0,0,.35);color:#e8f0ff;overflow:hidden}
 .equipment-import-head{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:16px 18px 8px}
