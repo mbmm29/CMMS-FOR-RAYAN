@@ -5,3 +5,10 @@ html[lang="en"] body * {
 html[lang="en"] body svg text {
   font-family:"Plus Jakarta Sans",Arial,sans-serif;
 }
+html[lang="ar"] body,
+html[lang="ar"] body * {
+  font-family:"IBM Plex Sans Arabic",Tahoma,Arial,sans-serif!important;
+}
+html[lang="ar"] body svg text {
+  font-family:"IBM Plex Sans Arabic",Tahoma,Arial,sans-serif;
+}

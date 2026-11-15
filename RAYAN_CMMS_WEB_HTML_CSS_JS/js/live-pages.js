@@ -2674,6 +2674,7 @@ async function renderEquipmentCategoryDocument(selected, documentType, info, con
       const renderPage = async (page) => {
         const token = ++renderToken;
         currentPage = Math.max(1, Math.min(Number(pdf.pages) || 1, page));
+        if (stage) stage.scrollTo({ top: 0, left: 0, behavior: 'smooth' });
         if (count) count.textContent = `${currentPage} / ${pdf.pages}`;
         content.querySelector('[data-pdf-prev]').disabled = currentPage <= 1;
         content.querySelector('[data-pdf-next]').disabled = currentPage >= pdf.pages;
@@ -2699,6 +2700,17 @@ async function renderEquipmentCategoryDocument(selected, documentType, info, con
       };
       content.querySelector('[data-pdf-prev]')?.addEventListener('click', () => renderPage(currentPage - 1));
       content.querySelector('[data-pdf-next]')?.addEventListener('click', () => renderPage(currentPage + 1));
+      stage?.addEventListener('wheel', (event) => {
+        const atBottom = stage.scrollTop + stage.clientHeight >= stage.scrollHeight - 12;
+        const atTop = stage.scrollTop <= 4;
+        if (event.deltaY > 0 && atBottom && currentPage < Number(pdf.pages || 1)) {
+          event.preventDefault();
+          renderPage(currentPage + 1);
+        } else if (event.deltaY < 0 && atTop && currentPage > 1) {
+          event.preventDefault();
+          renderPage(currentPage - 1);
+        }
+      }, { passive: false });
       content.querySelector('[data-pdf-zoom-out]')?.addEventListener('click', () => { zoom = Math.max(50, zoom - 10); zoomLabel.textContent = `${zoom}%`; image.style.width = `${zoom}%`; });
       content.querySelector('[data-pdf-zoom-in]')?.addEventListener('click', () => { zoom = Math.min(160, zoom + 10); zoomLabel.textContent = `${zoom}%`; image.style.width = `${zoom}%`; });
       renderPage(1);
