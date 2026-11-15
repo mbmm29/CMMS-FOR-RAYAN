@@ -100,6 +100,8 @@ class SparePartIn(BaseModel):
     name: str
     stock_qty: float | None = None
     critical_qty: float | None = None
+    shelf: str | None = None
+    column_code: str | None = None
     unit: str = "pcs"
     equipment_ids: list[str] = Field(default_factory=list)
     notes: str | None = None

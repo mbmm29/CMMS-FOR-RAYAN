@@ -319,9 +319,15 @@ def ensure_additive_columns():
                     conn.execute(text("ALTER TABLE equipment ALTER COLUMN criticality SET DEFAULT 'Important'"))
         if 'spare_parts' in tables:
             existing = {c['name'] for c in inspector.get_columns('spare_parts')}
-            if 'critical_qty' not in existing:
-                with engine.begin() as conn:
-                    conn.execute(text('ALTER TABLE spare_parts ADD COLUMN critical_qty DOUBLE PRECISION'))
+            additions = {
+                'critical_qty': 'DOUBLE PRECISION',
+                'shelf': 'VARCHAR(40)',
+                'column_code': 'VARCHAR(40)',
+            }
+            with engine.begin() as conn:
+                for name, sql_type in additions.items():
+                    if name not in existing:
+                        conn.execute(text(f'ALTER TABLE spare_parts ADD COLUMN {name} {sql_type}'))
         if 'plants' in tables:
             existing = {c['name'] for c in inspector.get_columns('plants')}
             with engine.begin() as conn:
@@ -1584,6 +1590,8 @@ def spare_part_payload(db, part):
         'name': part.name,
         'stock_qty': part.stock_qty,
         'critical_qty': part.critical_qty,
+        'shelf': part.shelf,
+        'column_code': part.column_code,
         'unit': part.unit or 'pcs',
         'notes': part.notes or '',
         'equipment': equipment,
@@ -1800,6 +1808,8 @@ def create_spare_part(data: SparePartIn, db: Session = Depends(get_db), u=Depend
         name=name,
         stock_qty=_clean_stock(data.stock_qty),
         critical_qty=_clean_critical(data.critical_qty),
+        shelf=(data.shelf or '').strip()[:40] or None,
+        column_code=(data.column_code or '').strip()[:40] or None,
         unit=unit,
         notes=(data.notes or '').strip() or None,
     )
@@ -1830,6 +1840,8 @@ def update_spare_part(part_id: str, data: SparePartIn, db: Session = Depends(get
     part.name = name
     part.stock_qty = _clean_stock(data.stock_qty)
     part.critical_qty = _clean_critical(data.critical_qty)
+    part.shelf = (data.shelf or '').strip()[:40] or None
+    part.column_code = (data.column_code or '').strip()[:40] or None
     part.unit = (data.unit or '').strip()[:30] or 'pcs'
     part.notes = (data.notes or '').strip() or None
     _replace_part_links(db, part.part_id, equipment_ids)

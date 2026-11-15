@@ -1064,6 +1064,9 @@ body .data-table tr.spare-critical-row.selected{background:#3a2410}
 body .spare-filter select,body .spare-filter input,body .spare-form input,body .spare-form select{width:100%;max-width:none;height:38px;margin:0;padding:0 10px;border:1px solid #8eabda;border-radius:8px;background:#fff;color:#102d60;color-scheme:light;font:14px Arial,sans-serif}
 @media (max-width:900px){.spare-toolbar{grid-template-columns:1fr}}
 .spare-form{display:grid;gap:8px}
+.spare-location-fields{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
+.spare-location-fields label{display:grid;gap:5px;margin:0;color:#d5e4ff;font-size:12px;font-weight:700}
+@media (max-width:420px){.spare-location-fields{grid-template-columns:1fr}}
 .spare-equip-search-label{display:grid;gap:6px}
 .spare-equip-results{display:flex;flex-direction:column;gap:4px;max-height:220px;overflow:auto;padding:6px;border:1px solid #8eabda;border-radius:8px;background:#0b2a58}
 .spare-equip-hit{display:flex;align-items:center;gap:8px;width:100%;margin:0;padding:8px 10px;border:0;border-radius:6px;background:#123a72;color:#f4f8ff;text-align:start;cursor:pointer}

@@ -7,6 +7,7 @@ import re
 import shutil
 import subprocess
 import tempfile
+import unicodedata
 from pathlib import Path
 
 from sqlalchemy.orm import Session
@@ -19,6 +20,10 @@ ARABIC_RE = re.compile(
     r'[\u0600-\u06FF\u0750-\u077F\u08A0-\u08FF\uFB50-\uFDFF\uFE70-\uFEFF]+'
 )
 LATIN_TOKEN_RE = re.compile(r'[A-Za-z0-9][A-Za-z0-9./\-_*+%,:]*')
+ARABIC_WORDS_RE = re.compile(
+    r'[\u0600-\u06FF\u0750-\u077F\u08A0-\u08FF\uFB50-\uFDFF\uFE70-\uFEFF]+'
+    r'(?:\s+[\u0600-\u06FF\u0750-\u077F\u08A0-\u08FF\uFB50-\uFDFF\uFE70-\uFEFF]+)*'
+)
 PART_NO_RE = re.compile(r'^\d{4,8}$')
 UNIT_LINE_RE = re.compile(r'^\d+(?:[.,]\d+)?\s+\S')
 # Leading qty on the name line: "0 / name", "1 (كاتم)…", "19.75 (كغم)…"
@@ -61,7 +66,12 @@ def _reverse_chars(text: str) -> str:
 
 
 def repair_arabic_runs(text: str) -> str:
-    return ARABIC_RE.sub(lambda match: _reverse_chars(match.group(0)), text or '')
+    """Restore Arabic word and character order from pdftotext's visual RTL runs."""
+    def restore(match):
+        words = match.group(0).split()
+        return ' '.join(_reverse_chars(word) for word in reversed(words))
+
+    return unicodedata.normalize('NFKC', ARABIC_WORDS_RE.sub(restore, text or ''))
 
 
 def repair_bidi_name(text: str) -> str:
@@ -72,7 +82,10 @@ def repair_bidi_name(text: str) -> str:
     latin = len(re.findall(r'[A-Za-z]', text))
     if arabic >= latin:
         rev = _reverse_chars(text)
-        return LATIN_TOKEN_RE.sub(lambda match: _reverse_chars(match.group(0)), rev)
+        rev = LATIN_TOKEN_RE.sub(lambda match: _reverse_chars(match.group(0)), rev)
+        # Parentheses are mirrored visually when the full RTL line is reversed.
+        rev = rev.replace('(', '\u0000').replace(')', '(').replace('\u0000', ')')
+        return unicodedata.normalize('NFKC', rev)
     return repair_arabic_runs(text)
 
 
@@ -295,6 +308,7 @@ def parse_mekanik_stock_text(text: str) -> list[dict]:
         pre_warehouse_numbers: list[str] = []
         saw_warehouse = False
         after_numbers: list[float] = []
+        location_values: list[str] = []
 
         while cursor < len(lines):
             raw = lines[cursor]
@@ -319,7 +333,12 @@ def parse_mekanik_stock_text(text: str) -> list[dict]:
                 cursor += 1
                 continue
 
-            if _is_location_code(raw):
+            # The first two values after the warehouse name are Shelf and Column.
+            # They may be numeric (165) or coded (A1 / C12 / S1).
+            if len(location_values) < 2 and (
+                _parse_stock_number(raw) is not None or _is_location_code(raw)
+            ):
+                location_values.append(_clean(raw))
                 cursor += 1
                 continue
             stock_value = _parse_stock_number(raw)
@@ -342,6 +361,8 @@ def parse_mekanik_stock_text(text: str) -> list[dict]:
                 'name': name_fixed,
                 'stock_qty': stock,
                 'unit': unit,
+                'shelf': location_values[0] if location_values else None,
+                'column_code': location_values[1] if len(location_values) > 1 else None,
             })
         index = cursor
 
@@ -451,6 +472,8 @@ def import_spare_rows(
             skipped += 1
             continue
         unit = _clean(row.get('unit') or 'pcs')[:30] or 'pcs'
+        shelf = _clean(row.get('shelf'))[:40] or None if 'shelf' in row else None
+        column_code = _clean(row.get('column_code'))[:40] or None if 'column_code' in row else None
         key = number.lower()
         part = existing.get(key)
         if part:
@@ -463,6 +486,10 @@ def import_spare_rows(
             part.name = name
             part.stock_qty = stock_qty
             part.unit = unit
+            if 'shelf' in row:
+                part.shelf = shelf
+            if 'column_code' in row:
+                part.column_code = column_code
             part.notes = source[:200] if source else part.notes
             updated += 1
             touched.append(part)
@@ -477,6 +504,8 @@ def import_spare_rows(
             stock_qty=stock_qty,
             critical_qty=None,
             unit=unit,
+            shelf=shelf,
+            column_code=column_code,
             notes=(source or SOURCE_NOTE)[:200],
         )
         db.add(part)
