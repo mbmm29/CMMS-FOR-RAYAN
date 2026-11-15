@@ -6179,6 +6179,8 @@ function showSpareImportReport(result, filename) {
     ['Rows skipped', result?.skipped],
     ['Rows with shelf', result?.with_shelf],
     ['Rows with column', result?.with_column],
+    ['Shelf values saved', result?.saved_with_shelf],
+    ['Column values saved', result?.saved_with_column],
     ['Category matches', links?.matched_parts],
     ['Equipment in matched categories', links?.equipment_matched],
     ['New equipment links', links?.links_added],

@@ -34,6 +34,10 @@ WAREHOUSE_LINE_RE = re.compile(
     re.IGNORECASE,
 )
 KG_UNIT_RE = re.compile(r'كغم|ﻛﻐﻢ|ﻢﻐﻛ|مغك|\bkg\b', re.IGNORECASE)
+LOCATION_PREFIX_RE = re.compile(
+    r'^\s*(\d{1,4}|[A-Za-z]\d{1,3})\s+'
+    r'(\d{1,4}|[A-Za-z]\d{1,3})\s*(?:/\s*)?(?=[\u0600-\u06FF\u0750-\u077F\u08A0-\u08FF\uFB50-\uFEFF]|$)(.*)$'
+)
 FORM_MARKERS = (
     'أرصدة المواد',
     'الرصيد النهائي',
@@ -310,6 +314,21 @@ def _is_location_code(value: str) -> bool:
     return bool(re.fullmatch(r'[A-Za-z][A-Za-z0-9\-]{0,11}', text))
 
 
+def _strip_leading_location_pair(value: str) -> tuple[str, list[str]]:
+    """Some Poppler builds place the two right-to-left location cells before the name."""
+    match = LOCATION_PREFIX_RE.match(_clean(value))
+    if not match:
+        return value, []
+    first, second, rest = match.groups()
+    codes = [first, second]
+    # Column codes on this form use C/S; shelf codes are numeric or use R/F/A/H.
+    column = next((code for code in codes if re.match(r'^[CS]\d', code, re.IGNORECASE)), None)
+    shelf = next((code for code in codes if code != column), None)
+    if column and shelf:
+        return rest.strip(), [shelf, column]
+    return rest.strip(), codes
+
+
 def parse_mekanik_stock_text(text: str) -> list[dict]:
     """Parse أرصدة المواد: رقم المادة / name / الرصيد النهائي / unit.
 
@@ -349,6 +368,21 @@ def parse_mekanik_stock_text(text: str) -> list[dict]:
                 cursor += 1
                 continue
             if not saw_warehouse:
+                stripped, leading_locations = _strip_leading_location_pair(raw)
+                if leading_locations:
+                    for location in leading_locations:
+                        if len(location_values) < 2:
+                            location_values.append(location)
+                    if stripped:
+                        name_lines.append(stripped)
+                    cursor += 1
+                    continue
+                # Other Poppler versions emit the same two location cells on
+                # their own lines (R85, then C8) instead of prefixing the name.
+                if len(location_values) < 2 and _is_location_code(raw):
+                    location_values.append(_clean(raw))
+                    cursor += 1
+                    continue
                 stock_value = _parse_stock_number(raw)
                 if stock_value is not None and name_lines:
                     pre_warehouse_numbers.append(raw)
@@ -559,6 +593,9 @@ def import_spare_rows(
         except Exception:
             pass
         links = {**links, 'skipped_error': True}
+    saved_rows = []
+    if touched_ids:
+        saved_rows = db.query(SparePart).filter(SparePart.part_id.in_(touched_ids)).all()
     return {
         'source': source or SOURCE_NOTE,
         'rows': len(rows),
@@ -568,6 +605,8 @@ def import_spare_rows(
         'skipped_existing': skipped_existing,
         'with_shelf': sum(bool(row.get('shelf')) for row in rows),
         'with_column': sum(bool(row.get('column_code')) for row in rows),
+        'saved_with_shelf': sum(bool(part.shelf) for part in saved_rows),
+        'saved_with_column': sum(bool(part.column_code) for part in saved_rows),
         'dedupe': dedupe,
         'category_links': links,
         'touched_ids': touched_ids,

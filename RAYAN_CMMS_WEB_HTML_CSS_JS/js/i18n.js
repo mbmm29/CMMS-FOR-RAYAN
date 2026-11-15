@@ -222,6 +222,8 @@ const CMMS_AR = {
   'Rows skipped': 'مواد تم تجاوزها',
   'Rows with shelf': 'مواد لها رف',
   'Rows with column': 'مواد لها عمود',
+  'Shelf values saved': 'قيم الرف المحفوظة',
+  'Column values saved': 'قيم العمود المحفوظة',
   'Category matches': 'مواد طابقت فئة معدات',
   'Equipment in matched categories': 'معدات ضمن الفئات المطابقة',
   'New equipment links': 'روابط معدات جديدة',
