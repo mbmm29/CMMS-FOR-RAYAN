@@ -28,7 +28,7 @@ class PlantLine(Base):
     id: Mapped[int]=mapped_column(Integer,primary_key=True)
     line_id: Mapped[str]=mapped_column(String(50),unique=True,index=True)
     plant_id: Mapped[str]=mapped_column(String(50),ForeignKey('plants.plant_id'))
-    line_number: Mapped[int|None]=mapped_column(Integer,nullable=True)
+    line_number: Mapped[str|None]=mapped_column(String(40),nullable=True)
     name: Mapped[str]=mapped_column(String(150))
     active: Mapped[bool]=mapped_column(Boolean,default=True)
     __table_args__=(UniqueConstraint('plant_id','line_number',name='uq_plant_line_number'),)

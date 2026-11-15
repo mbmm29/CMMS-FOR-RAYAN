@@ -36,13 +36,13 @@ FORM_MARKERS = (
 # English one-line form (preferred): code name category Feed Mill N line … year
 EN_ROW_RE = re.compile(
     r'^(\d{3,8})\s+(.+?)\s+([A-Za-z]{3,8})\s+(Feed\s*Mill\s*[12])\s+'
-    r'(Intake\s*\d+|Line\s*\d+|Line\d+|Line)(?:\s+(OTL))?\s+(.+)\s+(\d{4})$',
+    r'(Intake\s*\d+|Line\s*[A-Za-z0-9]+|Line)(?:\s+(OTL))?\s+(.+)\s+(\d{4})$',
     re.IGNORECASE,
 )
 # Legacy Arabic two-line form from older PDFs.
 LINE1_RE = re.compile(r'^(\d{3,8})\s+(.+?)\s+([A-Za-z]{3,8})\s+(\S+)$')
 LINE2_RE = re.compile(
-    r'^(\S+)\s+(Intake\s*\d+|Line\s*\d+|Line\d+|Line)(?:\s+(OTL))?\s+(.+)\s+(\d{4})$',
+    r'^(\S+)\s+(Intake\s*\d+|Line\s*[A-Za-z0-9]+|Line)(?:\s+(OTL))?\s+(.+)\s+(\d{4})$',
     re.IGNORECASE,
 )
 KNOWN_SECTIONS = {
@@ -132,18 +132,18 @@ def load_catalog(path: Path | None = None) -> list[dict]:
     return rows
 
 
-def parse_line(raw: str) -> tuple[int, str]:
+def parse_line(raw: str) -> tuple[str, str]:
     text = _clean(raw)
-    match = re.match(r'(?i)^line\s*(\d+)$', text)
+    match = re.match(r'(?i)^line\s*([a-z0-9]+)$', text)
     if match:
-        number = int(match.group(1))
+        number = match.group(1).upper()
         return number, f'Line {number}'
     match = re.match(r'(?i)^intake\s*(\d+)$', text)
     if match:
         number = int(match.group(1))
-        return 100 + number, f'Intake {number}'
+        return str(100 + number), f'Intake {number}'
     if text.casefold() == 'line':
-        return 99, 'Line'
+        return '99', 'Line'
     raise ValueError(f'Unrecognized line: {raw!r}')
 
 

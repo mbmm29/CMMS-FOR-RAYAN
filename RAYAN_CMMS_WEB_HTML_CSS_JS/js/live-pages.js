@@ -1760,7 +1760,7 @@ function applyRowRepeat(row) {
 
 function annualLineSelect(selected, locked) {
   const lines = (store.lines || []).filter((line) => line.plant_id === ui.annualPlant)
-    .sort((a, b) => Number(a.line_number) - Number(b.line_number) || String(a.name).localeCompare(String(b.name)));
+    .sort((a, b) => String(a.line_number ?? '').localeCompare(String(b.line_number ?? ''), undefined, { numeric: true, sensitivity: 'base' }) || String(a.name).localeCompare(String(b.name)));
   const lock = locked ? ' disabled' : '';
   const options = [`<option value="">${esc(t('No line'))}</option>`].concat(lines.map((line) => {
     const label = line.name ? `${line.line_number} · ${line.name}` : String(line.line_number ?? '');
@@ -2317,7 +2317,7 @@ async function drawPlans() {
 function drawPlants() {
   const rows = store.plants.filter((plant) => ui.tab === 'All Plants' || (ui.tab === 'Active' ? plant.active !== false : plant.active === false));
   const selected = rows.find((plant) => plant.plant_id === ui.rowKey) || rows[0];
-  const plantLines = store.lines.filter((line) => line.plant_id === selected?.plant_id).sort((a, b) => Number(a.line_number) - Number(b.line_number));
+  const plantLines = store.lines.filter((line) => line.plant_id === selected?.plant_id).sort((a, b) => String(a.line_number ?? '').localeCompare(String(b.line_number ?? ''), undefined, { numeric: true, sensitivity: 'base' }));
   document.getElementById('metric-grid').innerHTML = metrics([
     ['Plants', String(store.plants.length), '▣', 'blue', ''],
     ['Active Plants', String(store.plants.filter((plant) => plant.active !== false).length), '✓', 'green', ''],
@@ -2341,7 +2341,7 @@ function drawPlants() {
     const title = `${esc(t('Line'))} ${esc(line.line_number ?? '—')}${line.name ? ` · ${esc(line.name)}` : ''}`;
     return `<div class="line-block"><div class="line-head"><b>${title}</b>${canMaintain() ? `<button type="button" class="detail-button danger" data-delete="/lines" data-delete-id="${esc(line.line_id)}" data-delete-keep="1">${esc(t('Delete'))}</button>` : ''}</div><div class="section-list">${chips}</div>${add}</div>`;
   }).join('') || `<p class="live-note">${esc(t('No records yet'))}</p>`;
-  const lineForm = selected && canMaintain() ? `<form id="line-form" class="live-form"><div class="assign-block"><b>Add production line</b></div><label>Line number<input name="line_number" type="number" min="1" step="1" required></label><label>Name<input name="name" placeholder="Optional"></label><button class="detail-button primary" type="submit">Add line</button><p id="line-error" class="form-error"></p></form>` : '';
+  const lineForm = selected && canMaintain() ? `<form id="line-form" class="live-form"><div class="assign-block"><b>Add production line</b></div><label>Line number<input name="line_number" type="text" maxlength="40" pattern="[A-Za-z0-9]+" title="Use English letters and numbers only" autocomplete="off" required></label><label>Name<input name="name" placeholder="Optional"></label><button class="detail-button primary" type="submit">Add line</button><p id="line-error" class="form-error"></p></form>` : '';
   const statusForm = selected && canMaintain() ? `<form id="plant-status" class="live-form"><label>${esc(t('Plant name'))}<input name="name" value="${esc(selected.name || '')}" required maxlength="150"></label><label>${esc(t('Work order code'))}<input name="order_code" value="${esc(selected.order_code || '')}" required maxlength="12" placeholder="FM1"></label><label>${esc(t('Status'))}<select name="active">${plantStatusOptions(selected.active)}</select></label><button class="detail-button primary" type="submit">${esc(t('Save'))}</button><p class="live-note">${esc(t('Each plant keeps its own sequence. FM1 in 2026 starts at FM12026-001.'))}</p><p id="plant-status-error" class="form-error"></p></form>` : '';
   const accessBoxes = (store.technicians || []).map((tech) => {
     const checked = (tech.plant_ids || []).includes(selected?.plant_id);
@@ -2364,7 +2364,7 @@ function drawPlants() {
     const error = document.getElementById('line-error');
     const data = Object.fromEntries(new FormData(event.currentTarget).entries());
     try {
-      await apiRequest('/lines', { method: 'POST', body: JSON.stringify({ plant_id: selected.plant_id, line_number: Number(data.line_number), name: data.name || null, active: true }) });
+      await apiRequest('/lines', { method: 'POST', body: JSON.stringify({ plant_id: selected.plant_id, line_number: data.line_number.trim().toUpperCase(), name: data.name || null, active: true }) });
       store = null;
       ui.rowKey = selected.plant_id;
       ui.mode = 'view';
@@ -3676,7 +3676,7 @@ function bindJobPlace(form) {
   const fillLines = (keep) => {
     const lines = store.lines
       .filter((line) => line.plant_id === plantSelect.value && line.active !== false)
-      .sort((a, b) => Number(a.line_number) - Number(b.line_number));
+      .sort((a, b) => String(a.line_number ?? '').localeCompare(String(b.line_number ?? ''), undefined, { numeric: true, sensitivity: 'base' }));
     lineSelect.innerHTML = `<option value="">${esc(t(plantSelect.value ? 'Select line number' : 'Select a plant first'))}</option>${lines.map((line) => `<option value="${esc(line.line_id)}"${line.line_id === keep ? ' selected' : ''}>${esc(jobLineLabel(line))}</option>`).join('')}`;
   };
   const fillSections = (keep) => {
@@ -3891,7 +3891,7 @@ function bindEquipmentLines(form, selected = null) {
     sectionSelect.innerHTML = sectionOptions(lineSelect.value, sectionId, lineSelect.value ? 'No section' : 'Select a line first');
   };
   const fill = (lineId = '', sectionId = '') => {
-    const lines = store.lines.filter((line) => line.plant_id === plantSelect.value).sort((a, b) => Number(a.line_number) - Number(b.line_number));
+    const lines = store.lines.filter((line) => line.plant_id === plantSelect.value).sort((a, b) => String(a.line_number ?? '').localeCompare(String(b.line_number ?? ''), undefined, { numeric: true, sensitivity: 'base' }));
     lineSelect.innerHTML = `<option value="">${esc(t(plantSelect.value ? 'Select line number' : 'Select a plant first'))}</option>${lines.map((line) => {
       const label = lineText(line);
       const extra = line.name && line.name !== label ? ` — ${line.name}` : '';

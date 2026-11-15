@@ -72,7 +72,7 @@ class PlantUpdate(BaseModel):
 class LineCreate(BaseModel):
     line_id: str | None = None
     plant_id: str
-    line_number: int
+    line_number: str = Field(min_length=1, max_length=40, pattern=r'^[A-Za-z0-9]+$')
     name: str | None = None
     active: bool = True
 

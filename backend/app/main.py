@@ -235,7 +235,11 @@ def ensure_additive_columns():
             existing = {c['name'] for c in inspector.get_columns('plant_lines')}
             with engine.begin() as conn:
                 if 'line_number' not in existing:
-                    conn.execute(text('ALTER TABLE plant_lines ADD COLUMN line_number INTEGER'))
+                    conn.execute(text('ALTER TABLE plant_lines ADD COLUMN line_number VARCHAR(40)'))
+                else:
+                    line_type = next((c['type'] for c in inspector.get_columns('plant_lines') if c['name'] == 'line_number'), None)
+                    if line_type is not None and 'INT' in str(line_type).upper() and engine.dialect.name == 'postgresql':
+                        conn.execute(text('ALTER TABLE plant_lines ALTER COLUMN line_number TYPE VARCHAR(40) USING line_number::text'))
                 conn.execute(text('''
                     UPDATE plant_lines AS line
                     SET line_number = numbered.line_number
@@ -247,6 +251,7 @@ def ensure_additive_columns():
                     WHERE line.id = numbered.id
                 '''))
                 conn.execute(text('CREATE UNIQUE INDEX IF NOT EXISTS uq_plant_line_number ON plant_lines (plant_id, line_number)'))
+                conn.execute(text('CREATE UNIQUE INDEX IF NOT EXISTS uq_plant_line_number_ci ON plant_lines (plant_id, UPPER(line_number))'))
         if 'annual_pm_items' in tables:
             existing = {c['name'] for c in inspector.get_columns('annual_pm_items')}
             additions = {
@@ -924,17 +929,18 @@ def lines(plant_id:str|None=None,db:Session=Depends(get_db),u=Depends(auth)):
     return [as_dict(row) for row in q.order_by(PlantLine.name).all()]
 @app.post('/lines')
 def create_line(data:LineCreate,db:Session=Depends(get_db),u=Depends(role(*ENGINEER))):
-    if data.line_number < 1:
-        raise HTTPException(400, 'Line number must be 1 or greater')
+    line_number = data.line_number.strip().upper()
+    if not line_number or not re.fullmatch(r'[A-Z0-9]{1,40}', line_number):
+        raise HTTPException(400, 'Line number must contain only English letters and numbers')
     if not db.query(Plant).filter_by(plant_id=data.plant_id).first():
         raise HTTPException(404, 'Plant not found')
-    if db.query(PlantLine).filter_by(plant_id=data.plant_id, line_number=data.line_number).first():
+    if db.query(PlantLine).filter(PlantLine.plant_id == data.plant_id, func.upper(PlantLine.line_number) == line_number).first():
         raise HTTPException(409, 'This line number already exists in the plant')
-    line_id = (data.line_id or f'{data.plant_id}-L{data.line_number}').strip()
+    line_id = (data.line_id or f'{data.plant_id}-L{line_number}').strip()
     if db.query(PlantLine).filter_by(line_id=line_id).first():
         raise HTTPException(409, 'Line ID already exists')
-    name = (data.name or '').strip() or f'Line {data.line_number}'
-    o=PlantLine(line_id=line_id, plant_id=data.plant_id, line_number=data.line_number, name=name, active=data.active)
+    name = (data.name or '').strip() or f'Line {line_number}'
+    o=PlantLine(line_id=line_id, plant_id=data.plant_id, line_number=line_number, name=name, active=data.active)
     db.add(o); audit(db,u,'CREATE','Line',line_id,new=data.model_dump()); db.commit(); db.refresh(o); return as_dict(o)
 
 def section_for_line(db, line_id: str, section_id: str | None):
@@ -1889,8 +1895,8 @@ def approve_pending_equipment(item_id: int, plant_id: str | None = None, line_id
     line = None
     if row.line_id:
         line = db.query(PlantLine).filter_by(line_id=row.line_id, plant_id=row.plant_id).first()
-    if line is None and row.plant_id and row.line_number and str(row.line_number).isdigit():
-        line = db.query(PlantLine).filter_by(plant_id=row.plant_id, line_number=int(row.line_number)).first()
+    if line is None and row.plant_id and row.line_number:
+        line = db.query(PlantLine).filter_by(plant_id=row.plant_id, line_number=str(row.line_number).strip()).first()
     if line is not None:
         row.line_id = line.line_id
         row.line_number = str(line.line_number) if line.line_number is not None else row.line_number

@@ -591,7 +591,7 @@ def compute_kpi(
         elif single_plant:
             catalog = [
                 (row.line_id, row.name)
-                for row in sorted(plant_lines, key=lambda row: (row.line_number or 0, row.name))
+                for row in sorted(plant_lines, key=lambda row: (str(row.line_number or ''), row.name))
                 if row.plant_id == single_plant
             ]
             trend_by = 'line'
