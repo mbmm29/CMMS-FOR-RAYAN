@@ -1268,6 +1268,20 @@ body[data-live-page="equipment"] .category-plan-action .detail-button{width:auto
 .sop-category-action small{color:#b7c9e6;font-size:11px}
 .sop-category-action .detail-button{width:auto;flex:0 0 auto;margin:0}
 .category-pm-dialog input[type="file"]{color:#e7eefc}
+.equipment-category-file-list{display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:8px;margin:0 0 12px}
+.equipment-category-file-choice{display:grid;grid-template-columns:28px minmax(0,1fr);grid-template-rows:auto auto;align-items:center;gap:2px 8px;min-width:0;padding:10px;border:1px solid #d7e2d2;border-radius:9px;background:#fbfcf8;color:#263c2b;text-align:start;cursor:pointer}
+.equipment-category-file-choice:hover,.equipment-category-file-choice.active{border-color:#d6ae1f;background:#fff8d9}
+.equipment-category-file-choice>span{grid-row:1/3;display:grid;place-items:center;width:28px;height:28px;border-radius:50%;background:#fff0b4;color:#655000;font-size:16px}
+.equipment-category-file-choice>b{min-width:0;overflow:hidden;color:#233a2c;font-size:12px;text-overflow:ellipsis;white-space:nowrap}
+.equipment-category-file-choice>small{color:#68766a;font-size:10px}
+.equipment-category-file-viewer{min-width:0;padding:12px;border:1px solid #d8e2d4;border-radius:10px;background:#fff}
+.equipment-selected-files{max-height:155px;overflow:auto;border:1px solid #d8e2d4;border-radius:8px;background:#fbfcf8;color:#263c2b;font-size:12px}
+.equipment-selected-files:empty{display:none}
+.equipment-selected-files ul{display:grid;gap:5px;margin:0;padding:8px;list-style:none}
+.equipment-selected-files li{display:flex;justify-content:space-between;gap:12px;padding:6px 8px;border-bottom:1px solid #e6ece2}
+.equipment-selected-files li:last-child{border-bottom:0}
+.equipment-selected-files li b{min-width:0;overflow-wrap:anywhere}
+.equipment-selected-files li small{flex:0 0 auto;color:#657367}
 @media(max-width:680px){
   .category-pm-fields{grid-template-columns:1fr}
   .category-pm-list{grid-template-columns:1fr;max-height:38vh}

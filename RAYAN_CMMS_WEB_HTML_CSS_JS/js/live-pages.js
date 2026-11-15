@@ -2616,19 +2616,37 @@ async function loadEquipmentCategoryFile(selected, documentType, content, object
   content.innerHTML = `<p class="live-note">${esc(t('Loading document...'))}</p>`;
   try {
     const docs = await apiRequest(`/equipment-category-documents?category=${encodeURIComponent(selected.equipment_type || '')}`);
-    const info = (docs || []).find((item) => item.document_type === documentType);
-    if (!info) throw new Error(t('No file is published for this category.'));
-    const blob = await apiRequest(`/equipment-category-documents/file?category=${encodeURIComponent(info.category)}&document_type=${encodeURIComponent(documentType)}`, { blob: true });
+    const files = (docs || []).filter((item) => item.document_type === documentType);
+    if (!files.length) throw new Error(t('No file is published for this category.'));
+    content.innerHTML = `<nav class="equipment-category-file-list" aria-label="${esc(t('Published files'))}">${files.map((item, index) => `<button type="button" class="equipment-category-file-choice${index === 0 ? ' active' : ''}" data-category-file-choice="${item.file_id == null ? 'legacy' : esc(item.file_id)}"><span>▤</span><b>${esc(item.filename)}</b><small>${esc((Number(item.size || 0) / 1048576).toFixed(1))} MB · ${esc(fmtDate(item.updated_at) || '')}</small></button>`).join('')}</nav><div class="equipment-category-file-viewer"><p class="live-note">${esc(t('Loading document...'))}</p></div>`;
+    const viewer = content.querySelector('.equipment-category-file-viewer');
+    const openFile = (info) => renderEquipmentCategoryDocument(selected, documentType, info, viewer, objectUrls);
+    content.querySelectorAll('[data-category-file-choice]').forEach((button, index) => button.addEventListener('click', () => {
+      content.querySelectorAll('[data-category-file-choice]').forEach((item) => item.classList.toggle('active', item === button));
+      openFile(files[index]);
+    }));
+    await openFile(files[0]);
+  } catch (exception) {
+    if (content.isConnected) content.innerHTML = `<p class="live-note">${esc(t(exception.message || 'Could not load document.'))}</p>`;
+  }
+}
+
+async function renderEquipmentCategoryDocument(selected, documentType, info, content, objectUrls) {
+  if (!content?.isConnected) return;
+  content.innerHTML = `<p class="live-note">${esc(t('Loading document...'))}</p>`;
+  const fileId = info.file_id == null ? '&legacy=true' : `&file_id=${encodeURIComponent(info.file_id)}`;
+  try {
+    const blob = await apiRequest(`/equipment-category-documents/file?category=${encodeURIComponent(info.category)}&document_type=${encodeURIComponent(documentType)}${fileId}`, { blob: true });
     if (!content.isConnected) return;
     const url = URL.createObjectURL(blob);
     objectUrls.push(url);
     const download = `<a class="detail-button primary equipment-file-download" href="${url}" download="${esc(info.filename)}">${esc(t('Download file'))}</a>`;
     const infoLine = `<div class="equipment-category-file-info"><b>${esc(info.filename)}</b><span>${esc(info.category)} · ${esc(fmtDate(info.updated_at) || '')}</span></div>`;
     if (info.content_type === 'application/pdf') {
-      const pdf = await apiRequest(`/equipment-category-documents/pdf-info?category=${encodeURIComponent(info.category)}&document_type=${encodeURIComponent(documentType)}`);
+      const pdf = await apiRequest(`/equipment-category-documents/pdf-info?category=${encodeURIComponent(info.category)}&document_type=${encodeURIComponent(documentType)}${fileId}`);
       if (!content.isConnected) return;
       content.innerHTML = `${infoLine}<div class="equipment-pdf-toolbar"><div class="equipment-pdf-pages"><button type="button" data-pdf-prev aria-label="${esc(t('Previous page'))}">‹</button><span data-pdf-count>—</span><button type="button" data-pdf-next aria-label="${esc(t('Next page'))}">›</button></div><div class="equipment-pdf-zoom"><button type="button" data-pdf-zoom-out aria-label="${esc(t('Zoom out'))}">−</button><span data-pdf-zoom-label>100%</span><button type="button" data-pdf-zoom-in aria-label="${esc(t('Zoom in'))}">+</button></div>${download}</div><div class="equipment-pdf-stage"><div class="equipment-pdf-page"><p class="live-note" data-pdf-status>${esc(t('Loading document...'))}</p><img data-pdf-image alt="${esc(info.filename)}" hidden></div></div>`;
-      const viewer = content.querySelector('.equipment-pdf-stage');
+      const stage = content.querySelector('.equipment-pdf-stage');
       const image = content.querySelector('[data-pdf-image]');
       const status = content.querySelector('[data-pdf-status]');
       const count = content.querySelector('[data-pdf-count]');
@@ -2646,8 +2664,8 @@ async function loadEquipmentCategoryFile(selected, documentType, content, object
         if (status) { status.hidden = false; status.textContent = t('Loading document...'); }
         if (image) image.hidden = true;
         try {
-          const pageBlob = await apiRequest(`/equipment-category-documents/pdf-page?category=${encodeURIComponent(info.category)}&document_type=${encodeURIComponent(documentType)}&page=${currentPage}`, { blob: true });
-          if (!viewer?.isConnected || token !== renderToken) return;
+          const pageBlob = await apiRequest(`/equipment-category-documents/pdf-page?category=${encodeURIComponent(info.category)}&document_type=${encodeURIComponent(documentType)}&page=${currentPage}${fileId}`, { blob: true });
+          if (!stage?.isConnected || token !== renderToken) return;
           const nextUrl = URL.createObjectURL(pageBlob);
           objectUrls.push(nextUrl);
           if (currentPageUrl) URL.revokeObjectURL(currentPageUrl);
@@ -2657,7 +2675,7 @@ async function loadEquipmentCategoryFile(selected, documentType, content, object
           image.hidden = false;
           if (status) status.hidden = true;
         } catch (exception) {
-          if (viewer?.isConnected && token === renderToken && status) {
+          if (stage?.isConnected && token === renderToken && status) {
             status.hidden = false;
             status.textContent = t(exception.message || 'Could not render this PDF page.');
           }
@@ -2676,7 +2694,7 @@ async function loadEquipmentCategoryFile(selected, documentType, content, object
       content.innerHTML = `${infoLine}${download}<pre class="equipment-file-text"></pre>`;
       content.querySelector('.equipment-file-text').textContent = text;
     } else if (String(info.filename || '').toLowerCase().endsWith('.xlsx')) {
-      const preview = await apiRequest(`/equipment-category-documents/preview?category=${encodeURIComponent(info.category)}&document_type=${encodeURIComponent(documentType)}`);
+      const preview = await apiRequest(`/equipment-category-documents/preview?category=${encodeURIComponent(info.category)}&document_type=${encodeURIComponent(documentType)}${fileId}`);
       if (!content.isConnected) return;
       const rows = (preview.rows || []).map((row) => `<tr>${row.map((value) => `<td>${esc(value)}</td>`).join('')}</tr>`).join('');
       content.innerHTML = `${infoLine}${download}<div class="equipment-xlsx-preview"><table class="data-table"><tbody>${rows || `<tr><td>${esc(t('No records yet'))}</td></tr>`}</tbody></table></div>`;
@@ -2711,22 +2729,33 @@ function openEquipmentCategoryFilePublish(selected) {
   if (!categories.length) return;
   const overlay = document.createElement('div');
   overlay.className = 'category-pm-overlay';
-  overlay.innerHTML = `<section class="category-pm-dialog equipment-category-file-dialog" role="dialog" aria-modal="true" aria-labelledby="equipment-category-file-title"><header><div><h2 id="equipment-category-file-title">${esc(t('Publish category document'))}</h2><p>${esc(t('Upload one manual or spare parts file. It will be available for every machine in the selected category.'))}</p></div><button type="button" class="category-pm-close" aria-label="${esc(t('Close'))}">×</button></header><form class="live-form" id="equipment-category-file-form"><label>${esc(t('Category'))}<select name="category" required>${categories.map((category) => `<option value="${esc(category)}"${category === selected?.equipment_type ? ' selected' : ''}>${esc(category)}</option>`).join('')}</select></label><label>${esc(t('Document type'))}<select name="document_type" required><option value="manual">${esc(t('Equipment manual'))}</option><option value="spare-parts">${esc(t('Spare parts file'))}</option></select></label><label class="category-pm-task">${esc(t('Choose file'))}<input name="file" type="file" accept=".pdf,.xlsx,.xls,.docx,.doc,.png,.jpg,.jpeg,.txt,.csv" required></label><p class="live-note">${esc(t('Supported files: PDF, Excel, Word, images, CSV, and text. Maximum size: 15 MB. A new upload replaces the file for that category.'))}</p><p class="form-error" id="equipment-category-file-error"></p><footer><button type="button" class="detail-button" id="equipment-category-file-cancel">${esc(t('Cancel'))}</button><button class="detail-button primary" id="equipment-category-file-submit" type="submit">${esc(t('Upload file'))}</button></footer></form></section>`;
+  overlay.innerHTML = `<section class="category-pm-dialog equipment-category-file-dialog" role="dialog" aria-modal="true" aria-labelledby="equipment-category-file-title"><header><div><h2 id="equipment-category-file-title">${esc(t('Publish category document'))}</h2><p>${esc(t('Upload multiple manuals or spare parts files. They will be available for every machine in the selected category.'))}</p></div><button type="button" class="category-pm-close" aria-label="${esc(t('Close'))}">×</button></header><form class="live-form" id="equipment-category-file-form"><label>${esc(t('Category'))}<select name="category" required>${categories.map((category) => `<option value="${esc(category)}"${category === selected?.equipment_type ? ' selected' : ''}>${esc(category)}</option>`).join('')}</select></label><label>${esc(t('Document type'))}<select name="document_type" required><option value="manual">${esc(t('Equipment manual'))}</option><option value="spare-parts">${esc(t('Spare parts file'))}</option></select></label><label class="category-pm-task">${esc(t('Choose files'))}<input name="files" type="file" multiple accept=".pdf,.xlsx,.xls,.docx,.doc,.png,.jpg,.jpeg,.txt,.csv" required></label><div class="equipment-selected-files" id="equipment-category-selected-files">${esc(t('No files selected'))}</div><p class="live-note">${esc(t('Supported files: PDF, Excel, Word, images, CSV, and text. Up to 20 files; each file can be up to 100 MB. Uploading adds files to the category list.'))}</p><p class="form-error" id="equipment-category-file-error"></p><footer><button type="button" class="detail-button" id="equipment-category-file-cancel">${esc(t('Cancel'))}</button><button class="detail-button primary" id="equipment-category-file-submit" type="submit">${esc(t('Upload files'))}</button></footer></form></section>`;
   document.body.appendChild(overlay);
   const close = () => overlay.remove();
   overlay.querySelector('.category-pm-close').addEventListener('click', close);
   overlay.querySelector('#equipment-category-file-cancel').addEventListener('click', close);
   overlay.addEventListener('click', (event) => { if (event.target === overlay) close(); });
+  const fileInput = overlay.querySelector('input[name="files"]');
+  const selectedFiles = overlay.querySelector('#equipment-category-selected-files');
+  fileInput.addEventListener('change', () => {
+    const files = [...fileInput.files];
+    selectedFiles.innerHTML = files.length
+      ? `<ul>${files.map((item) => `<li><b>${esc(item.name)}</b><small>${(item.size / 1048576).toFixed(1)} MB</small></li>`).join('')}</ul>`
+      : esc(t('No files selected'));
+  });
   overlay.querySelector('#equipment-category-file-form').addEventListener('submit', async (event) => {
     event.preventDefault();
-    const formData = new FormData(event.currentTarget);
+    const formData = new FormData();
+    formData.append('category', overlay.querySelector('[name="category"]').value);
+    formData.append('document_type', overlay.querySelector('[name="document_type"]').value);
+    [...fileInput.files].forEach((item) => formData.append('files', item, item.name));
     const button = overlay.querySelector('#equipment-category-file-submit');
     const error = overlay.querySelector('#equipment-category-file-error');
     button.disabled = true;
     try {
       const result = await apiRequest('/equipment-category-documents', { method: 'POST', body: formData });
       close();
-      toast(`${t('File published for category')}: ${result.category}.`);
+      toast(`${result.files?.length || 1} ${t('files published for category')}: ${result.category}.`);
     } catch (exception) {
       error.textContent = t(exception.message || 'Could not upload file.');
       button.disabled = false;

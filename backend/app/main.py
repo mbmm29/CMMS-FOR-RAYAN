@@ -10,6 +10,7 @@ import json
 import secrets
 import threading
 from pathlib import Path
+from urllib.parse import quote
 from xml.etree import ElementTree as ET
 from fastapi import FastAPI, Depends, HTTPException, File, Form, UploadFile, Query
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
@@ -998,44 +999,74 @@ EQUIPMENT_CATEGORY_FILE_TYPES = {
                     'doc': 'application/msword', 'png': 'image/png', 'jpg': 'image/jpeg', 'jpeg': 'image/jpeg',
                     'txt': 'text/plain', 'csv': 'text/csv'},
 }
-EQUIPMENT_CATEGORY_FILE_MAX_BYTES = 15_000_000
+EQUIPMENT_CATEGORY_FILE_MAX_BYTES = 100_000_000
+EQUIPMENT_CATEGORY_FILE_MAX_COUNT = 20
+EQUIPMENT_CATEGORY_FILE_MAX_TOTAL_BYTES = 200_000_000
+
+
+def find_equipment_category_document(db: Session, category: str, document_type: str, file_id: int | None = None, legacy: bool = False):
+    if legacy:
+        return db.query(EquipmentCategoryDocument).filter(
+            func.lower(EquipmentCategoryDocument.category) == category.strip().lower(),
+            EquipmentCategoryDocument.document_type == document_type,
+        ).first()
+    query = db.query(EquipmentCategoryDocumentFile).filter(
+        func.lower(EquipmentCategoryDocumentFile.category) == category.strip().lower(),
+        EquipmentCategoryDocumentFile.document_type == document_type,
+    )
+    if file_id is not None:
+        row = query.filter_by(id=file_id).first()
+        if row:
+            return row
+        return None
+    row = query.order_by(EquipmentCategoryDocumentFile.updated_at.desc(), EquipmentCategoryDocumentFile.id.desc()).first()
+    if row:
+        return row
+    return db.query(EquipmentCategoryDocument).filter(
+        func.lower(EquipmentCategoryDocument.category) == category.strip().lower(),
+        EquipmentCategoryDocument.document_type == document_type,
+    ).first()
 
 @app.get('/equipment-category-documents')
 def list_equipment_category_documents(category: str, db: Session = Depends(get_db), u=Depends(auth)):
     category = category.strip()
-    rows = db.query(EquipmentCategoryDocument).filter(func.lower(EquipmentCategoryDocument.category) == category.lower()).all()
-    return [{
-        'category': row.category, 'document_type': row.document_type, 'filename': row.filename,
+    rows = db.query(EquipmentCategoryDocumentFile).filter(func.lower(EquipmentCategoryDocumentFile.category) == category.lower()).order_by(EquipmentCategoryDocumentFile.updated_at.desc(), EquipmentCategoryDocumentFile.id.desc()).all()
+    result = [{
+        'file_id': row.id, 'category': row.category, 'document_type': row.document_type, 'filename': row.filename,
         'content_type': row.content_type, 'size': len(row.data or b''),
         'updated_at': row.updated_at.isoformat() if row.updated_at else None,
     } for row in rows]
+    # Keep the files uploaded before multi-file publishing visible alongside new files.
+    old_rows = db.query(EquipmentCategoryDocument).filter(func.lower(EquipmentCategoryDocument.category) == category.lower()).all()
+    for row in old_rows:
+        result.append({
+            'file_id': None, 'category': row.category, 'document_type': row.document_type, 'filename': row.filename,
+            'content_type': row.content_type, 'size': len(row.data or b''),
+            'updated_at': row.updated_at.isoformat() if row.updated_at else None,
+        })
+    return result
 
 @app.get('/equipment-category-documents/file')
-def get_equipment_category_document(category: str, document_type: str, db: Session = Depends(get_db), u=Depends(auth)):
+def get_equipment_category_document(category: str, document_type: str, file_id: int | None = None, legacy: bool = False, db: Session = Depends(get_db), u=Depends(auth)):
     if document_type not in EQUIPMENT_CATEGORY_FILE_TYPES:
         raise HTTPException(404, 'Document not found')
-    row = db.query(EquipmentCategoryDocument).filter(
-        func.lower(EquipmentCategoryDocument.category) == category.strip().lower(),
-        EquipmentCategoryDocument.document_type == document_type,
-    ).first()
+    row = find_equipment_category_document(db, category, document_type, file_id, legacy)
     if not row:
         raise HTTPException(404, 'No file is published for this category.')
-    safe_name = re.sub(r'[\\"\r\n]', '_', row.filename or 'document')
+    safe_name = re.sub(r'[^A-Za-z0-9._-]', '_', Path(row.filename or 'document').name)
+    encoded_name = quote(Path(row.filename or 'document').name, safe='')
     return Response(
         content=bytes(row.data),
         media_type=row.content_type or 'application/octet-stream',
-        headers={'Content-Disposition': f'inline; filename="{safe_name}"'},
+        headers={'Content-Disposition': f'inline; filename="{safe_name}"; filename*=UTF-8\'\'{encoded_name}'},
     )
 
 @app.get('/equipment-category-documents/pdf-info')
-def equipment_category_pdf_info(category: str, document_type: str, db: Session = Depends(get_db), u=Depends(auth)):
+def equipment_category_pdf_info(category: str, document_type: str, file_id: int | None = None, legacy: bool = False, db: Session = Depends(get_db), u=Depends(auth)):
     pdfinfo = shutil.which('pdfinfo')
     if not pdfinfo:
         raise HTTPException(503, 'PDF preview is unavailable on this server.')
-    row = db.query(EquipmentCategoryDocument).filter(
-        func.lower(EquipmentCategoryDocument.category) == category.strip().lower(),
-        EquipmentCategoryDocument.document_type == document_type,
-    ).first()
+    row = find_equipment_category_document(db, category, document_type, file_id, legacy)
     if not row or Path(row.filename).suffix.lower() != '.pdf':
         raise HTTPException(404, 'No PDF is published for this category.')
     with tempfile.TemporaryDirectory(prefix='cmms-category-pdf-') as temp_dir:
@@ -1051,11 +1082,8 @@ def equipment_category_pdf_info(category: str, document_type: str, db: Session =
     return {'filename': row.filename, 'category': row.category, 'pages': int(match.group(1))}
 
 @app.get('/equipment-category-documents/pdf-page')
-def equipment_category_pdf_page(category: str, document_type: str, page: int = 1, db: Session = Depends(get_db), u=Depends(auth)):
-    row = db.query(EquipmentCategoryDocument).filter(
-        func.lower(EquipmentCategoryDocument.category) == category.strip().lower(),
-        EquipmentCategoryDocument.document_type == document_type,
-    ).first()
+def equipment_category_pdf_page(category: str, document_type: str, page: int = 1, file_id: int | None = None, legacy: bool = False, db: Session = Depends(get_db), u=Depends(auth)):
+    row = find_equipment_category_document(db, category, document_type, file_id, legacy)
     if not row or Path(row.filename).suffix.lower() != '.pdf':
         raise HTTPException(404, 'No PDF is published for this category.')
     pdfinfo = shutil.which('pdfinfo')
@@ -1086,11 +1114,8 @@ def equipment_category_pdf_page(category: str, document_type: str, page: int = 1
     return Response(content=image, media_type='image/png', headers={'Cache-Control': 'private, max-age=300'})
 
 @app.get('/equipment-category-documents/preview')
-def preview_equipment_category_document(category: str, document_type: str, db: Session = Depends(get_db), u=Depends(auth)):
-    row = db.query(EquipmentCategoryDocument).filter(
-        func.lower(EquipmentCategoryDocument.category) == category.strip().lower(),
-        EquipmentCategoryDocument.document_type == document_type,
-    ).first()
+def preview_equipment_category_document(category: str, document_type: str, file_id: int | None = None, legacy: bool = False, db: Session = Depends(get_db), u=Depends(auth)):
+    row = find_equipment_category_document(db, category, document_type, file_id, legacy)
     if not row:
         raise HTTPException(404, 'No file is published for this category.')
     if Path(row.filename).suffix.lower() != '.xlsx':
@@ -1106,7 +1131,8 @@ def preview_equipment_category_document(category: str, document_type: str, db: S
 async def publish_equipment_category_document(
     category: str = Form(...),
     document_type: str = Form(...),
-    file: UploadFile = File(...),
+    files: list[UploadFile] = File(default=[]),
+    file: UploadFile | None = File(default=None),
     db: Session = Depends(get_db),
     u=Depends(role(*ENGINEER)),
 ):
@@ -1119,36 +1145,43 @@ async def publish_equipment_category_document(
     if not canonical:
         raise HTTPException(404, 'No equipment was found in this category.')
     category = (canonical[0] or '').strip()
-    filename = Path(file.filename or '').name
-    extension = Path(filename).suffix.lower().lstrip('.')
-    content_type = EQUIPMENT_CATEGORY_FILE_TYPES[document_type].get(extension)
-    if not content_type:
-        raise HTTPException(400, 'Use PDF, Excel, Word, image, CSV, or text files.')
-    raw = await file.read(EQUIPMENT_CATEGORY_FILE_MAX_BYTES + 1)
-    await file.close()
-    if not raw:
-        raise HTTPException(400, 'Choose a file to upload.')
-    if len(raw) > EQUIPMENT_CATEGORY_FILE_MAX_BYTES:
-        raise HTTPException(400, 'The file must be smaller than 15 MB.')
+    uploads = [item for item in files if item and item.filename] or ([file] if file and file.filename else [])
+    if not uploads:
+        raise HTTPException(400, 'Choose at least one file to upload.')
+    if len(uploads) > EQUIPMENT_CATEGORY_FILE_MAX_COUNT:
+        raise HTTPException(400, f'Upload up to {EQUIPMENT_CATEGORY_FILE_MAX_COUNT} files at once.')
     try:
-        row = db.query(EquipmentCategoryDocument).filter_by(category=category, document_type=document_type).first()
-        previous = {'filename': row.filename, 'size': len(row.data or b'')} if row else None
-        if row is None:
-            row = EquipmentCategoryDocument(category=category, document_type=document_type,
-                                             filename=filename[:255], content_type=content_type, data=raw)
+        total_size = 0
+        saved_files = []
+        for upload in uploads:
+            filename = Path(upload.filename or 'document').name or 'document'
+            extension = Path(filename).suffix.lower().lstrip('.')
+            allowed_type = EQUIPMENT_CATEGORY_FILE_TYPES[document_type].get(extension)
+            if not allowed_type:
+                raise HTTPException(400, f'{filename}: use PDF, Excel, Word, image, CSV, or text files.')
+            raw = await upload.read(EQUIPMENT_CATEGORY_FILE_MAX_BYTES + 1)
+            await upload.close()
+            if not raw:
+                raise HTTPException(400, f'{filename}: file is empty.')
+            if len(raw) > EQUIPMENT_CATEGORY_FILE_MAX_BYTES:
+                raise HTTPException(400, f'{filename}: each file must be 100 MB or smaller.')
+            total_size += len(raw)
+            if total_size > EQUIPMENT_CATEGORY_FILE_MAX_TOTAL_BYTES:
+                raise HTTPException(400, 'The total upload size must be 200 MB or smaller.')
+            content_type = allowed_type
+            row = EquipmentCategoryDocumentFile(
+                category=category, document_type=document_type, filename=filename[:255],
+                content_type=content_type or 'application/octet-stream', data=raw,
+            )
             db.add(row)
-        else:
-            row.filename = filename[:255]
-            row.content_type = content_type
-            row.data = raw
-            row.updated_at = datetime.utcnow()
+            saved_files.append({'filename': row.filename, 'size': len(raw)})
         audit(db, u, 'PUBLISH', 'EquipmentCategoryDocument', f'{category}:{document_type}',
-              old=previous, new={'filename': row.filename, 'size': len(raw)})
+              new={'files': saved_files, 'count': len(saved_files), 'size': total_size})
         db.commit()
     except Exception:
         db.rollback()
         raise
-    return {'published': True, 'category': category, 'document_type': document_type, 'filename': filename}
+    return {'published': True, 'category': category, 'document_type': document_type, 'files': saved_files}
 
 @app.post('/equipment/import-catalog')
 def import_equipment_catalog_endpoint(
