@@ -2979,7 +2979,7 @@ function drawEquipment() {
   ];
   if (canMaintain()) equipmentMetrics.splice(4, 0, ['From reports', String((store.pending || []).length), '＋', 'purple', '']);
   document.getElementById('metric-grid').innerHTML = metrics(equipmentMetrics);
-  const body = rows.map((item) => `<tr data-row="${esc(equipmentRowKey(item))}" class="${selected && equipmentRowKey(selected) === equipmentRowKey(item) ? 'selected' : ''}">${cell(esc(item.equipment_id), true)}${cell(esc(item.name))}${cell(esc(item.equipment_type))}${cell(esc(placeOf(item)))}${cell(liveBadge(item.status))}${cell(liveBadge(item.condition || '—'))}${cell(liveBadge(criticalityLabel(item.criticality)))}</tr>`);
+  const body = rows.map((item) => `<tr data-row="${esc(equipmentRowKey(item))}" class="${selected && equipmentRowKey(selected) === equipmentRowKey(item) ? 'selected' : ''}"><td class="code" data-label="${esc(t('Equipment Code'))}">${esc(item.equipment_id)}</td><td data-label="${esc(t('Equipment Name'))}">${esc(item.name)}</td><td data-label="${esc(t('Category'))}">${esc(item.equipment_type)}</td><td data-label="${esc(t('Location (Plant / Line)'))}">${esc(placeOf(item))}</td><td data-label="${esc(t('Status'))}">${liveBadge(item.status)}</td><td data-label="${esc(t('Condition'))}">${liveBadge(item.condition || '—')}</td><td data-label="${esc(t('Criticality'))}">${liveBadge(criticalityLabel(item.criticality))}</td></tr>`);
   const detail = ui.mode === 'create'
     ? equipmentForm()
     : ui.mode === 'edit' && selected
