@@ -1536,7 +1536,11 @@ function drawPreventiveDispatchApprovals(dispatches) {
 
 async function drawWorkOrders() {
   const pmDispatches = (canMaintain() || isTechnician()) ? await apiRequest('/preventive-dispatches') : [];
-  const scopeOrders = scopedWorkOrders(store.orders);
+  const visibleOrders = scopedWorkOrders(store.orders);
+  const technicianId = getSavedUser()?.technician_id;
+  const scopeOrders = isTechnician()
+    ? visibleOrders.filter((order) => technicianId && assigneeIds(order).includes(technicianId))
+    : visibleOrders;
   const issuedOrders = scopeOrders.filter((order) => order.work_order_number);
   const queryOrders = scopeOrders.filter((order) => workOrderSearchMatches(order));
   const rows = queryOrders.filter((order) => {
@@ -1575,8 +1579,8 @@ async function drawWorkOrders() {
       bindForm();
       document.getElementById('job-pdf-export')?.addEventListener('click', () => exportJobOrderPdf(order));
       document.getElementById('job-back')?.addEventListener('click', () => {
-        ui.mode = 'view';
-        drawWorkOrders();
+        ui.mode = isTechnician() && window.matchMedia('(max-width: 760px)').matches ? 'mobile-detail' : 'view';
+        drawWorkOrders().then(() => window.scrollTo({ top: 0, behavior: 'smooth' }));
       });
       return;
     }
@@ -1588,16 +1592,18 @@ async function drawWorkOrders() {
   }
   const myPmDispatch = isTechnician() ? pmDispatches.find((item) => item.id === Number(ui.pmDispatchId)) : null;
   if (ui.pmDispatchId && !myPmDispatch) ui.pmDispatchId = '';
-  const body = rows.map((order) => `<tr data-row="${esc(order.work_order_id)}" class="${selected && selected.work_order_id === order.work_order_id ? 'selected' : ''}">${cell(esc(order.work_order_number || t('Pending acceptance')), true)}${cell(liveBadge(order.work_order_type))}${cell(esc(equipmentText(order)))}${cell(esc(order.problem_description || order.work_description || '—'))}${cell(liveBadge(order.priority))}${cell(isTechnician() ? `<button type="button" class="badge blue job-open" data-open="${esc(order.work_order_id)}">${esc(t(order.status || 'Open'))}</button>` : liveBadge(order.status))}${cell(esc(assigneeNames(order)))}${cell(fmtDate(order.planned_date))}${cell(fmtDate(order.request_date))}</tr>`);
-  const detail = myPmDispatch ? preventiveDispatchDetails(myPmDispatch, false) : ui.mode === 'create' ? workOrderForm() : detailPanel('Work Order Details', selected?.status || '—', selected?.work_order_number || t('Pending acceptance'), equipmentText(selected || {}), [
+  const body = rows.map((order) => `<tr data-row="${esc(order.work_order_id)}" class="${selected && selected.work_order_id === order.work_order_id ? 'selected' : ''}"><td class="code" data-label="${esc(t('WO No.'))}">${esc(order.work_order_number || t('Pending acceptance'))}</td><td data-label="${esc(t('Type'))}">${liveBadge(order.work_order_type)}</td><td data-label="${esc(t('Equipment'))}">${esc(equipmentText(order))}</td><td data-label="${esc(t('Problem / Description'))}">${esc(order.problem_description || order.work_description || '—')}</td><td data-label="${esc(t('Priority'))}">${liveBadge(order.priority)}</td><td data-label="${esc(t('Status'))}">${isTechnician() ? `<button type="button" class="badge blue job-open" data-open="${esc(order.work_order_id)}">${esc(t(order.status || 'Open'))}</button>` : liveBadge(order.status)}</td><td data-label="${esc(t('Assigned To'))}">${esc(assigneeNames(order))}</td><td data-label="${esc(t('Due Date'))}">${esc(fmtDate(order.planned_date))}</td><td data-label="${esc(t('Created On'))}">${esc(fmtDate(order.request_date))}</td></tr>`);
+  let detail = myPmDispatch ? preventiveDispatchDetails(myPmDispatch, false) : ui.mode === 'create' ? workOrderForm() : detailPanel('Work Order Details', selected?.status || '—', selected?.work_order_number || t('Pending acceptance'), equipmentText(selected || {}), [
     ['Type', selected?.work_order_type], ['Priority', selected?.priority], ['Equipment', equipmentText(selected || {})],
     ['Problem', selected?.problem_description], ['Work', selected?.work_description], ['PM details', selected?.pm_details], ['Technicians', assigneeNames(selected)],
     ['Planned', fmtDate(selected?.planned_date)], ['Downtime (h)', selected?.downtime_h ?? '—'], ['Parts', selected?.parts_used],
   ]);
+  const mobileOrderDetail = isTechnician() && ui.mode === 'mobile-detail' && !myPmDispatch && Boolean(selected);
+  if (mobileOrderDetail) detail = detail.replace('<aside class="panel detail">', `<aside class="panel detail"><button type="button" class="detail-button work-order-mobile-back" id="work-order-mobile-back">← ${esc(t('Back'))}</button>`);
   const workOrderFilters = filtersHtml({ className: 'work-order-filters', equipmentSearch: false, equipmentQuery: '', extra: `<label class="equipment-query">${esc(t('Search'))}<span class="equipment-query-row"><input id="work-order-query" type="search" value="${esc(ui.workOrderQuery || '')}" placeholder="${esc(t('Search...'))}" autocomplete="off"><button type="button" class="detail-button" id="work-order-query-go">${esc(t('Search'))}</button></span></label>` });
   const technicianDispatches = isTechnician() && pmDispatches.length
     ? `<div class="pm-dispatch-inbox"><b>${esc(t('Preventive work orders awaiting acceptance'))}</b>${pmDispatches.map((item) => `<button type="button" class="pm-dispatch-item${myPmDispatch?.id === item.id ? ' selected' : ''}" data-open-pm="${item.id}"><strong>${esc(item.machine_code)} — ${esc(item.machine_name)}</strong><small>${esc(item.task)}</small><small>${esc(fmtDate(item.work_date))} · ${esc(t('Accept before'))}: ${esc(fmtDate(String(item.expires_at || '').slice(0, 10)))}</small></button>`).join('')}</div>` : '';
-  document.getElementById('workspace').className = 'workspace work-orders-board';
+  document.getElementById('workspace').className = `workspace work-orders-board${mobileOrderDetail ? ' mobile-order-detail' : ''}`;
   const workOrderTabs = ['All Work Orders', 'In Progress', 'Overdue', 'Completed', 'On Hold', ...(canMaintain() ? ['Work orders needing approval and dispatch'] : [])];
   document.getElementById('workspace').innerHTML = `${workOrderFilters}<section class="panel">${technicianDispatches}${tabsHtml(workOrderTabs)}${tableShell(['WO No.', 'Type', 'Equipment', 'Problem / Description', 'Priority', 'Status', 'Assigned To', 'Due Date', 'Created On'], body, shown(rows.length, scopeOrders.length, 'work orders'))}</section>${detail}`;
   bindFilters();
@@ -1620,6 +1626,10 @@ async function drawWorkOrders() {
   if (!myPmDispatch && ui.mode !== 'create' && selected && canMaintain()) {
     document.querySelector('.detail')?.insertAdjacentHTML('beforeend', `<button type="button" class="detail-button danger" data-delete="/work-orders" data-delete-id="${esc(selected.work_order_id)}">${esc(t('Delete'))}</button>`);
   }
+  document.getElementById('work-order-mobile-back')?.addEventListener('click', () => {
+    ui.mode = 'view';
+    drawWorkOrders().then(() => window.scrollTo({ top: 0, behavior: 'smooth' }));
+  });
   bindRows();
   bindDeletes();
   document.querySelectorAll('[data-open]').forEach((button) => button.addEventListener('click', (event) => {
@@ -4028,7 +4038,9 @@ function bindRows() {
   }));
   document.querySelectorAll('[data-row]').forEach((row) => row.addEventListener('click', () => {
     ui.rowKey = row.dataset.row;
-    ui.mode = 'view';
+    ui.mode = ui.page === 'work-orders' && isTechnician() && window.matchMedia('(max-width: 760px)').matches
+      ? 'mobile-detail'
+      : 'view';
     if (ui.page === 'sop') {
       const sop = (store.sops || []).find((item) => item.category === row.dataset.row || item.sop_id === row.dataset.row);
       if (sop?.category_sop) {
@@ -4036,7 +4048,9 @@ function bindRows() {
         ui.equipmentId = '';
       } else if (sop?.equipment_id) ui.equipmentId = sop.equipment_id;
     }
-    draw(ui.page);
+    if (ui.page === 'work-orders' && isTechnician() && window.matchMedia('(max-width: 760px)').matches) {
+      draw(ui.page).then(() => window.scrollTo({ top: 0, behavior: 'smooth' }));
+    } else draw(ui.page);
   }));
 }
 
