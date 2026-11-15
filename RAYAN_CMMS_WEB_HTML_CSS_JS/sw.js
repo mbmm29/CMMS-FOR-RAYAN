@@ -1,4 +1,4 @@
-const CACHE = 'rayan-cmms-shell-52';
+const CACHE = 'rayan-cmms-shell-53';
 const SHELL = [
   '/login.html',
   '/index.html',
@@ -38,8 +38,11 @@ function noticeOptions(payload) {
     vibrate: [180, 80, 180, 80, 280],
     timestamp: Date.now(),
     interruptionLevel: payload.interruptionLevel || 'timeSensitive',
-    data: { url: payload.url || '/index.html#work-orders' },
-    actions: [
+    data: { url: payload.url || '/index.html#work-orders', workOrderId: payload.workOrderId || null, pmDispatchId: payload.pmDispatchId || null },
+    actions: (payload.workOrderId || payload.pmDispatchId) ? [
+      { action: 'accept-work-order', title: 'قبول الأمر' },
+      { action: 'reject-work-order', title: 'رفض الأمر' },
+    ] : [
       { action: 'open', title: 'فتح' },
       { action: 'dismiss', title: 'إغلاق' },
     ],
@@ -74,7 +77,17 @@ self.addEventListener('notificationclick', (event) => {
   const action = event.action;
   event.notification.close();
   if (action === 'dismiss') return;
-  const target = new URL(event.notification.data?.url || '/index.html#work-orders', self.location.origin).href;
+  const targetUrl = new URL(event.notification.data?.url || '/index.html#work-orders', self.location.origin);
+  const workOrderId = event.notification.data?.workOrderId;
+  const pmDispatchId = event.notification.data?.pmDispatchId;
+  if (workOrderId && ['accept-work-order', 'reject-work-order'].includes(action)) {
+    targetUrl.searchParams.set('workOrderAction', action === 'accept-work-order' ? 'Accepted' : 'Rejected');
+    targetUrl.searchParams.set('workOrderId', workOrderId);
+  } else if (pmDispatchId && ['accept-work-order', 'reject-work-order'].includes(action)) {
+    targetUrl.searchParams.set('dispatchAction', action === 'accept-work-order' ? 'Accepted' : 'Rejected');
+    targetUrl.searchParams.set('dispatchId', pmDispatchId);
+  }
+  const target = targetUrl.href;
   event.waitUntil(self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((windows) => {
     const open = windows.find((client) => client.url.startsWith(self.location.origin));
     if (open) {

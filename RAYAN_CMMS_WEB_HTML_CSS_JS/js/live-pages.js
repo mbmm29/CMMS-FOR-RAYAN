@@ -342,6 +342,11 @@ function myResponse(order) {
   return (order.assignment_states || []).find((row) => row.technician_id === me)?.response || 'Pending';
 }
 
+function workOrderNumberText(order) {
+  if (order?.work_order_number) return order.work_order_number;
+  return myResponse(order) === 'Accepted' ? t('Number issued after submission') : t('Pending acceptance');
+}
+
 function technicianChecks(selectedIds) {
   const chosen = new Set(selectedIds || []);
   const boxes = store.technicians.map((item) => `<label><input type="checkbox" name="assigned_technician_ids" value="${esc(item.technician_id)}"${chosen.has(item.technician_id) ? ' checked' : ''}> ${esc(item.name)}</label>`).join('');
@@ -1592,8 +1597,8 @@ async function drawWorkOrders() {
   }
   const myPmDispatch = isTechnician() ? pmDispatches.find((item) => item.id === Number(ui.pmDispatchId)) : null;
   if (ui.pmDispatchId && !myPmDispatch) ui.pmDispatchId = '';
-  const body = rows.map((order) => `<tr data-row="${esc(order.work_order_id)}" class="${selected && selected.work_order_id === order.work_order_id ? 'selected' : ''}"><td class="code" data-label="${esc(t('WO No.'))}">${esc(order.work_order_number || t('Pending acceptance'))}</td><td data-label="${esc(t('Type'))}">${liveBadge(order.work_order_type)}</td><td data-label="${esc(t('Equipment'))}">${esc(equipmentText(order))}</td><td data-label="${esc(t('Problem / Description'))}">${esc(order.problem_description || order.work_description || '—')}</td><td data-label="${esc(t('Priority'))}">${liveBadge(order.priority)}</td><td data-label="${esc(t('Status'))}">${isTechnician() ? `<button type="button" class="badge blue job-open" data-open="${esc(order.work_order_id)}">${esc(t(order.status || 'Open'))}</button>` : liveBadge(order.status)}</td><td data-label="${esc(t('Assigned To'))}">${esc(assigneeNames(order))}</td><td data-label="${esc(t('Due Date'))}">${esc(fmtDate(order.planned_date))}</td><td data-label="${esc(t('Created On'))}">${esc(fmtDate(order.request_date))}</td></tr>`);
-  let detail = myPmDispatch ? preventiveDispatchDetails(myPmDispatch, false) : ui.mode === 'create' ? workOrderForm() : detailPanel('Work Order Details', selected?.status || '—', selected?.work_order_number || t('Pending acceptance'), equipmentText(selected || {}), [
+  const body = rows.map((order) => `<tr data-row="${esc(order.work_order_id)}" class="${selected && selected.work_order_id === order.work_order_id ? 'selected' : ''}"><td class="code" data-label="${esc(t('WO No.'))}">${esc(workOrderNumberText(order))}</td><td data-label="${esc(t('Type'))}">${liveBadge(order.work_order_type)}</td><td data-label="${esc(t('Equipment'))}">${esc(equipmentText(order))}</td><td data-label="${esc(t('Problem / Description'))}">${esc(order.problem_description || order.work_description || '—')}</td><td data-label="${esc(t('Priority'))}">${liveBadge(order.priority)}</td><td data-label="${esc(t('Status'))}">${isTechnician() ? `<button type="button" class="badge blue job-open" data-open="${esc(order.work_order_id)}">${esc(t(order.status || 'Open'))}</button>` : liveBadge(order.status)}</td><td data-label="${esc(t('Assigned To'))}">${esc(assigneeNames(order))}</td><td data-label="${esc(t('Due Date'))}">${esc(fmtDate(order.planned_date))}</td><td data-label="${esc(t('Created On'))}">${esc(fmtDate(order.request_date))}</td></tr>`);
+  let detail = myPmDispatch ? preventiveDispatchDetails(myPmDispatch, false) : ui.mode === 'create' ? workOrderForm() : detailPanel('Work Order Details', selected?.status || '—', workOrderNumberText(selected), equipmentText(selected || {}), [
     ['Type', selected?.work_order_type], ['Priority', selected?.priority], ['Equipment', equipmentText(selected || {})],
     ['Problem', selected?.problem_description], ['Work', selected?.work_description], ['PM details', selected?.pm_details], ['Technicians', assigneeNames(selected)],
     ['Planned', fmtDate(selected?.planned_date)], ['Downtime (h)', selected?.downtime_h ?? '—'], ['Parts', selected?.parts_used],
@@ -1649,8 +1654,8 @@ async function drawWorkOrders() {
       store = null;
       ui.pmDispatchId = '';
       ui.rowKey = result.work_order_id;
-      const issuedNumber = result.work_order_number || result.work_order_id;
-      toast(`${t('Preventive work order accepted.')}${issuedNumber ? ` ${issuedNumber}` : ''}`);
+      ui.mode = 'job';
+      toast(t('Preventive work order accepted. Enter the repair action, then submit it.'));
       await paint('work-orders');
     } catch (exception) {
       if (error) error.textContent = t(exception.message);
@@ -1667,7 +1672,8 @@ async function drawWorkOrders() {
           await apiRequest(`/work-orders/${encodeURIComponent(selected.work_order_id)}/respond`, { method: 'POST', body: JSON.stringify({ decision }) });
           store = null;
           ui.rowKey = selected.work_order_id;
-          toast(decision === 'Accepted' ? 'Work order accepted and recorded.' : 'Work order rejected.');
+          if (decision === 'Accepted') ui.mode = 'job';
+          toast(decision === 'Accepted' ? 'Work order accepted. Enter the repair action, then submit it.' : 'Work order rejected.');
           await paint('work-orders');
         } catch (error) {
           document.getElementById('response-error').textContent = error.message;
@@ -3391,7 +3397,7 @@ function workOrderFor(row) {
 }
 
 function workOrderNumber(row) {
-  return row?.wo_id || workOrderFor(row)?.work_order_id || '';
+  return workOrderFor(row)?.work_order_number || row?.wo_id || workOrderFor(row)?.work_order_id || '';
 }
 
 function maintenanceKind(row) {
@@ -3728,7 +3734,8 @@ function bindJobPlace(form) {
 
 function jobActions(order) {
   const pdf = order ? `<button type="button" id="job-pdf-export">${esc(t('Export PDF'))}</button>` : '';
-  return `<p id="live-form-error" class="form-error"></p><div class="lube-actions no-print">${pdf}<button type="button" id="job-back">${esc(t('Back'))}</button><button type="submit">${esc(t('Save'))}</button></div>`;
+  const submitLabel = order && isTechnician() ? t('Submit order') : t('Save');
+  return `<p id="live-form-error" class="form-error"></p><div class="lube-actions no-print">${pdf}<button type="button" id="job-back">${esc(t('Back'))}</button><button type="submit">${esc(submitLabel)}</button></div>`;
 }
 
 function orderForPdf(order) {
@@ -3802,7 +3809,7 @@ function workOrderForm(order) {
       jobField('Section', `<input value="${esc(place.section)}" readonly>`),
       jobField('Maintenance type', `<input value="${esc(jobTypeLabel(order.work_order_type))}" readonly>`),
       jobField('Machine name', `<input class="job-code" value="${esc(equipmentText(order))}" readonly>`, 'job-wide'),
-      jobField('Repair order no.', `<input class="job-code" value="${esc(order.work_order_number || t('Pending acceptance'))}" readonly>`),
+      jobField('Repair order no.', `<input class="job-code" value="${esc(workOrderNumberText(order))}" readonly>`),
       jobField('Date', `<input type="date" value="${esc(String(order.planned_date || '').slice(0, 10))}" readonly>`),
       ...(order.pm_details ? [jobField('PM details', `<input class="job-code" value="${esc(order.pm_details)}" readonly>`, 'job-wide')] : []),
     ].join('');
@@ -4084,11 +4091,17 @@ function bindForm(selectedEquipment = null) {
         })).filter((part) => part.name || part.number);
         const partsUsed = parts.length ? parts.map((part, index) => `${index + 1} | ${part.name || '—'} | No: ${part.number || '—'}`).join('\n') : null;
         if (form.dataset.orderId) {
-          await apiRequest(`/work-orders/${encodeURIComponent(form.dataset.orderId)}`, { method: 'PUT', body: JSON.stringify({
+          const jobPayload = {
             corrective_action: data.corrective_action,
             verification: data.verification,
             parts_used: partsUsed,
-          }) });
+          };
+          if (isTechnician()) {
+            if (!String(data.corrective_action || '').trim()) throw new Error(t('Enter the repair action before submitting the work order'));
+            await apiRequest(`/work-orders/${encodeURIComponent(form.dataset.orderId)}/submit`, { method: 'POST', body: JSON.stringify(jobPayload) });
+          } else {
+            await apiRequest(`/work-orders/${encodeURIComponent(form.dataset.orderId)}`, { method: 'PUT', body: JSON.stringify(jobPayload) });
+          }
         } else {
           const technicians = formData.getAll('assigned_technician_ids').filter(Boolean);
           const knownMachine = matchEquipment(data.machine_name);
@@ -4099,7 +4112,10 @@ function bindForm(selectedEquipment = null) {
           await apiRequest('/work-orders', { method: 'POST', body: JSON.stringify({
             work_order_type: data.work_order_type,
             equipment_id: knownMachine ? knownMachine.equipment_id : null,
+            manual_equipment_code: knownMachine ? null : String(data.machine_name || '').trim(),
             manual_equipment_name: knownMachine ? null : data.machine_name,
+            manual_plant_id: knownMachine ? null : data.plant_id,
+            manual_line_id: knownMachine ? null : data.line_id,
             priority: 'Medium',
             status: 'Open',
             problem_description: data.problem_description,
@@ -4146,7 +4162,7 @@ function bindForm(selectedEquipment = null) {
       }
       store = null;
       ui.mode = 'view';
-      toast(form.dataset.orderId ? t('Work order accepted and added to your daily report.') : 'Saved.');
+      toast(form.dataset.orderId ? t('Work order submitted and added to your daily report.') : 'Saved.');
       await paint(ui.page);
     } catch (exception) {
       error.textContent = exception.message;
@@ -6589,7 +6605,7 @@ function noticesLiveMark(rows) {
     .join('|');
 }
 
-function showLivePhoneNotice(title, body) {
+function showLivePhoneNotice(title, body, workOrderId = '', pmDispatchId = '') {
   try {
     if (typeof Notification === 'undefined' || Notification.permission !== 'granted') return;
     const text = String(body || '').slice(0, 180);
@@ -6600,7 +6616,7 @@ function showLivePhoneNotice(title, body) {
       badge: '/icons/icon-192.png',
       lang: 'ar',
       dir: 'rtl',
-      data: { url: '/index.html#work-orders' },
+      data: { url: '/index.html#work-orders', workOrderId: workOrderId || null, pmDispatchId: pmDispatchId || null },
       tag: `cmms-live-${Date.now()}`,
       renotify: true,
       silent: false,
@@ -6608,6 +6624,10 @@ function showLivePhoneNotice(title, body) {
       vibrate: [180, 80, 180, 80, 280],
       timestamp: Date.now(),
     };
+    if (workOrderId || pmDispatchId) options.actions = [
+      { action: 'accept-work-order', title: 'قبول الأمر' },
+      { action: 'reject-work-order', title: 'رفض الأمر' },
+    ];
     if (navigator.serviceWorker?.ready) {
       navigator.serviceWorker.ready.then((registration) => {
         registration.showNotification(title, options);
@@ -6634,7 +6654,7 @@ function announceLiveWorkOrders(orders, previousMark) {
     : `${fresh.length} ${t('new work orders')}`;
   const detail = first.problem_description || first.work_description || equipmentText(first) || '';
   screenNotice(detail ? `${title} — ${detail}` : title, 'ok');
-  showLivePhoneNotice(title, detail || t('Open Work Orders'));
+  showLivePhoneNotice(title, detail || t('Open Work Orders'), first.work_order_id);
 }
 
 async function pollLiveUpdates(force) {
@@ -6672,7 +6692,9 @@ async function pollLiveUpdates(force) {
       const newest = (notices || []).find((row) => !row.is_read);
       if (newest) {
         screenNotice(`${t(newest.title || 'New notice')}${newest.message ? ` — ${t(newest.message)}` : ''}`, 'ok');
-        showLivePhoneNotice(t(newest.title || 'New notice'), t(newest.message || ''));
+        const actionableOrder = newest.kind === 'work_order' && newest.title === 'Work Order Assigned' ? newest.related_id : '';
+        const actionableDispatch = newest.kind === 'pm_dispatch' && newest.title === 'Preventive maintenance work order' ? newest.related_id : '';
+        showLivePhoneNotice(t(newest.title || 'New notice'), t(newest.message || ''), actionableOrder || '', actionableDispatch || '');
       }
     }
   } catch (_) {
@@ -6697,6 +6719,54 @@ function startLiveSync() {
     });
   }
   pollLiveUpdates(true);
+}
+
+async function handleWorkOrderNotificationAction(workOrderId, decision) {
+  if (!workOrderId || !['Accepted', 'Rejected'].includes(decision) || !isTechnician()) return;
+  try {
+    await apiRequest(`/work-orders/${encodeURIComponent(workOrderId)}/respond`, {
+      method: 'POST', body: JSON.stringify({ decision }),
+    });
+    const url = new URL(window.location.href);
+    url.searchParams.delete('workOrderAction');
+    url.searchParams.delete('workOrderId');
+    history.replaceState(null, '', `${url.pathname}${url.search}${url.hash}`);
+    ui.rowKey = workOrderId;
+    ui.mode = decision === 'Accepted' ? 'job' : 'view';
+    store = null;
+    toast(decision === 'Accepted' ? 'Work order accepted. Enter the repair action, then submit it.' : 'Work order rejected.');
+    await paint('work-orders');
+  } catch (error) {
+    toast(t(error.message || 'Unable to respond to the work order'));
+    await paint('work-orders');
+  }
+}
+
+async function handlePreventiveNotificationAction(dispatchId, decision) {
+  if (!dispatchId || !['Accepted', 'Rejected'].includes(decision) || !isTechnician()) return;
+  try {
+    const result = await apiRequest(`/preventive-dispatches/${encodeURIComponent(dispatchId)}/respond`, {
+      method: 'POST', body: JSON.stringify({ decision }),
+    });
+    const url = new URL(window.location.href);
+    url.searchParams.delete('dispatchAction');
+    url.searchParams.delete('dispatchId');
+    history.replaceState(null, '', `${url.pathname}${url.search}${url.hash}`);
+    store = null;
+    ui.pmDispatchId = '';
+    if (decision === 'Accepted' && result.work_order_id) {
+      ui.rowKey = result.work_order_id;
+      ui.mode = 'job';
+      toast(t('Preventive work order accepted. Enter the repair action, then submit it.'));
+    } else {
+      ui.mode = 'view';
+      toast(decision === 'Rejected' ? t('Work order rejected.') : t('Unable to respond to the work order'));
+    }
+    await paint('work-orders');
+  } catch (error) {
+    toast(t(error.message || 'Unable to respond to the work order'));
+    await paint('work-orders');
+  }
 }
 
 function openCreate() {
@@ -6796,6 +6866,17 @@ render = function liveRender(page) {
 
 const boot = location.hash.slice(1);
 render(boot === 'users' || boot === 'user' || boot === 'daily-reports' || LIVE_PAGES.has(boot) ? boot : 'dashboard');
+const notificationParams = new URLSearchParams(location.search);
+const notificationDecision = notificationParams.get('workOrderAction');
+const notificationOrderId = notificationParams.get('workOrderId');
+const dispatchDecision = notificationParams.get('dispatchAction');
+const dispatchId = notificationParams.get('dispatchId');
+if (notificationDecision && notificationOrderId) {
+  window.setTimeout(() => handleWorkOrderNotificationAction(notificationOrderId, notificationDecision), 0);
+}
+if (dispatchDecision && dispatchId) {
+  window.setTimeout(() => handlePreventiveNotificationAction(dispatchId, dispatchDecision), 0);
+}
 document.addEventListener('cmms-language', () => {
   captureAnnual();
   if (document.body.dataset.livePage) paint(ui.page);

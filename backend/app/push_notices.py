@@ -148,7 +148,7 @@ def send_test_push(db: Session, user_id: int) -> bool:
 PUSH_TTL_SECONDS = 24 * 60 * 60
 
 
-def _send(db: Session, user_id: int, title: str, body: str, url: str, private_key: str) -> bool:
+def _send(db: Session, user_id: int, title: str, body: str, url: str, private_key: str, *, work_order_id: str | None = None, pm_dispatch_id: int | None = None) -> bool:
     if webpush is None:
         return False
     subscriptions = db.query(PushSubscription).filter_by(user_id=user_id).all()
@@ -158,6 +158,8 @@ def _send(db: Session, user_id: int, title: str, body: str, url: str, private_ke
         'title': title,
         'body': body,
         'url': url,
+        'workOrderId': work_order_id,
+        'pmDispatchId': pm_dispatch_id,
         'tag': f'cmms-{int(time.time() * 1000)}',
         'sound': True,
         # Ask iOS for a time-sensitive banner with sound when Focus allows it.
@@ -327,10 +329,45 @@ def _push_work_orders(technician_ids, work_order_id, equipment_id, manual_name):
                 continue
             if not _remember(db, account.id, 'work_order', work_order_id):
                 continue
-            if _send(db, account.id, 'أمر صيانة جديد', body, '/index.html#work-orders', private_key):
+            if _send(db, account.id, 'أمر صيانة جديد', body, '/index.html#work-orders', private_key, work_order_id=work_order_id):
                 db.commit()
             else:
                 # Keep the delivery slot open so the next assign/retry can push again.
+                db.rollback()
+    except Exception:
+        db.rollback()
+    finally:
+        db.close()
+
+
+def queue_preventive_dispatch_pushes(technician_ids, dispatch_id, equipment_code, equipment_name, task):
+    ids = [item for item in (technician_ids or []) if item]
+    if not ids or not dispatch_id:
+        return
+    threading.Thread(
+        target=_push_preventive_dispatches,
+        args=(ids, int(dispatch_id), equipment_code or '', equipment_name or '', task or ''),
+        daemon=True,
+    ).start()
+
+
+def _push_preventive_dispatches(technician_ids, dispatch_id, equipment_code, equipment_name, task):
+    db = SessionLocal()
+    try:
+        private_key, _public = vapid_material(db)
+        detail = ' — '.join(part for part in (equipment_code, equipment_name, task) if part)
+        body = f'{detail}. اقبل أمر الصيانة قبل انتهاء مهلة الأسبوع.'
+        for technician_id in technician_ids:
+            account = db.query(User).filter(
+                User.is_active == True,
+                User.role.in_(('TECHNICIAN', 'LUBRICATION_TECHNICIAN')),
+                func.lower(User.technician_id) == (technician_id or '').lower(),
+            ).first()
+            if not account or not _remember(db, account.id, 'pm_dispatch', str(dispatch_id)):
+                continue
+            if _send(db, account.id, 'أمر صيانة وقائية جديد', body, '/index.html#work-orders', private_key, pm_dispatch_id=dispatch_id):
+                db.commit()
+            else:
                 db.rollback()
     except Exception:
         db.rollback()

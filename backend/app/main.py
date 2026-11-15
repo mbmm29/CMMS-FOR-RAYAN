@@ -30,6 +30,7 @@ from .push_notices import (
     public_key as push_public_key,
     queue_critical_stock_pushes,
     queue_engineer_pushes,
+    queue_preventive_dispatch_pushes,
     queue_work_order_pushes,
     save_subscription,
     send_test_push,
@@ -2448,10 +2449,6 @@ def annual_pm_due(year: int, plant_id: str | None = None, db: Session = Depends(
         row.work_order_id: row
         for row in db.query(WorkOrder).filter(WorkOrder.work_order_id.in_(order_ids)).all()
     } if order_ids else {}
-    dispatches = {
-        row.annual_task_id: row
-        for row in db.query(PreventiveDispatch).filter(PreventiveDispatch.annual_task_id.in_([task.id for task in tasks])).all()
-    } if tasks else {}
     done_reports = db.query(DailyReportItem, DailyReport.report_date).join(
         DailyReport, DailyReport.id == DailyReportItem.report_id
     ).filter(
@@ -2477,9 +2474,6 @@ def annual_pm_due(year: int, plant_id: str | None = None, db: Session = Depends(
         if order and order.status in ('Completed', 'Closed'):
             completed = True
             finished = order.closing_date.date() if order.closing_date else (order.end_time.date() if order.end_time else None)
-        elif dispatch and dispatch.status == 'Accepted':
-            completed = True
-            finished = dispatch.accepted_at.date() if dispatch.accepted_at else task.work_date
         elif task.work_order_id and task.work_order_id in done_by_order:
             completed = True
             finished = min(done_by_order[task.work_order_id])
@@ -2905,6 +2899,7 @@ def send_preventive_dispatch(dispatch_id: int, data: PreventiveDispatchSend, db:
     dispatch.sent_at = now
     audit(db, u, 'SEND', 'PreventiveDispatch', dispatch.id, new={'technician_ids': technician_ids, 'expires_at': dispatch.expires_at})
     db.commit()
+    queue_preventive_dispatch_pushes(technician_ids, dispatch.id, task.machine_code, task.machine_name, task.task)
     return preventive_dispatch_out(db, dispatch)
 
 
@@ -2946,10 +2941,10 @@ def respond_preventive_dispatch(dispatch_id: int, data: PreventiveDispatchRespon
         raise HTTPException(404, 'The annual maintenance task no longer exists')
     plan_item = db.query(AnnualPMItem).filter_by(plan_id=plan.id, line_key=task.source_key).first() if task.source_key else None
     equipment = equipment_for_day_task(db, plan.plant_id, task.machine_code)
-    work_order_number = next_work_order_id(db, plan.plant_id, task.work_date.year)
+    work_order_key = draft_work_order_id()
     order = WorkOrder(
-        work_order_id=work_order_number,
-        work_order_number=work_order_number,
+        work_order_id=work_order_key,
+        work_order_number=None,
         work_order_type=task.maintenance_type if task.maintenance_type in MAINT_TYPES else 'Preventive',
         priority='Medium',
         status='In Progress',
@@ -2960,7 +2955,7 @@ def respond_preventive_dispatch(dispatch_id: int, data: PreventiveDispatchRespon
         request_date=now.date(),
         assigned_technician_id=u.technician_id,
         created_by='Annual PM approval',
-        records_committed=True,
+        records_committed=False,
     )
     fill_order_equipment(order, equipment, plan.plant_id, task.machine_code, task.machine_name)
     db.add(order)
@@ -2976,7 +2971,6 @@ def respond_preventive_dispatch(dispatch_id: int, data: PreventiveDispatchRespon
         if other.technician_id != u.technician_id and other.response == 'Pending':
             other.response = 'Rejected'
             other.responded_at = now
-    deliver_to_technician(db, u, order, u.technician_id)
     audit(db, u, 'ACCEPT', 'PreventiveDispatch', dispatch.id, new={'work_order_id': order.work_order_id})
     db.commit()
     db.refresh(order)
@@ -3868,19 +3862,25 @@ def collapse_duplicate_machine_logs(db: Session) -> int:
     return removed
 
 
-def record_high_machine(db, work_order, technician_id, action=None, teammate_ids=None):
-    """Machine history is kept only for High corrective or emergency work."""
-    if work_order.work_order_type not in {'Corrective', 'Emergency'} or work_order.priority != 'High':
-        return None
+def record_work_order_machine(db, work_order, technician_id, action=None, teammate_ids=None):
+    """Write every submitted maintenance order to its equipment history."""
     existing = merge_machine_records_for_wo(db, work_order.work_order_id)
     if existing:
         if teammate_ids:
             names = technician_names(db, teammate_ids)
             existing.team_technician_ids = ','.join(teammate_ids)
             existing.team_technicians = ', '.join(names)
-        if action:
-            existing.action = action
-            existing.description = action
+        existing.record_date = work_order.planned_date or date.today()
+        existing.record_type = work_order.work_order_type
+        existing.technician_id = technician_id
+        existing.pm_id = work_order.pm_id
+        existing.description = work_order.problem_description or work_order.work_description
+        existing.cause = work_order.failure_cause or work_order.problem_description
+        existing.action = action or work_order.corrective_action or work_order.work_description
+        existing.start_time = work_order.start_time.time() if work_order.start_time else existing.start_time
+        existing.end_time = work_order.end_time.time() if work_order.end_time else existing.end_time
+        existing.downtime_h = work_order.downtime_h
+        existing.spare_parts = work_order.parts_used
         return existing
     equipment_id = work_order.equipment_id or work_order.manual_equipment_code
     if not equipment_id:
@@ -3896,7 +3896,11 @@ def record_high_machine(db, work_order, technician_id, action=None, teammate_ids
         team_technicians=', '.join(technician_names(db, teammate_ids or [])) or None,
         description=work_order.problem_description or work_order.work_description,
         cause=work_order.failure_cause or work_order.problem_description,
-        action=action,
+        action=action or work_order.corrective_action or work_order.work_description,
+        start_time=work_order.start_time.time() if work_order.start_time else None,
+        end_time=work_order.end_time.time() if work_order.end_time else None,
+        downtime_h=work_order.downtime_h,
+        spare_parts=work_order.parts_used,
     )
     db.add(record)
     db.flush()
@@ -4119,16 +4123,24 @@ def release_other_technicians(db, work_order, technician_id):
         retract_assignment(db, work_order, work_order.assigned_technician_id)
     work_order.assigned_technician_id = technician_id
 
-def commit_accepted_work(db, actor, work_order, technician_id, teammate_ids=None):
-    """Write the accepted order into the technician report and the shared records."""
+def commit_submitted_work(db, actor, work_order, technician_id, teammate_ids=None):
+    """Finalize a technician-submitted order in the report and shared records."""
     issue_work_order_number(db, work_order)
     deliver_to_technician(db, actor, work_order, technician_id)
     if not work_order.records_committed:
         consume_annual_plan(db, work_order, date.today())
-        record_high_machine(db, work_order, technician_id, teammate_ids=teammate_ids)
+        record = record_work_order_machine(db, work_order, technician_id, action=work_order.corrective_action, teammate_ids=teammate_ids)
+        report = db.query(DailyReport).filter(
+            DailyReport.report_date == date.today(),
+            DailyReport.technician_id == technician_id,
+            DailyReport.status.in_(('Draft', 'Returned')),
+        ).order_by(DailyReport.id.desc()).first()
+        if record and report:
+            record.daily_report_id = report.id
+            record.team_technician_ids = ','.join(teammate_ids or []) or None
+            record.team_technicians = ', '.join(technician_names(db, teammate_ids or [])) or None
         work_order.records_committed = True
-    if work_order.status in ('Open', 'Overdue'):
-        work_order.status = 'In Progress'
+    work_order.status = 'Completed'
 
 def apply_assignment(db, actor, work_order, technician_ids, had_assignees):
     added, removed = replace_assignees(db, work_order, technician_ids)
@@ -4301,7 +4313,7 @@ def sync_job_to_daily_report(db, actor, work_order, technician_id):
     apply_spare_stock(db, before_parts, spare_text_from_items(db.query(DailyReportItem).filter_by(report_id=report.id).all()))
 
 def accept_saved_job(db, actor, work_order):
-    """Saving the job form accepts it for this technician and drops the other assignees."""
+    """Finalize a job submitted by a technician (legacy Save button clients)."""
     technician_id = actor.technician_id
     row = db.query(WorkOrderAssignment).filter_by(
         work_order_id=work_order.work_order_id,
@@ -4318,39 +4330,39 @@ def accept_saved_job(db, actor, work_order):
         db.flush()
     if row.response == 'Rejected':
         raise HTTPException(409, 'This work order was already rejected')
-    if row.response != 'Accepted':
-        release_other_technicians(db, work_order, technician_id)
-        row.response = 'Accepted'
-        row.responded_at = datetime.utcnow()
-        teammate_ids, teammate_names, scheduled_shift = work_order_team(db, work_order, technician_id, date.today())
-        for teammate_id in teammate_ids:
-            assignment = db.query(WorkOrderAssignment).filter_by(work_order_id=work_order.work_order_id, technician_id=teammate_id).first()
-            if assignment is None:
-                assignment = WorkOrderAssignment(work_order_id=work_order.work_order_id, technician_id=teammate_id, response='Accepted', assigned_at=datetime.utcnow(), responded_at=datetime.utcnow())
-                db.add(assignment)
-            else:
-                assignment.response = 'Accepted'
-                assignment.responded_at = assignment.responded_at or datetime.utcnow()
-            account = db.query(User).filter(User.technician_id == teammate_id, User.is_active == True).first()
-            if account:
-                notify(db, account.id, 'Work Order Team', f'{work_order.work_order_number or "Work order"} was accepted by your shift teammate. You were added to the same-shift work team.', 'work_order', work_order.work_order_id)
-        commit_accepted_work(db, actor, work_order, technician_id, teammate_ids=teammate_ids)
-        plant = db.query(Equipment).filter_by(equipment_id=work_order.equipment_id).first() if work_order.equipment_id else None
-        report = db.query(DailyReport).filter_by(report_date=date.today(), technician_id=technician_id).filter(DailyReport.status.in_(('Draft', 'Returned'))).order_by(DailyReport.id.desc()).first()
-        if report:
-            report.plant_id = report.plant_id or (plant.plant_id if plant else work_order.manual_plant_id)
-            report.team_technician_ids = ','.join(teammate_ids) or None
-            report.team_technicians = ', '.join(teammate_names) or None
-            if not report.shift and scheduled_shift:
-                report.shift = canonical_shift_label(scheduled_shift)
-            for machine_record in db.query(MachineRecord).filter_by(wo_id=work_order.work_order_id).all():
-                machine_record.team_technician_ids = report.team_technician_ids
-                machine_record.team_technicians = report.team_technicians
-        refresh_work_order_response(db, work_order)
-    else:
-        release_other_technicians(db, work_order, technician_id)
-        work_order.assigned_technician_id = technician_id
+    release_other_technicians(db, work_order, technician_id)
+    row.response = 'Accepted'
+    row.responded_at = row.responded_at or datetime.utcnow()
+    work_order.status = 'In Progress'
+    teammate_ids, teammate_names, scheduled_shift = work_order_team(db, work_order, technician_id, date.today())
+    for teammate_id in teammate_ids:
+        assignment = db.query(WorkOrderAssignment).filter_by(work_order_id=work_order.work_order_id, technician_id=teammate_id).first()
+        if assignment is None:
+            assignment = WorkOrderAssignment(work_order_id=work_order.work_order_id, technician_id=teammate_id, response='Accepted', assigned_at=datetime.utcnow(), responded_at=datetime.utcnow())
+            db.add(assignment)
+        else:
+            assignment.response = 'Accepted'
+            assignment.responded_at = assignment.responded_at or datetime.utcnow()
+        account = db.query(User).filter(User.technician_id == teammate_id, User.is_active == True).first()
+        if account and teammate_id != technician_id:
+            notify(db, account.id, 'Work Order Team', 'Your shift teammate accepted this order. You were added to the work team.', 'work_order', work_order.work_order_id)
+    if not (work_order.corrective_action or '').strip():
+        raise HTTPException(400, 'Enter the repair action before submitting the work order')
+    commit_submitted_work(db, actor, work_order, technician_id, teammate_ids=teammate_ids)
     sync_job_to_daily_report(db, actor, work_order, technician_id)
+    plant = db.query(Equipment).filter_by(equipment_id=work_order.equipment_id).first() if work_order.equipment_id else None
+    report = db.query(DailyReport).filter_by(report_date=date.today(), technician_id=technician_id).filter(DailyReport.status.in_(('Draft', 'Returned'))).order_by(DailyReport.id.desc()).first()
+    if report:
+        report.plant_id = report.plant_id or (plant.plant_id if plant else work_order.manual_plant_id)
+        report.team_technician_ids = ','.join(teammate_ids) or None
+        report.team_technicians = ', '.join(teammate_names) or None
+        if not report.shift and scheduled_shift:
+            report.shift = canonical_shift_label(scheduled_shift)
+        record = db.query(MachineRecord).filter_by(wo_id=work_order.work_order_id).first()
+        if record:
+            record.daily_report_id = report.id
+            record.team_technician_ids = report.team_technician_ids
+            record.team_technicians = report.team_technicians
 
 def plant_now():
     """The mill clock in Asia/Baghdad, so an approval after midnight is the right day."""
@@ -4414,9 +4426,45 @@ def respond_work_order(wo_id: str, data: WORespond, db: Session = Depends(get_db
     row.responded_at = datetime.utcnow()
     if decision == 'Accepted':
         release_other_technicians(db, order, u.technician_id)
-        commit_accepted_work(db, u, order, u.technician_id)
+        row.response = 'Accepted'
+        order.status = 'In Progress'
+        teammate_ids, _names, _shift = work_order_team(db, order, u.technician_id, date.today())
+        for teammate_id in teammate_ids:
+            if teammate_id == u.technician_id:
+                continue
+            assignment = db.query(WorkOrderAssignment).filter_by(work_order_id=order.work_order_id, technician_id=teammate_id).first()
+            if assignment is None:
+                db.add(WorkOrderAssignment(work_order_id=order.work_order_id, technician_id=teammate_id, response='Accepted', assigned_at=datetime.utcnow(), responded_at=datetime.utcnow()))
+            else:
+                assignment.response = 'Accepted'
+                assignment.responded_at = assignment.responded_at or datetime.utcnow()
     refresh_work_order_response(db, order)
     audit(db, u, decision.upper(), 'WorkOrder', wo_id, new={'technician_id': u.technician_id, 'decision': decision})
+    db.commit()
+    db.refresh(order)
+    return order
+
+@app.post('/work-orders/{wo_id}/submit', response_model=WOOut)
+def submit_work_order(wo_id: str, data: WOUpdate, db: Session = Depends(get_db), u=Depends(auth)):
+    if not is_technician_account(u) or not u.technician_id:
+        raise HTTPException(403, 'Only the assigned technician can submit this work order')
+    order = db.query(WorkOrder).filter_by(work_order_id=wo_id).first()
+    if not order:
+        raise HTTPException(404, 'Work Order not found')
+    assignment = db.query(WorkOrderAssignment).filter_by(work_order_id=wo_id, technician_id=u.technician_id).first()
+    if assignment is None or assignment.response != 'Accepted':
+        raise HTTPException(409, 'Accept the work order before submitting it')
+    if order.records_committed:
+        raise HTTPException(409, 'This work order was already submitted')
+    payload = data.model_dump(exclude_unset=True)
+    allowed = {'start_time', 'end_time', 'downtime_h', 'labor_hours', 'failure_mode', 'failure_cause', 'corrective_action', 'result', 'verification', 'parts_used'}
+    if set(payload) - allowed:
+        raise HTTPException(403, 'Technician cannot modify this field')
+    for key, value in payload.items():
+        setattr(order, key, value)
+    old = {'status': order.status, 'work_order_number': order.work_order_number}
+    accept_saved_job(db, u, order)
+    audit(db, u, 'SUBMIT', 'WorkOrder', wo_id, old=old, new={**payload, 'status': order.status, 'work_order_number': order.work_order_number})
     db.commit()
     db.refresh(order)
     return order
@@ -4525,7 +4573,7 @@ def draft_work_order_id():
     return f'DRAFT-{secrets.token_hex(12)}'
 
 def issue_work_order_number(db, order):
-    """Assign a plant sequence number only when a technician accepts the order."""
+    """Assign a plant sequence number only when the technician submits completed work."""
     if order.work_order_number:
         return order.work_order_number
     equipment = db.query(Equipment).filter_by(equipment_id=order.equipment_id).first() if order.equipment_id else None
