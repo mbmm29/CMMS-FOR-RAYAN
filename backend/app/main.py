@@ -5028,8 +5028,13 @@ def load_daily_report(db: Session, report_id: str, u, edit: bool = False):
     report = db.query(DailyReport).filter_by(report_id=report_id).first()
     if not report:
         raise HTTPException(404, 'Daily Report not found')
-    if is_technician_account(u) and report.technician_id != u.technician_id:
-        raise HTTPException(403, 'You can only edit your own reports' if edit else 'You can only view your own reports')
+    if is_technician_account(u):
+        if not u.technician_id:
+            raise HTTPException(403, 'Your account is not linked to a technician')
+        if edit and report.technician_id != u.technician_id:
+            raise HTTPException(403, 'You can only edit your own reports')
+        if report.technician_id != u.technician_id and report.status not in ('Submitted', 'Approved', 'Returned'):
+            raise HTTPException(403, 'You can only view reports that have been sent')
     if edit and (report.locked_at or report.status not in ('Draft', 'Returned')):
         raise HTTPException(409, f'Report cannot be edited while status is {report.status}')
     return report
@@ -5049,9 +5054,15 @@ def list_reports(
     if equipment_id:
         q = q.filter(DailyReport.equipment_id == equipment_id)
 
-    # A technician sees his own reports. Engineers/developers can see all.
+    # Technicians can read their own reports and reports sent by colleagues;
+    # drafts from other technicians remain private. Only the owner can edit.
     if is_technician_account(u):
-        q = q.filter(DailyReport.technician_id == u.technician_id)
+        if not u.technician_id:
+            raise HTTPException(403, 'Your account is not linked to a technician')
+        q = q.filter(or_(
+            DailyReport.technician_id == u.technician_id,
+            DailyReport.status.in_(('Submitted', 'Approved', 'Returned')),
+        ))
     elif technician_id:
         q = q.filter(DailyReport.technician_id == technician_id)
 
@@ -5067,12 +5078,7 @@ def get_report(
     db: Session = Depends(get_db),
     u=Depends(auth),
 ):
-    r = db.query(DailyReport).filter_by(report_id=report_id).first()
-    if not r:
-        raise HTTPException(404, 'Daily Report not found')
-
-    if is_technician_account(u) and r.technician_id != u.technician_id:
-        raise HTTPException(403, 'You can only view your own reports')
+    r = load_daily_report(db, report_id, u)
 
     items = db.query(DailyReportItem).filter_by(report_id=r.id).all()
     return report_to_dict(r, items, db)

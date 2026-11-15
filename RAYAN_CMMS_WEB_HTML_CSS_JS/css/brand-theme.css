@@ -377,7 +377,19 @@ html body .equipment-linked-parts-table .data-table{width:100%;min-width:700px}
 html body .equipment-linked-parts-table .data-table th,html body .equipment-linked-parts-table .data-table td{padding:10px 12px;font-size:13px}
 html body .equipment-category-spare-file .equipment-file-frame{height:58vh;min-height:380px}
 /* Technician work orders: assigned-only cards and a focused mobile detail screen. */
+html body.technician-interface .workspace.lube-board.daily-report-detail-view{display:grid!important;grid-template-columns:minmax(0,1fr)!important;gap:12px;min-width:0;max-width:100%;overflow:visible}
+html body.technician-interface .workspace.lube-board.daily-report-detail-view>.lube-list,
+html body.technician-interface .workspace.lube-board.daily-report-detail-view>#daily-photo-print{display:none!important}
+html body.technician-interface .workspace.lube-board.daily-report-detail-view>.daily-paper{width:100%;max-width:1200px;min-width:0;margin:0 auto;overflow-x:hidden}
+html body.technician-interface .daily-read-toolbar{display:flex;align-items:center;justify-content:space-between;gap:10px;margin:0 0 14px;padding:10px 12px;border:1px solid #d4dfd2;border-radius:10px;background:#f7f9f6;color:#26372e}
+html body.technician-interface .daily-read-toolbar .detail-button{width:auto;min-height:40px;margin:0;padding:8px 13px;white-space:nowrap}
+html body.technician-interface .daily-read-toolbar>span{min-width:0;color:#435b49;font-size:13px;font-weight:700;text-align:end;overflow-wrap:anywhere}
+html body.technician-interface .daily-read-only-note{margin:0 0 12px;padding:10px 12px;border:1px solid #d9c665;border-radius:8px;background:#fff8dc;color:#655316;font-size:13px;font-weight:700}
 @media(max-width:760px){
+  html body.technician-interface .daily-read-toolbar{align-items:stretch;flex-direction:column}
+  html body.technician-interface .daily-read-toolbar .detail-button{width:100%}
+  html body.technician-interface .daily-read-toolbar>span{text-align:start}
+  html body.technician-interface .workspace.lube-board.daily-report-detail-view>.daily-paper{padding:12px 10px}
   html body.technician-interface .workspace.work-orders-board{display:grid;grid-template-columns:minmax(0,1fr);gap:10px;width:100%;min-width:0;max-width:100%}
   html body.technician-interface .workspace.work-orders-board>.work-order-filters{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;width:100%;min-width:0;padding:10px;border:1px solid #d4dfd2;border-radius:11px;background:#fff}
   html body.technician-interface .workspace.work-orders-board>.work-order-filters>label{display:grid;min-width:0;gap:5px;font-size:11px}
