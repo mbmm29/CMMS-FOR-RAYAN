@@ -1689,7 +1689,7 @@ def apply_spare_stock(db, before_text, after_text):
     if changed:
         watch_critical_stock(db, changed)
 
-def spare_parts_order_payload(order: SparePartsOrder):
+def spare_parts_order_payload(order: SparePartsOrder, user_names=None):
     def item_payload(row):
         return {
             'id': row.id,
@@ -1727,7 +1727,7 @@ def spare_parts_order_payload(order: SparePartsOrder):
         'machine': ', '.join(machine['machine'] for machine in machines if machine['machine']),
         'serial_number': ', '.join(machine['serial_number'] for machine in machines if machine['serial_number']),
         'status': order.status,
-        'created_by': order.created_by,
+        'created_by': (user_names or {}).get(order.created_by, order.created_by),
         'created_at': order.created_at,
         'machines': machines,
         'items': [item for machine in machines for item in machine['items']],
@@ -1737,7 +1737,8 @@ def spare_parts_order_payload(order: SparePartsOrder):
 @app.get('/spare-parts-orders')
 def list_spare_parts_orders(db: Session = Depends(get_db), u=Depends(role(*ENGINEER))):
     rows = db.query(SparePartsOrder).order_by(SparePartsOrder.created_at.desc(), SparePartsOrder.id.desc()).all()
-    return [spare_parts_order_payload(row) for row in rows]
+    user_names = {username: (full_name or username) for username, full_name in db.query(User.username, User.full_name).all()}
+    return [spare_parts_order_payload(row, user_names) for row in rows]
 
 
 @app.get('/spare-parts-orders/{order_id}')
@@ -1745,7 +1746,8 @@ def get_spare_parts_order(order_id: str, db: Session = Depends(get_db), u=Depend
     order = db.query(SparePartsOrder).filter_by(order_id=order_id).first()
     if not order:
         raise HTTPException(404, 'Spare parts order not found')
-    return spare_parts_order_payload(order)
+    user = db.query(User).filter_by(username=order.created_by).first()
+    return spare_parts_order_payload(order, {user.username: (user.full_name or user.username)} if user else {})
 
 
 @app.post('/spare-parts-orders')
@@ -1814,7 +1816,7 @@ def create_spare_parts_order(data: SparePartsOrderCreate, db: Session = Depends(
     })
     db.commit()
     db.refresh(order)
-    return spare_parts_order_payload(order)
+    return spare_parts_order_payload(order, {u.username: (u.full_name or u.username)})
 
 
 @app.get('/spare-parts-orders/{order_id}/items/{item_id}/image')

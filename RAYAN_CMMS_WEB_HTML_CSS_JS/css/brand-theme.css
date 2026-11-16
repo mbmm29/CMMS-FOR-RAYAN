@@ -530,6 +530,7 @@ html body .sawa-order-choice b{font-size:13px}
 html body .sawa-order-choice span,html body .sawa-order-choice small{color:#586b5d;font-size:11px;overflow-wrap:anywhere}
 html body .sawa-order-empty{display:grid;min-height:220px;place-items:center;color:#617264;text-align:center}
 html body .sawa-order-details>header,html body .sawa-order-title{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin:0 0 14px;padding-bottom:12px;border-bottom:1px solid #e0e8dc}
+html body .sawa-order-detail-actions{display:flex;align-items:center;justify-content:flex-end;flex-wrap:wrap;gap:8px}
 html body .sawa-order-details>header p,html body .sawa-order-title p{margin:5px 0 0;color:#637166;font-size:12px}
 html body .sawa-order-pump-info{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin:0 0 14px;padding:12px;border:1px solid #e0e8dc;border-radius:9px;background:#f7f9f4}
 html body .sawa-order-pump-info>div{display:grid;gap:5px;min-width:0}
