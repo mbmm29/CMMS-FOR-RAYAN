@@ -1,4 +1,4 @@
-const LIVE_PAGES = new Set(['dashboard', 'work-orders', 'pm-schedule', 'work-schedule', 'plants', 'new-equipment', 'equipment', 'sop', 'machine-records', 'lubrication', 'daily-reports', 'motor-condition', 'iso', 'spare-parts']);
+const LIVE_PAGES = new Set(['dashboard', 'work-orders', 'pm-schedule', 'work-schedule', 'plants', 'new-equipment', 'equipment', 'sop', 'machine-records', 'lubrication', 'daily-reports', 'motor-condition', 'iso', 'spare-parts', 'orders']);
 const DEFAULT_TAB = {
   dashboard: 'All',
   'work-orders': 'All Work Orders',
@@ -14,9 +14,10 @@ const DEFAULT_TAB = {
   'motor-condition': 'Sheet',
   iso: 'All',
   'spare-parts': 'All parts',
+  orders: 'All orders',
 };
 const shellRender = render;
-const ui = { page: 'dashboard', tab: 'All', rowKey: '', mode: 'view', plantId: '', plantIds: [], lineId: '', sectionId: '', equipmentId: '', sopCategory: '', equipmentQuery: '', workOrderQuery: '', spareEquipment: '', spareQuery: '', technicianId: '', dateFrom: '', dateTo: '', annualPlant: '', annualYear: new Date().getFullYear(), annualItems: [], annualWeek: '', annualCopy: null, weekTasks: [], scheduleWeek: '', lubeId: '', dailyId: '', dailyFilter: '' };
+const ui = { page: 'dashboard', tab: 'All', rowKey: '', mode: 'view', plantId: '', plantIds: [], lineId: '', sectionId: '', equipmentId: '', sopCategory: '', equipmentQuery: '', workOrderQuery: '', spareEquipment: '', spareQuery: '', technicianId: '', dateFrom: '', dateTo: '', annualPlant: '', annualYear: new Date().getFullYear(), annualItems: [], annualWeek: '', annualCopy: null, weekTasks: [], scheduleWeek: '', lubeId: '', dailyId: '', dailyFilter: '', spareOrderId: '' };
 const ANNUAL_MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 const WEEKDAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 const DAY_MAINTENANCE_TYPES = ['Preventive', 'Corrective', 'Emergency', 'Routine', 'Inspection', 'Lubrication', 'Motor condition'];
@@ -6354,6 +6355,130 @@ async function drawSpareParts() {
   paintSparePartsList(sparePartsCache);
 }
 
+let spareOrderImageUrls = [];
+
+function spareOrderItemRow(sequence) {
+  return `<tr class="spare-order-edit-row"><td class="spare-order-seq">${sequence}</td><td><input class="sawa-description" maxlength="250" placeholder="${esc(t('Description'))}" required></td><td><input class="sawa-position" maxlength="80" placeholder="POS."></td><td><input class="sawa-material" maxlength="100" placeholder="${esc(t('Material number'))}"></td><td><input class="sawa-barcode" maxlength="120" placeholder="${esc(t('Barcode'))}"></td><td><input class="sawa-quantity" type="number" min="0.001" step="any" inputmode="decimal" required></td><td><input class="sawa-image" type="file" accept="image/png,image/jpeg,image/webp" aria-label="${esc(t('Image'))}"><button class="detail-button danger sawa-remove-row" type="button" aria-label="${esc(t('Remove row'))}">×</button></td></tr>`;
+}
+
+function bindSpareOrderRows() {
+  const rows = document.getElementById('sawa-order-lines');
+  if (!rows) return;
+  const renumber = () => rows.querySelectorAll('tr').forEach((row, index) => { row.querySelector('.spare-order-seq').textContent = String(index + 1); });
+  document.getElementById('sawa-order-add-row')?.addEventListener('click', () => {
+    rows.insertAdjacentHTML('beforeend', spareOrderItemRow(rows.children.length + 1));
+    renumber();
+  });
+  rows.addEventListener('click', (event) => {
+    if (!event.target.closest('.sawa-remove-row')) return;
+    if (rows.children.length > 1) event.target.closest('tr').remove();
+    else event.target.closest('tr').querySelectorAll('input').forEach((input) => { input.value = ''; });
+    renumber();
+  });
+}
+
+function fileDataUrl(file) {
+  return new Promise((resolve, reject) => {
+    if (!file) return resolve(null);
+    if (file.size > 4 * 1024 * 1024) return reject(new Error(t('Each item image must be 4 MB or smaller.')));
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result || ''));
+    reader.onerror = () => reject(new Error(t('Could not read item image.')));
+    reader.readAsDataURL(file);
+  });
+}
+
+function spareOrderFormHtml() {
+  return `<form id="sawa-order-form" class="panel sawa-order-form"><div class="sawa-order-title"><div><h2>${esc(t('Sawa pump spare parts order'))}</h2><p>${esc(t('Enter the pump details, then add one row for each required spare part.'))}</p></div><button type="button" class="detail-button" id="sawa-order-cancel">${esc(t('Cancel'))}</button></div><div class="sawa-order-pump"><label>${esc(t('Pump model'))}<input name="pump_model" maxlength="180" placeholder="Sawa pump ZRF5-55-GRZE" required></label><label>${esc(t('Serial No.'))}<input name="serial_number" maxlength="100" placeholder="Serial number"></label></div><div class="sawa-order-table-wrap"><table class="data-table sawa-order-table"><thead><tr><th>${esc(t('No.'))}</th><th>${esc(t('Description'))}</th><th>POS.</th><th>${esc(t('Material number'))}</th><th>${esc(t('Barcode'))}</th><th>${esc(t('Qty.'))}</th><th>${esc(t('Image'))}</th></tr></thead><tbody id="sawa-order-lines">${spareOrderItemRow(1)}</tbody></table></div><div class="sawa-order-actions"><button type="button" class="detail-button" id="sawa-order-add-row">${esc(t('Add item'))}</button><span>${esc(t('Each image can be up to 4 MB.'))}</span><button type="submit" class="detail-button primary" id="sawa-order-save">${esc(t('Save order'))}</button></div><p class="form-error" id="sawa-order-error"></p></form>`;
+}
+
+async function saveSparePartsOrder(event) {
+  event.preventDefault();
+  const form = event.currentTarget;
+  const error = form.querySelector('#sawa-order-error');
+  const save = form.querySelector('#sawa-order-save');
+  error.textContent = '';
+  const rows = [];
+  try {
+    for (const [index, row] of [...form.querySelectorAll('.spare-order-edit-row')].entries()) {
+      const description = row.querySelector('.sawa-description').value.trim();
+      const position = row.querySelector('.sawa-position').value.trim();
+      const material = row.querySelector('.sawa-material').value.trim();
+      const barcode = row.querySelector('.sawa-barcode').value.trim();
+      const quantityText = row.querySelector('.sawa-quantity').value.trim();
+      const file = row.querySelector('.sawa-image').files?.[0];
+      if (![description, position, material, barcode, quantityText, file].some(Boolean)) continue;
+      if (!description || !quantityText || !(Number(quantityText) > 0)) throw new Error(t('Enter a description and a quantity greater than zero for each item.'));
+      rows.push({
+        sequence: index + 1,
+        description,
+        position: position || null,
+        material_number: material || null,
+        barcode: barcode || null,
+        quantity: Number(quantityText),
+        image_data: await fileDataUrl(file),
+        image_filename: file?.name || null,
+      });
+    }
+    if (!rows.length) throw new Error(t('Add at least one spare part.'));
+    save.disabled = true;
+    const saved = await apiRequest('/spare-parts-orders', {
+      method: 'POST',
+      body: JSON.stringify({ pump_model: form.elements.namedItem('pump_model').value.trim(), serial_number: form.elements.namedItem('serial_number').value.trim(), items: rows }),
+    });
+    ui.spareOrderId = saved.order_id;
+    ui.mode = 'view';
+    toast(`${t('Order saved')}: ${saved.order_id}`);
+    await drawSparePartsOrders();
+  } catch (exception) {
+    error.textContent = t(exception.message || 'Could not save order.');
+  } finally {
+    if (save?.isConnected) save.disabled = false;
+  }
+}
+
+async function drawSparePartsOrders() {
+  if (!canMaintain()) return;
+  const orders = await apiRequest('/spare-parts-orders');
+  const selected = orders.find((order) => order.order_id === ui.spareOrderId) || null;
+  if (!selected && ui.mode !== 'create' && orders.length) ui.spareOrderId = orders[0].order_id;
+  const current = orders.find((order) => order.order_id === ui.spareOrderId) || null;
+  document.getElementById('metric-grid').innerHTML = metrics([
+    ['Total Orders', String(orders.length), '▤', 'blue', ''],
+    ['Pump models', String(new Set(orders.map((order) => order.pump_model)).size), '⚙', 'green', ''],
+    ['Parts ordered', String(orders.reduce((total, order) => total + (order.items || []).length, 0)), '□', 'orange', ''],
+  ]);
+  const list = `<aside class="panel sawa-order-list"><h2>${esc(t('Orders'))}</h2>${orders.length ? orders.map((order) => `<button type="button" class="sawa-order-choice${order.order_id === ui.spareOrderId && ui.mode !== 'create' ? ' active' : ''}" data-sawa-order="${esc(order.order_id)}"><b>${esc(order.pump_model)}</b><span>${esc(order.order_id)}</span><small>${esc(order.serial_number || t('No serial number'))} · ${esc(fmtDate(String(order.created_at || '').slice(0, 10)))}</small></button>`).join('') : `<p class="live-note">${esc(t('No spare parts orders yet.'))}</p>`}</aside>`;
+  let detail = `<section class="panel sawa-order-empty"><p>${esc(t('Choose an order to view its details, or create a new order.'))}</p></section>`;
+  if (ui.mode === 'create') detail = spareOrderFormHtml();
+  else if (current) {
+    const itemRows = current.items.map((item, index) => `<tr><td>${index + 1}</td><td>${esc(item.description)}</td><td>${esc(item.position || '—')}</td><td>${esc(item.material_number || '—')}</td><td>${esc(item.barcode || '—')}</td><td>${esc(item.quantity)}</td><td>${item.image_available ? `<img class="sawa-order-image" data-order-image="${item.id}" alt="${esc(item.image_filename || t('Image'))}">` : '—'}</td></tr>`).join('');
+    detail = `<section class="panel sawa-order-details"><header><div><h2>${esc(t('Sawa pump spare parts order'))}</h2><p>${esc(current.order_id)} · ${esc(fmtDate(String(current.created_at || '').slice(0, 10)))}</p></div><span class="status-pill">${esc(t(current.status))}</span></header><div class="sawa-order-pump-info"><div><small>${esc(t('Pump model'))}</small><b>${esc(current.pump_model)}</b></div><div><small>${esc(t('Serial No.'))}</small><b>${esc(current.serial_number || '—')}</b></div><div><small>${esc(t('Created by'))}</small><b>${esc(current.created_by)}</b></div></div><div class="sawa-order-table-wrap"><table class="data-table sawa-order-table"><thead><tr><th>${esc(t('No.'))}</th><th>${esc(t('Description'))}</th><th>POS.</th><th>${esc(t('Material number'))}</th><th>${esc(t('Barcode'))}</th><th>${esc(t('Qty.'))}</th><th>${esc(t('Image'))}</th></tr></thead><tbody>${itemRows}</tbody></table></div></section>`;
+  }
+  document.getElementById('workspace').className = 'workspace sawa-orders-layout';
+  document.getElementById('workspace').innerHTML = `${list}${detail}`;
+  document.querySelectorAll('[data-sawa-order]').forEach((button) => button.addEventListener('click', () => {
+    ui.mode = 'view';
+    ui.spareOrderId = button.dataset.sawaOrder;
+    drawSparePartsOrders().catch((exception) => screenNotice(exception.message, 'error'));
+  }));
+  if (ui.mode === 'create') {
+    bindSpareOrderRows();
+    document.getElementById('sawa-order-form')?.addEventListener('submit', saveSparePartsOrder);
+    document.getElementById('sawa-order-cancel')?.addEventListener('click', () => { ui.mode = 'view'; drawSparePartsOrders(); });
+  }
+  spareOrderImageUrls.forEach((url) => URL.revokeObjectURL(url));
+  spareOrderImageUrls = [];
+  await Promise.all([...document.querySelectorAll('[data-order-image]')].map(async (image) => {
+    try {
+      const blob = await apiRequest(`/spare-parts-orders/${encodeURIComponent(current.order_id)}/items/${encodeURIComponent(image.dataset.orderImage)}/image`, { blob: true });
+      const url = URL.createObjectURL(blob);
+      spareOrderImageUrls.push(url);
+      image.src = url;
+    } catch (_) { image.alt = t('Image unavailable'); }
+  }));
+}
+
 function drawIso() {
   document.getElementById('metric-grid').innerHTML = '';
   document.getElementById('workspace').className = 'workspace';
@@ -6589,6 +6714,7 @@ async function draw(page) {
   else if (page === 'daily-reports') await drawDailyReport();
   else if (page === 'iso') drawIso();
   else if (page === 'spare-parts') await drawSpareParts();
+  else if (page === 'orders') await drawSparePartsOrders();
   else drawRecords();
 }
 
@@ -6625,7 +6751,7 @@ function liveSyncEditing() {
   if (ui.mode === 'create' || ui.mode === 'job') return true;
   if (ui.page === 'daily-reports' || ui.page === 'lubrication' || ui.page === 'motor-condition') return true;
   if (ui.page === 'pm-schedule' && (document.getElementById('annual-rows') || document.querySelector('.week-day'))) return true;
-  if (ui.page === 'iso' || ui.page === 'spare-parts' || ui.page === 'work-schedule') return true;
+  if (ui.page === 'iso' || ui.page === 'spare-parts' || ui.page === 'work-schedule' || ui.page === 'orders') return true;
   return false;
 }
 
@@ -6896,6 +7022,8 @@ render = function liveRender(page) {
   } else if (name === 'iso' && !canMaintain()) {
     name = 'dashboard';
   } else if (name === 'spare-parts' && !canMaintain()) {
+    name = 'dashboard';
+  } else if (name === 'orders' && !canMaintain()) {
     name = 'dashboard';
   }
   if (name !== ui.page) {

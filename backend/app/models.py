@@ -353,6 +353,34 @@ class WorkOrderAssignment(Base):
     work_order: Mapped['WorkOrder'] = relationship(back_populates='assignments')
     __table_args__ = (UniqueConstraint('work_order_id', 'technician_id', name='uq_wo_technician'),)
 
+class SparePartsOrder(Base):
+    __tablename__ = 'spare_parts_orders'
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    order_id: Mapped[str] = mapped_column(String(60), unique=True, index=True)
+    pump_model: Mapped[str] = mapped_column(String(180))
+    serial_number: Mapped[str] = mapped_column(String(100), default='')
+    status: Mapped[str] = mapped_column(String(30), default='Submitted')
+    created_by: Mapped[str] = mapped_column(String(80))
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    items: Mapped[list['SparePartsOrderItem']] = relationship(
+        back_populates='order', cascade='all, delete-orphan', order_by='SparePartsOrderItem.sequence'
+    )
+
+class SparePartsOrderItem(Base):
+    __tablename__ = 'spare_parts_order_items'
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    order_id: Mapped[str] = mapped_column(String(60), ForeignKey('spare_parts_orders.order_id', ondelete='CASCADE'), index=True)
+    sequence: Mapped[int] = mapped_column(Integer)
+    description: Mapped[str] = mapped_column(String(250))
+    position: Mapped[str | None] = mapped_column(String(80), nullable=True)
+    material_number: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    barcode: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    quantity: Mapped[float] = mapped_column(Float)
+    image_filename: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    image_content_type: Mapped[str | None] = mapped_column(String(80), nullable=True)
+    image_data: Mapped[bytes | None] = mapped_column(LargeBinary, nullable=True)
+    order: Mapped['SparePartsOrder'] = relationship(back_populates='items')
+
 class DailyReport(Base):
     __tablename__ = 'daily_reports'
 

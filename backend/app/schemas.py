@@ -588,3 +588,20 @@ class ISOCreate(BaseModel):
 
 class FormNumbersUpdate(BaseModel):
     forms: dict[str, str]
+
+
+class SparePartsOrderItemIn(BaseModel):
+    sequence: int = Field(ge=1)
+    description: str = Field(min_length=1, max_length=250)
+    position: str | None = Field(default=None, max_length=80)
+    material_number: str | None = Field(default=None, max_length=100)
+    barcode: str | None = Field(default=None, max_length=120)
+    quantity: float = Field(gt=0)
+    image_data: str | None = Field(default=None, max_length=6 * 1024 * 1024)
+    image_filename: str | None = Field(default=None, max_length=255)
+
+
+class SparePartsOrderCreate(BaseModel):
+    pump_model: str = Field(min_length=1, max_length=180)
+    serial_number: str = Field(default='', max_length=100)
+    items: list[SparePartsOrderItemIn] = Field(min_length=1, max_length=100)

@@ -1,3 +1,5 @@
+import base64
+import binascii
 import io
 import os
 import re
@@ -1676,6 +1678,110 @@ def apply_spare_stock(db, before_text, after_text):
         changed.append(part)
     if changed:
         watch_critical_stock(db, changed)
+
+def spare_parts_order_payload(order: SparePartsOrder):
+    return {
+        'order_id': order.order_id,
+        'pump_model': order.pump_model,
+        'serial_number': order.serial_number,
+        'status': order.status,
+        'created_by': order.created_by,
+        'created_at': order.created_at,
+        'items': [
+            {
+                'id': row.id,
+                'sequence': row.sequence,
+                'description': row.description,
+                'position': row.position,
+                'material_number': row.material_number,
+                'barcode': row.barcode,
+                'quantity': row.quantity,
+                'image_available': bool(row.image_data),
+                'image_filename': row.image_filename,
+            }
+            for row in order.items
+        ],
+    }
+
+
+@app.get('/spare-parts-orders')
+def list_spare_parts_orders(db: Session = Depends(get_db), u=Depends(role(*ENGINEER))):
+    rows = db.query(SparePartsOrder).order_by(SparePartsOrder.created_at.desc(), SparePartsOrder.id.desc()).all()
+    return [spare_parts_order_payload(row) for row in rows]
+
+
+@app.get('/spare-parts-orders/{order_id}')
+def get_spare_parts_order(order_id: str, db: Session = Depends(get_db), u=Depends(role(*ENGINEER))):
+    order = db.query(SparePartsOrder).filter_by(order_id=order_id).first()
+    if not order:
+        raise HTTPException(404, 'Spare parts order not found')
+    return spare_parts_order_payload(order)
+
+
+@app.post('/spare-parts-orders')
+def create_spare_parts_order(data: SparePartsOrderCreate, db: Session = Depends(get_db), u=Depends(role(*ENGINEER))):
+    pump_model = data.pump_model.strip()
+    if not pump_model:
+        raise HTTPException(400, 'Enter the pump model')
+    order = SparePartsOrder(
+        order_id=f'SPO-{datetime.utcnow():%Y%m%d}-{secrets.token_hex(3).upper()}',
+        pump_model=pump_model,
+        serial_number=data.serial_number.strip(),
+        status='Submitted',
+        created_by=u.username,
+    )
+    db.add(order)
+    total_image_bytes = 0
+    for row in data.items:
+        image_data = None
+        image_content_type = None
+        if row.image_data:
+            try:
+                header, encoded = row.image_data.split(',', 1)
+                image_content_type = header.removeprefix('data:').split(';', 1)[0].lower()
+                if image_content_type not in {'image/jpeg', 'image/png', 'image/webp'}:
+                    raise ValueError('unsupported image type')
+                image_data = base64.b64decode(encoded, validate=True)
+            except (ValueError, binascii.Error):
+                raise HTTPException(400, 'Use a PNG, JPG, or WEBP image for each item.')
+            if len(image_data) > 4 * 1024 * 1024:
+                raise HTTPException(400, 'Each item image must be 4 MB or smaller.')
+            total_image_bytes += len(image_data)
+            if total_image_bytes > 12 * 1024 * 1024:
+                raise HTTPException(400, 'The combined item images must be 12 MB or smaller.')
+        db.add(SparePartsOrderItem(
+            order_id=order.order_id,
+            sequence=row.sequence,
+            description=row.description.strip(),
+            position=(row.position or '').strip() or None,
+            material_number=(row.material_number or '').strip() or None,
+            barcode=(row.barcode or '').strip() or None,
+            quantity=row.quantity,
+            image_filename=(row.image_filename or '').strip() or None,
+            image_content_type=image_content_type,
+            image_data=image_data,
+        ))
+    audit(db, u, 'CREATE', 'SparePartsOrder', order.order_id, new={
+        'pump_model': order.pump_model,
+        'serial_number': order.serial_number,
+        'items': len(data.items),
+    })
+    db.commit()
+    db.refresh(order)
+    return spare_parts_order_payload(order)
+
+
+@app.get('/spare-parts-orders/{order_id}/items/{item_id}/image')
+def get_spare_parts_order_image(order_id: str, item_id: int, db: Session = Depends(get_db), u=Depends(role(*ENGINEER))):
+    item = db.query(SparePartsOrderItem).filter_by(order_id=order_id, id=item_id).first()
+    if not item or not item.image_data:
+        raise HTTPException(404, 'Order item image not found')
+    return Response(
+        content=item.image_data,
+        media_type=item.image_content_type or 'application/octet-stream',
+        headers={'Content-Disposition': f'inline; filename="{quote(item.image_filename or "item-image")}"'},
+    )
+
 
 @app.get('/spare-parts/catalog')
 def spare_part_catalog(db: Session = Depends(get_db), u=Depends(auth)):

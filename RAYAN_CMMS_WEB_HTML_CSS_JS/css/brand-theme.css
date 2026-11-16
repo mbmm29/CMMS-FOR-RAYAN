@@ -521,3 +521,34 @@ html body.technician-interface .daily-read-only-note{margin:0 0 12px;padding:10p
   html body .equipment-category-doc-publish{align-items:stretch;flex-direction:column}
   html body .equipment-category-doc-publish .detail-button{width:100%}
 }
+html body .sawa-orders-layout{display:grid;grid-template-columns:minmax(250px,300px) minmax(0,1fr);align-items:start;gap:14px}
+html body .sawa-order-list,html body .sawa-order-details,html body .sawa-order-form,html body .sawa-order-empty{min-width:0;padding:16px;border:1px solid #d3dfcf;border-radius:12px;background:#fff;box-shadow:0 4px 14px #163b2410}
+html body .sawa-order-list h2,html body .sawa-order-details h2,html body .sawa-order-form h2{margin:0;color:#203b2a;font-size:18px}
+html body .sawa-order-choice{display:grid;width:100%;gap:5px;margin-top:9px;padding:12px;border:1px solid #d9e3d5;border-radius:9px;background:#fbfcf8;color:#22372a;text-align:start;cursor:pointer}
+html body .sawa-order-choice:hover,html body .sawa-order-choice.active{border-color:#c9a72d;background:#fff5ce}
+html body .sawa-order-choice b{font-size:13px}
+html body .sawa-order-choice span,html body .sawa-order-choice small{color:#586b5d;font-size:11px;overflow-wrap:anywhere}
+html body .sawa-order-empty{display:grid;min-height:220px;place-items:center;color:#617264;text-align:center}
+html body .sawa-order-details>header,html body .sawa-order-title{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin:0 0 14px;padding-bottom:12px;border-bottom:1px solid #e0e8dc}
+html body .sawa-order-details>header p,html body .sawa-order-title p{margin:5px 0 0;color:#637166;font-size:12px}
+html body .sawa-order-pump-info{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin:0 0 14px;padding:12px;border:1px solid #e0e8dc;border-radius:9px;background:#f7f9f4}
+html body .sawa-order-pump-info>div{display:grid;gap:5px;min-width:0}
+html body .sawa-order-pump-info small{color:#677468;font-size:11px}
+html body .sawa-order-pump-info b{color:#263a2c;overflow-wrap:anywhere}
+html body .sawa-order-form .sawa-order-title{align-items:center}
+html body .sawa-order-form .sawa-order-pump{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;margin-bottom:14px}
+html body .sawa-order-form .sawa-order-pump label{display:grid;gap:6px;color:#334b39;font-size:12px;font-weight:700}
+html body .sawa-order-form input:not([type=file]){width:100%;min-width:0;min-height:38px;padding:8px 10px;border:1px solid #c7d6c1;border-radius:7px;background:#fff;color:#1d3325}
+html body .sawa-order-table-wrap{width:100%;overflow:auto;border:1px solid #d7e2d3;border-radius:8px}
+html body .sawa-order-table{min-width:840px}
+html body .sawa-order-table th{background:#edf3e9;color:#243d2c;white-space:nowrap}
+html body .sawa-order-table td{vertical-align:middle}
+html body .sawa-order-table .sawa-order-edit-row input:not([type=file]){width:100%;min-width:72px;min-height:35px;padding:6px 7px;border:1px solid #d3dfcf;border-radius:6px;background:#fff;color:#203629}
+html body .sawa-order-table .sawa-image{max-width:150px;font-size:11px}
+html body .sawa-order-table .sawa-remove-row{min-width:30px;min-height:30px;margin-inline-start:4px;padding:4px 8px}
+html body .sawa-order-seq{text-align:center;font-weight:700}
+html body .sawa-order-actions{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-top:12px}
+html body .sawa-order-actions>span{margin-inline-end:auto;color:#627165;font-size:11px}
+html body .sawa-order-image{display:block;width:68px;height:54px;object-fit:contain;border:1px solid #d7e2d3;border-radius:6px;background:#fff}
+@media(max-width:850px){html body .sawa-orders-layout{grid-template-columns:1fr}html body .sawa-order-list{order:0}html body .sawa-order-details,html body .sawa-order-form,html body .sawa-order-empty{order:1}}
+@media(max-width:560px){html body .sawa-order-pump-info,html body .sawa-order-form .sawa-order-pump{grid-template-columns:1fr}html body .sawa-order-actions>*{flex:1 1 100%;width:100%}html body .sawa-order-title{align-items:stretch;flex-direction:column}}
