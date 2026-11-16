@@ -601,8 +601,12 @@ class SparePartsOrderItemIn(BaseModel):
     image_filename: str | None = Field(default=None, max_length=255)
 
 
-class SparePartsOrderCreate(BaseModel):
-    order_name: str = Field(min_length=1, max_length=180)
+class SparePartsOrderMachineIn(BaseModel):
     machine: str = Field(min_length=1, max_length=180)
     serial_number: str = Field(default='', max_length=100)
     items: list[SparePartsOrderItemIn] = Field(min_length=1, max_length=100)
+
+
+class SparePartsOrderCreate(BaseModel):
+    order_name: str = Field(min_length=1, max_length=180)
+    machines: list[SparePartsOrderMachineIn] = Field(min_length=1, max_length=100)

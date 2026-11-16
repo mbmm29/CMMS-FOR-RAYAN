@@ -367,11 +367,27 @@ class SparePartsOrder(Base):
     items: Mapped[list['SparePartsOrderItem']] = relationship(
         back_populates='order', cascade='all, delete-orphan', order_by='SparePartsOrderItem.sequence'
     )
+    machines: Mapped[list['SparePartsOrderMachine']] = relationship(
+        back_populates='order', cascade='all, delete-orphan', order_by='SparePartsOrderMachine.sequence'
+    )
+
+class SparePartsOrderMachine(Base):
+    __tablename__ = 'spare_parts_order_machines'
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    order_id: Mapped[str] = mapped_column(String(60), ForeignKey('spare_parts_orders.order_id', ondelete='CASCADE'), index=True)
+    sequence: Mapped[int] = mapped_column(Integer)
+    machine: Mapped[str] = mapped_column(String(180))
+    serial_number: Mapped[str] = mapped_column(String(100), default='')
+    order: Mapped['SparePartsOrder'] = relationship(back_populates='machines')
+    items: Mapped[list['SparePartsOrderItem']] = relationship(
+        back_populates='machine_group', order_by='SparePartsOrderItem.sequence'
+    )
 
 class SparePartsOrderItem(Base):
     __tablename__ = 'spare_parts_order_items'
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     order_id: Mapped[str] = mapped_column(String(60), ForeignKey('spare_parts_orders.order_id', ondelete='CASCADE'), index=True)
+    machine_id: Mapped[int | None] = mapped_column(Integer, ForeignKey('spare_parts_order_machines.id', ondelete='CASCADE'), nullable=True, index=True)
     sequence: Mapped[int] = mapped_column(Integer)
     description: Mapped[str] = mapped_column(String(250))
     position: Mapped[str | None] = mapped_column(String(80), nullable=True)
@@ -382,6 +398,7 @@ class SparePartsOrderItem(Base):
     image_content_type: Mapped[str | None] = mapped_column(String(80), nullable=True)
     image_data: Mapped[bytes | None] = mapped_column(LargeBinary, nullable=True)
     order: Mapped['SparePartsOrder'] = relationship(back_populates='items')
+    machine_group: Mapped['SparePartsOrderMachine | None'] = relationship(back_populates='items')
 
 class DailyReport(Base):
     __tablename__ = 'daily_reports'

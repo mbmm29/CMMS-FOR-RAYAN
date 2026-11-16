@@ -340,6 +340,11 @@ def ensure_additive_columns():
             if 'order_name' not in existing:
                 with engine.begin() as conn:
                     conn.execute(text("ALTER TABLE spare_parts_orders ADD COLUMN order_name VARCHAR(180) DEFAULT ''"))
+        if 'spare_parts_order_items' in tables:
+            existing = {c['name'] for c in inspector.get_columns('spare_parts_order_items')}
+            if 'machine_id' not in existing:
+                with engine.begin() as conn:
+                    conn.execute(text('ALTER TABLE spare_parts_order_items ADD COLUMN machine_id INTEGER'))
         if 'plants' in tables:
             existing = {c['name'] for c in inspector.get_columns('plants')}
             with engine.begin() as conn:
@@ -1685,28 +1690,47 @@ def apply_spare_stock(db, before_text, after_text):
         watch_critical_stock(db, changed)
 
 def spare_parts_order_payload(order: SparePartsOrder):
+    def item_payload(row):
+        return {
+            'id': row.id,
+            'sequence': row.sequence,
+            'description': row.description,
+            'position': row.position,
+            'material_number': row.material_number,
+            'barcode': row.barcode,
+            'quantity': row.quantity,
+            'image_available': bool(row.image_data),
+            'image_filename': row.image_filename,
+        }
+
+    machines = [
+        {
+            'id': machine.id,
+            'sequence': machine.sequence,
+            'machine': machine.machine,
+            'serial_number': machine.serial_number,
+            'items': [item_payload(row) for row in machine.items],
+        }
+        for machine in order.machines
+    ]
+    if not machines and order.items:
+        machines = [{
+            'id': None,
+            'sequence': 1,
+            'machine': order.machine,
+            'serial_number': order.serial_number,
+            'items': [item_payload(row) for row in order.items],
+        }]
     return {
         'order_id': order.order_id,
         'order_name': order.order_name,
-        'machine': order.machine,
-        'serial_number': order.serial_number,
+        'machine': ', '.join(machine['machine'] for machine in machines if machine['machine']),
+        'serial_number': ', '.join(machine['serial_number'] for machine in machines if machine['serial_number']),
         'status': order.status,
         'created_by': order.created_by,
         'created_at': order.created_at,
-        'items': [
-            {
-                'id': row.id,
-                'sequence': row.sequence,
-                'description': row.description,
-                'position': row.position,
-                'material_number': row.material_number,
-                'barcode': row.barcode,
-                'quantity': row.quantity,
-                'image_available': bool(row.image_data),
-                'image_filename': row.image_filename,
-            }
-            for row in order.items
-        ],
+        'machines': machines,
+        'items': [item for machine in machines for item in machine['items']],
     }
 
 
@@ -1727,53 +1751,66 @@ def get_spare_parts_order(order_id: str, db: Session = Depends(get_db), u=Depend
 @app.post('/spare-parts-orders')
 def create_spare_parts_order(data: SparePartsOrderCreate, db: Session = Depends(get_db), u=Depends(role(*ENGINEER))):
     order_name = data.order_name.strip()
-    machine = data.machine.strip()
-    if not order_name or not machine:
-        raise HTTPException(400, 'Enter the order name and machine')
+    if not order_name:
+        raise HTTPException(400, 'Enter the order name')
     order = SparePartsOrder(
         order_id=f'SPO-{datetime.utcnow():%Y%m%d}-{secrets.token_hex(3).upper()}',
         order_name=order_name,
-        machine=machine,
-        serial_number=data.serial_number.strip(),
+        machine='',
+        serial_number='',
         status='Submitted',
         created_by=u.username,
     )
     db.add(order)
     total_image_bytes = 0
-    for row in data.items:
-        image_data = None
-        image_content_type = None
-        if row.image_data:
-            try:
-                header, encoded = row.image_data.split(',', 1)
-                image_content_type = header.removeprefix('data:').split(';', 1)[0].lower()
-                if image_content_type not in {'image/jpeg', 'image/png', 'image/webp'}:
-                    raise ValueError('unsupported image type')
-                image_data = base64.b64decode(encoded, validate=True)
-            except (ValueError, binascii.Error):
-                raise HTTPException(400, 'Use a PNG, JPG, or WEBP image for each item.')
-            if len(image_data) > 4 * 1024 * 1024:
-                raise HTTPException(400, 'Each item image must be 4 MB or smaller.')
-            total_image_bytes += len(image_data)
-            if total_image_bytes > 12 * 1024 * 1024:
-                raise HTTPException(400, 'The combined item images must be 12 MB or smaller.')
-        db.add(SparePartsOrderItem(
+    item_count = 0
+    for machine_index, machine_data in enumerate(data.machines, start=1):
+        machine_name = machine_data.machine.strip()
+        if not machine_name:
+            raise HTTPException(400, 'Enter a machine for each group')
+        machine = SparePartsOrderMachine(
             order_id=order.order_id,
-            sequence=row.sequence,
-            description=row.description.strip(),
-            position=(row.position or '').strip() or None,
-            material_number=(row.material_number or '').strip() or None,
-            barcode=(row.barcode or '').strip() or None,
-            quantity=row.quantity,
-            image_filename=(row.image_filename or '').strip() or None,
-            image_content_type=image_content_type,
-            image_data=image_data,
-        ))
+            sequence=machine_index,
+            machine=machine_name,
+            serial_number=machine_data.serial_number.strip(),
+        )
+        db.add(machine)
+        db.flush()
+        for row in machine_data.items:
+            image_data = None
+            image_content_type = None
+            if row.image_data:
+                try:
+                    header, encoded = row.image_data.split(',', 1)
+                    image_content_type = header.removeprefix('data:').split(';', 1)[0].lower()
+                    if image_content_type not in {'image/jpeg', 'image/png', 'image/webp'}:
+                        raise ValueError('unsupported image type')
+                    image_data = base64.b64decode(encoded, validate=True)
+                except (ValueError, binascii.Error):
+                    raise HTTPException(400, 'Use a PNG, JPG, or WEBP image for each item.')
+                if len(image_data) > 4 * 1024 * 1024:
+                    raise HTTPException(400, 'Each item image must be 4 MB or smaller.')
+                total_image_bytes += len(image_data)
+                if total_image_bytes > 12 * 1024 * 1024:
+                    raise HTTPException(400, 'The combined item images must be 12 MB or smaller.')
+            db.add(SparePartsOrderItem(
+                order_id=order.order_id,
+                machine_id=machine.id,
+                sequence=row.sequence,
+                description=row.description.strip(),
+                position=(row.position or '').strip() or None,
+                material_number=(row.material_number or '').strip() or None,
+                barcode=(row.barcode or '').strip() or None,
+                quantity=row.quantity,
+                image_filename=(row.image_filename or '').strip() or None,
+                image_content_type=image_content_type,
+                image_data=image_data,
+            ))
+            item_count += 1
     audit(db, u, 'CREATE', 'SparePartsOrder', order.order_id, new={
         'order_name': order.order_name,
-        'machine': order.machine,
-        'serial_number': order.serial_number,
-        'items': len(data.items),
+        'machines': len(data.machines),
+        'items': item_count,
     })
     db.commit()
     db.refresh(order)

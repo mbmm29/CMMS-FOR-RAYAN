@@ -536,8 +536,13 @@ html body .sawa-order-pump-info>div{display:grid;gap:5px;min-width:0}
 html body .sawa-order-pump-info small{color:#677468;font-size:11px}
 html body .sawa-order-pump-info b{color:#263a2c;overflow-wrap:anywhere}
 html body .sawa-order-form .sawa-order-title{align-items:center}
-html body .sawa-order-form .sawa-order-pump{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;margin-bottom:14px}
-html body .sawa-order-form .sawa-order-pump label{display:grid;gap:6px;color:#334b39;font-size:12px;font-weight:700}
+html body .sawa-order-order-name{margin:0 0 14px}
+html body .sawa-order-order-name label,html body .sawa-order-machine-fields label{display:grid;gap:6px;color:#334b39;font-size:12px;font-weight:700}
+html body .sawa-order-machine-group,html body .sawa-order-machine-view{margin:12px 0;padding:12px;border:1px solid #d8e3d4;border-radius:10px;background:#fbfcf8}
+html body .sawa-order-machine-group>header,html body .sawa-order-machine-view>header{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:10px}
+html body .sawa-order-machine-group h3,html body .sawa-order-machine-view h3{margin:0;color:#233d2c;font-size:15px}
+html body .sawa-order-machine-fields{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;margin-bottom:12px}
+html body .sawa-order-machine-view>header span{color:#536658;font-size:12px}
 html body .sawa-order-form input:not([type=file]){width:100%;min-width:0;min-height:38px;padding:8px 10px;border:1px solid #c7d6c1;border-radius:7px;background:#fff;color:#1d3325}
 html body .sawa-order-table-wrap{width:100%;overflow:auto;border:1px solid #d7e2d3;border-radius:8px}
 html body .sawa-order-table{min-width:840px}
@@ -551,4 +556,4 @@ html body .sawa-order-actions{display:flex;align-items:center;justify-content:sp
 html body .sawa-order-actions>span{margin-inline-end:auto;color:#627165;font-size:11px}
 html body .sawa-order-image{display:block;width:68px;height:54px;object-fit:contain;border:1px solid #d7e2d3;border-radius:6px;background:#fff}
 @media(max-width:850px){html body .sawa-orders-layout{grid-template-columns:1fr}html body .sawa-order-list{order:0}html body .sawa-order-details,html body .sawa-order-form,html body .sawa-order-empty{order:1}}
-@media(max-width:560px){html body .sawa-order-pump-info,html body .sawa-order-form .sawa-order-pump{grid-template-columns:1fr}html body .sawa-order-actions>*{flex:1 1 100%;width:100%}html body .sawa-order-title{align-items:stretch;flex-direction:column}}
+@media(max-width:560px){html body .sawa-order-pump-info,html body .sawa-order-machine-fields{grid-template-columns:1fr}html body .sawa-order-actions>*{flex:1 1 100%;width:100%}html body .sawa-order-title,html body .sawa-order-machine-group>header,html body .sawa-order-machine-view>header{align-items:stretch;flex-direction:column}}
