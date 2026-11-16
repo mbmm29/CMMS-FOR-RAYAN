@@ -6400,7 +6400,7 @@ async function saveSparePartsOrder(event) {
   error.textContent = '';
   const rows = [];
   try {
-    for (const [index, row] of [...form.querySelectorAll('.spare-order-edit-row')].entries()) {
+    for (const row of form.querySelectorAll('.spare-order-edit-row')) {
       const description = row.querySelector('.sawa-description').value.trim();
       const position = row.querySelector('.sawa-position').value.trim();
       const material = row.querySelector('.sawa-material').value.trim();
@@ -6410,7 +6410,7 @@ async function saveSparePartsOrder(event) {
       if (![description, position, material, barcode, quantityText, file].some(Boolean)) continue;
       if (!description || !quantityText || !(Number(quantityText) > 0)) throw new Error(t('Enter a description and a quantity greater than zero for each item.'));
       rows.push({
-        sequence: index + 1,
+        sequence: rows.length + 1,
         description,
         position: position || null,
         material_number: material || null,
