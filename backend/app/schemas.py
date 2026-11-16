@@ -602,6 +602,7 @@ class SparePartsOrderItemIn(BaseModel):
 
 
 class SparePartsOrderCreate(BaseModel):
-    pump_model: str = Field(min_length=1, max_length=180)
+    order_name: str = Field(min_length=1, max_length=180)
+    machine: str = Field(min_length=1, max_length=180)
     serial_number: str = Field(default='', max_length=100)
     items: list[SparePartsOrderItemIn] = Field(min_length=1, max_length=100)

@@ -357,7 +357,9 @@ class SparePartsOrder(Base):
     __tablename__ = 'spare_parts_orders'
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     order_id: Mapped[str] = mapped_column(String(60), unique=True, index=True)
-    pump_model: Mapped[str] = mapped_column(String(180))
+    order_name: Mapped[str] = mapped_column(String(180), default='')
+    # Keep the existing database column name so current orders survive deploys.
+    machine: Mapped[str] = mapped_column('pump_model', String(180), default='')
     serial_number: Mapped[str] = mapped_column(String(100), default='')
     status: Mapped[str] = mapped_column(String(30), default='Submitted')
     created_by: Mapped[str] = mapped_column(String(80))

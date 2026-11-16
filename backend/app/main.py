@@ -335,6 +335,11 @@ def ensure_additive_columns():
                 for name, sql_type in additions.items():
                     if name not in existing:
                         conn.execute(text(f'ALTER TABLE spare_parts ADD COLUMN {name} {sql_type}'))
+        if 'spare_parts_orders' in tables:
+            existing = {c['name'] for c in inspector.get_columns('spare_parts_orders')}
+            if 'order_name' not in existing:
+                with engine.begin() as conn:
+                    conn.execute(text("ALTER TABLE spare_parts_orders ADD COLUMN order_name VARCHAR(180) DEFAULT ''"))
         if 'plants' in tables:
             existing = {c['name'] for c in inspector.get_columns('plants')}
             with engine.begin() as conn:
@@ -1682,7 +1687,8 @@ def apply_spare_stock(db, before_text, after_text):
 def spare_parts_order_payload(order: SparePartsOrder):
     return {
         'order_id': order.order_id,
-        'pump_model': order.pump_model,
+        'order_name': order.order_name,
+        'machine': order.machine,
         'serial_number': order.serial_number,
         'status': order.status,
         'created_by': order.created_by,
@@ -1720,12 +1726,14 @@ def get_spare_parts_order(order_id: str, db: Session = Depends(get_db), u=Depend
 
 @app.post('/spare-parts-orders')
 def create_spare_parts_order(data: SparePartsOrderCreate, db: Session = Depends(get_db), u=Depends(role(*ENGINEER))):
-    pump_model = data.pump_model.strip()
-    if not pump_model:
-        raise HTTPException(400, 'Enter the pump model')
+    order_name = data.order_name.strip()
+    machine = data.machine.strip()
+    if not order_name or not machine:
+        raise HTTPException(400, 'Enter the order name and machine')
     order = SparePartsOrder(
         order_id=f'SPO-{datetime.utcnow():%Y%m%d}-{secrets.token_hex(3).upper()}',
-        pump_model=pump_model,
+        order_name=order_name,
+        machine=machine,
         serial_number=data.serial_number.strip(),
         status='Submitted',
         created_by=u.username,
@@ -1762,7 +1770,8 @@ def create_spare_parts_order(data: SparePartsOrderCreate, db: Session = Depends(
             image_data=image_data,
         ))
     audit(db, u, 'CREATE', 'SparePartsOrder', order.order_id, new={
-        'pump_model': order.pump_model,
+        'order_name': order.order_name,
+        'machine': order.machine,
         'serial_number': order.serial_number,
         'items': len(data.items),
     })
