@@ -1689,7 +1689,7 @@ def apply_spare_stock(db, before_text, after_text):
     if changed:
         watch_critical_stock(db, changed)
 
-def spare_parts_order_payload(order: SparePartsOrder, user_names=None):
+def spare_parts_order_payload(order: SparePartsOrder, user_names=None, change_history=None):
     def item_payload(row):
         return {
             'id': row.id,
@@ -1729,6 +1729,7 @@ def spare_parts_order_payload(order: SparePartsOrder, user_names=None):
         'status': order.status,
         'created_by': (user_names or {}).get(order.created_by, order.created_by),
         'created_at': order.created_at,
+        'change_history': change_history or [],
         'machines': machines,
         'items': [item for machine in machines for item in machine['items']],
     }
@@ -1738,7 +1739,20 @@ def spare_parts_order_payload(order: SparePartsOrder, user_names=None):
 def list_spare_parts_orders(db: Session = Depends(get_db), u=Depends(role(*ENGINEER))):
     rows = db.query(SparePartsOrder).order_by(SparePartsOrder.created_at.desc(), SparePartsOrder.id.desc()).all()
     user_names = {username: (full_name or username) for username, full_name in db.query(User.username, User.full_name).all()}
-    return [spare_parts_order_payload(row, user_names) for row in rows]
+    order_ids = [row.order_id for row in rows]
+    history = {}
+    if order_ids:
+        updates = db.query(AuditTrail).filter(
+            AuditTrail.entity == 'SparePartsOrder',
+            AuditTrail.action == 'UPDATE',
+            AuditTrail.entity_id.in_(order_ids),
+        ).order_by(AuditTrail.created_at.asc(), AuditTrail.id.asc()).all()
+        for row in updates:
+            history.setdefault(row.entity_id, []).append({
+                'changed_at': row.created_at,
+                'changed_by': user_names.get(row.username, row.username or 'SYSTEM'),
+            })
+    return [spare_parts_order_payload(row, user_names, history.get(row.order_id, [])) for row in rows]
 
 
 @app.get('/spare-parts-orders/{order_id}')
@@ -1747,7 +1761,11 @@ def get_spare_parts_order(order_id: str, db: Session = Depends(get_db), u=Depend
     if not order:
         raise HTTPException(404, 'Spare parts order not found')
     user = db.query(User).filter_by(username=order.created_by).first()
-    return spare_parts_order_payload(order, {user.username: (user.full_name or user.username)} if user else {})
+    user_names = {user.username: (user.full_name or user.username)} if user else {}
+    updates = db.query(AuditTrail).filter_by(entity='SparePartsOrder', action='UPDATE', entity_id=order.order_id).order_by(AuditTrail.created_at.asc(), AuditTrail.id.asc()).all()
+    history_users = {username: (full_name or username) for username, full_name in db.query(User.username, User.full_name).all()}
+    history = [{'changed_at': row.created_at, 'changed_by': history_users.get(row.username, row.username or 'SYSTEM')} for row in updates]
+    return spare_parts_order_payload(order, user_names, history)
 
 
 @app.post('/spare-parts-orders')
@@ -1817,6 +1835,178 @@ def create_spare_parts_order(data: SparePartsOrderCreate, db: Session = Depends(
     db.commit()
     db.refresh(order)
     return spare_parts_order_payload(order, {u.username: (u.full_name or u.username)})
+
+
+def spare_order_snapshot(order: SparePartsOrder):
+    machines = [
+        {
+            'machine': machine.machine,
+            'serial_number': machine.serial_number,
+            'items': [
+                {
+                    'sequence': item.sequence,
+                    'description': item.description,
+                    'position': item.position,
+                    'material_number': item.material_number,
+                    'barcode': item.barcode,
+                    'quantity': item.quantity,
+                    'image_filename': item.image_filename,
+                }
+                for item in machine.items
+            ],
+        }
+        for machine in order.machines
+    ]
+    if not machines and order.items:
+        machines = [{
+            'machine': order.machine,
+            'serial_number': order.serial_number,
+            'items': [
+                {
+                    'sequence': item.sequence,
+                    'description': item.description,
+                    'position': item.position,
+                    'material_number': item.material_number,
+                    'barcode': item.barcode,
+                    'quantity': item.quantity,
+                    'image_filename': item.image_filename,
+                }
+                for item in order.items
+            ],
+        }]
+    return {
+        'order_name': order.order_name,
+        'machines': machines,
+    }
+
+
+def decode_spare_order_image(row, db, total_image_bytes):
+    image_data = None
+    image_content_type = None
+    if row.image_data:
+        try:
+            header, encoded = row.image_data.split(',', 1)
+            image_content_type = header.removeprefix('data:').split(';', 1)[0].lower()
+            if image_content_type not in {'image/jpeg', 'image/png', 'image/webp'}:
+                raise ValueError('unsupported image type')
+            image_data = base64.b64decode(encoded, validate=True)
+        except (ValueError, binascii.Error):
+            raise HTTPException(400, 'Use a PNG, JPG, or WEBP image for each item.')
+        if len(image_data) > 4 * 1024 * 1024:
+            raise HTTPException(400, 'Each item image must be 4 MB or smaller.')
+        total_image_bytes += len(image_data)
+        if total_image_bytes > 12 * 1024 * 1024:
+            raise HTTPException(400, 'The combined item images must be 12 MB or smaller.')
+    return image_data, image_content_type, total_image_bytes
+
+
+@app.put('/spare-parts-orders/{order_id}')
+def update_spare_parts_order(order_id: str, data: SparePartsOrderUpdate, db: Session = Depends(get_db), u=Depends(role(*ENGINEER))):
+    order = db.query(SparePartsOrder).filter_by(order_id=order_id).first()
+    if not order:
+        raise HTTPException(404, 'Spare parts order not found')
+    old_snapshot = spare_order_snapshot(order)
+    order.order_name = data.order_name.strip()
+    if not order.order_name:
+        raise HTTPException(400, 'Enter the order name')
+
+    existing_machines = {machine.id: machine for machine in order.machines}
+    existing_items = {item.id: item for item in order.items}
+    kept_machine_ids = set()
+    kept_item_ids = set()
+    total_image_bytes = 0
+    for machine_index, machine_data in enumerate(data.machines, start=1):
+        machine_name = machine_data.machine.strip()
+        if not machine_name:
+            raise HTTPException(400, 'Enter a machine for each group')
+        if machine_data.machine_id is not None:
+            machine = existing_machines.get(machine_data.machine_id)
+            if not machine:
+                raise HTTPException(400, 'The selected machine does not belong to this order')
+            machine.machine = machine_name
+            machine.serial_number = machine_data.serial_number.strip()
+            machine.sequence = machine_index
+        else:
+            machine = SparePartsOrderMachine(
+                order_id=order.order_id,
+                sequence=machine_index,
+                machine=machine_name,
+                serial_number=machine_data.serial_number.strip(),
+            )
+            db.add(machine)
+            db.flush()
+        kept_machine_ids.add(machine.id)
+        for row in machine_data.items:
+            image_data, image_content_type, total_image_bytes = decode_spare_order_image(row, db, total_image_bytes)
+            if row.item_id is not None:
+                item = existing_items.get(row.item_id)
+                if not item or (item.machine_id != machine.id and not (item.machine_id is None and machine_data.machine_id is None)):
+                    raise HTTPException(400, 'The selected item does not belong to this machine')
+                item.machine_id = machine.id
+                item.sequence = row.sequence
+                item.description = row.description.strip()
+                item.position = (row.position or '').strip() or None
+                item.material_number = (row.material_number or '').strip() or None
+                item.barcode = (row.barcode or '').strip() or None
+                item.quantity = row.quantity
+                if row.image_data:
+                    item.image_data = image_data
+                    item.image_content_type = image_content_type
+                    item.image_filename = (row.image_filename or '').strip() or None
+            else:
+                db.add(SparePartsOrderItem(
+                    order_id=order.order_id,
+                    machine_id=machine.id,
+                    sequence=row.sequence,
+                    description=row.description.strip(),
+                    position=(row.position or '').strip() or None,
+                    material_number=(row.material_number or '').strip() or None,
+                    barcode=(row.barcode or '').strip() or None,
+                    quantity=row.quantity,
+                    image_filename=(row.image_filename or '').strip() or None,
+                    image_content_type=image_content_type,
+                    image_data=image_data,
+                ))
+            if row.item_id is not None:
+                kept_item_ids.add(row.item_id)
+
+    for item_id, item in existing_items.items():
+        if item_id not in kept_item_ids:
+            db.delete(item)
+    for machine_id, machine in existing_machines.items():
+        if machine_id not in kept_machine_ids:
+            db.delete(machine)
+
+    new_snapshot = {
+        'order_name': order.order_name,
+        'machines': [
+            {
+                'machine': machine.machine.strip(),
+                'serial_number': machine.serial_number.strip(),
+                'items': [
+                    {
+                        'sequence': item.sequence,
+                        'description': item.description.strip(),
+                        'position': (item.position or '').strip() or None,
+                        'material_number': (item.material_number or '').strip() or None,
+                        'barcode': (item.barcode or '').strip() or None,
+                        'quantity': item.quantity,
+                        'image_filename': item.image_filename,
+                    }
+                    for item in machine_data.items
+                ],
+            }
+            for machine_data in data.machines
+        ],
+    }
+    if json.dumps(old_snapshot, sort_keys=True, default=str) != json.dumps(new_snapshot, sort_keys=True, default=str):
+        audit(db, u, 'UPDATE', 'SparePartsOrder', order.order_id, old=old_snapshot, new=new_snapshot)
+    db.commit()
+    db.refresh(order)
+    user_names = {username: (full_name or username) for username, full_name in db.query(User.username, User.full_name).all()}
+    updates = db.query(AuditTrail).filter_by(entity='SparePartsOrder', action='UPDATE', entity_id=order.order_id).order_by(AuditTrail.created_at.asc(), AuditTrail.id.asc()).all()
+    history = [{'changed_at': row.created_at, 'changed_by': user_names.get(row.username, row.username or 'SYSTEM')} for row in updates]
+    return spare_parts_order_payload(order, user_names, history)
 
 
 @app.get('/spare-parts-orders/{order_id}/items/{item_id}/image')

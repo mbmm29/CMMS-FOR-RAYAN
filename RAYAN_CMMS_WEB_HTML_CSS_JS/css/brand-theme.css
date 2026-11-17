@@ -531,6 +531,10 @@ html body .sawa-order-choice span,html body .sawa-order-choice small{color:#586b
 html body .sawa-order-empty{display:grid;min-height:220px;place-items:center;color:#617264;text-align:center}
 html body .sawa-order-details>header,html body .sawa-order-title{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin:0 0 14px;padding-bottom:12px;border-bottom:1px solid #e0e8dc}
 html body .sawa-order-detail-actions{display:flex;align-items:center;justify-content:flex-end;flex-wrap:wrap;gap:8px}
+html body .sawa-order-history{margin-top:18px;padding-top:14px;border-top:1px solid #dbe5d8}
+html body .sawa-order-history h3{margin:0 0 10px;color:#294431;font-size:15px}
+html body .sawa-order-edit-row .sawa-order-image{width:48px;height:36px;margin:0 0 4px}
+html body .sawa-order-edit-row td small{display:block;margin-bottom:4px;color:#66776a;font-size:10px}
 html body .sawa-order-details>header p,html body .sawa-order-title p{margin:5px 0 0;color:#637166;font-size:12px}
 html body .sawa-order-pump-info{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin:0 0 14px;padding:12px;border:1px solid #e0e8dc;border-radius:9px;background:#f7f9f4}
 html body .sawa-order-pump-info>div{display:grid;gap:5px;min-width:0}

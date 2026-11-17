@@ -591,6 +591,7 @@ class FormNumbersUpdate(BaseModel):
 
 
 class SparePartsOrderItemIn(BaseModel):
+    item_id: int | None = None
     sequence: int = Field(ge=1)
     description: str = Field(min_length=1, max_length=250)
     position: str | None = Field(default=None, max_length=80)
@@ -602,6 +603,7 @@ class SparePartsOrderItemIn(BaseModel):
 
 
 class SparePartsOrderMachineIn(BaseModel):
+    machine_id: int | None = None
     machine: str = Field(min_length=1, max_length=180)
     serial_number: str = Field(default='', max_length=100)
     items: list[SparePartsOrderItemIn] = Field(min_length=1, max_length=100)
@@ -610,3 +612,7 @@ class SparePartsOrderMachineIn(BaseModel):
 class SparePartsOrderCreate(BaseModel):
     order_name: str = Field(min_length=1, max_length=180)
     machines: list[SparePartsOrderMachineIn] = Field(min_length=1, max_length=100)
+
+
+class SparePartsOrderUpdate(SparePartsOrderCreate):
+    pass

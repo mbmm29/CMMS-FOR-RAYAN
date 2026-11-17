@@ -6357,12 +6357,17 @@ async function drawSpareParts() {
 
 let spareOrderImageUrls = [];
 
-function spareOrderItemRow(sequence) {
-  return `<tr class="spare-order-edit-row"><td class="spare-order-seq">${sequence}</td><td><input class="sawa-description" maxlength="250" placeholder="${esc(t('Description'))}" required></td><td><input class="sawa-position" maxlength="80" placeholder="POS."></td><td><input class="sawa-material" maxlength="100" placeholder="${esc(t('Material number'))}"></td><td><input class="sawa-barcode" maxlength="120" placeholder="${esc(t('Barcode'))}"></td><td><input class="sawa-quantity" type="number" min="0.001" step="any" inputmode="decimal" required></td><td><input class="sawa-image" type="file" accept="image/png,image/jpeg,image/webp" aria-label="${esc(t('Image'))}"><button class="detail-button danger sawa-remove-row" type="button" aria-label="${esc(t('Remove row'))}">×</button></td></tr>`;
+function spareOrderItemRow(sequence, item = null) {
+  const id = item?.id ? ` data-item-id="${esc(item.id)}"` : '';
+  const filename = item?.image_filename ? ` data-image-filename="${esc(item.image_filename)}"` : '';
+  const image = item?.image_available ? `<img class="sawa-order-image" data-order-image="${esc(item.id)}" alt="${esc(item.image_filename || t('Image'))}"><small>${esc(item.image_filename || t('Image'))}</small>` : '';
+  return `<tr class="spare-order-edit-row"${id}${filename}><td class="spare-order-seq">${sequence}</td><td><input class="sawa-description" maxlength="250" value="${esc(item?.description || '')}" placeholder="${esc(t('Description'))}" required></td><td><input class="sawa-position" maxlength="80" value="${esc(item?.position || '')}" placeholder="POS."></td><td><input class="sawa-material" maxlength="100" value="${esc(item?.material_number || '')}" placeholder="${esc(t('Material number'))}"></td><td><input class="sawa-barcode" maxlength="120" value="${esc(item?.barcode || '')}" placeholder="${esc(t('Barcode'))}"></td><td><input class="sawa-quantity" type="number" min="0.001" step="any" inputmode="decimal" value="${esc(item?.quantity ?? '')}" required></td><td>${image}<input class="sawa-image" type="file" accept="image/png,image/jpeg,image/webp" aria-label="${esc(t('Image'))}"><button class="detail-button danger sawa-remove-row" type="button" aria-label="${esc(t('Remove row'))}">×</button></td></tr>`;
 }
 
-function spareOrderMachineSection(sequence) {
-  return `<section class="sawa-order-machine-group"><header><h3>${esc(t('Machine'))} ${sequence}</h3><button type="button" class="detail-button danger sawa-remove-machine">${esc(t('Remove machine'))}</button></header><div class="sawa-order-machine-fields"><label>${esc(t('Machine'))}<input class="sawa-machine-name" maxlength="180" required></label><label>${esc(t('Serial No.'))}<input class="sawa-machine-serial" maxlength="100" placeholder="${esc(t('Serial number'))}"></label></div><div class="sawa-order-table-wrap"><table class="data-table sawa-order-table"><thead><tr><th>${esc(t('No.'))}</th><th>${esc(t('Description'))}</th><th>POS.</th><th>${esc(t('Material number'))}</th><th>${esc(t('Barcode'))}</th><th>${esc(t('Qty.'))}</th><th>${esc(t('Image'))}</th></tr></thead><tbody class="sawa-order-lines">${spareOrderItemRow(1)}</tbody></table></div><button type="button" class="detail-button sawa-add-machine-item">${esc(t('Add item'))}</button></section>`;
+function spareOrderMachineSection(sequence, machine = null) {
+  const id = machine?.id ? ` data-machine-id="${esc(machine.id)}"` : '';
+  const items = machine?.items?.length ? machine.items : [null];
+  return `<section class="sawa-order-machine-group"${id}><header><h3>${esc(t('Machine'))} ${sequence}</h3><button type="button" class="detail-button danger sawa-remove-machine">${esc(t('Remove machine'))}</button></header><div class="sawa-order-machine-fields"><label>${esc(t('Machine'))}<input class="sawa-machine-name" maxlength="180" value="${esc(machine?.machine || '')}" required></label><label>${esc(t('Serial No.'))}<input class="sawa-machine-serial" maxlength="100" value="${esc(machine?.serial_number || '')}" placeholder="${esc(t('Serial number'))}"></label></div><div class="sawa-order-table-wrap"><table class="data-table sawa-order-table"><thead><tr><th>${esc(t('No.'))}</th><th>${esc(t('Description'))}</th><th>POS.</th><th>${esc(t('Material number'))}</th><th>${esc(t('Barcode'))}</th><th>${esc(t('Qty.'))}</th><th>${esc(t('Image'))}</th></tr></thead><tbody class="sawa-order-lines">${items.map((item, index) => spareOrderItemRow(index + 1, item)).join('')}</tbody></table></div><button type="button" class="detail-button sawa-add-machine-item">${esc(t('Add item'))}</button></section>`;
 }
 
 function bindSpareOrderRows() {
@@ -6386,7 +6391,9 @@ function bindSpareOrderRows() {
     } else if (event.target.closest('.sawa-remove-row') && group) {
       const rows = group.querySelector('.sawa-order-lines');
       if (rows.children.length > 1) event.target.closest('tr').remove();
-      else event.target.closest('tr').querySelectorAll('input').forEach((input) => { input.value = ''; });
+      else if (event.target.closest('tr').dataset.itemId) {
+        rows.innerHTML = spareOrderItemRow(1);
+      } else event.target.closest('tr').querySelectorAll('input').forEach((input) => { input.value = ''; });
       renumber(group);
     } else if (event.target.closest('.sawa-remove-machine') && groups.children.length > 1) {
       group.remove();
@@ -6407,8 +6414,19 @@ function fileDataUrl(file) {
   });
 }
 
-function spareOrderFormHtml() {
-  return `<form id="sawa-order-form" class="panel sawa-order-form"><div class="sawa-order-title"><div><h2>${esc(t('Sawa pump spare parts order'))}</h2><p>${esc(t('Enter one order name, then add each machine and its spare parts.'))}</p></div><button type="button" class="detail-button" id="sawa-order-cancel">${esc(t('Cancel'))}</button></div><div class="sawa-order-order-name"><label>${esc(t('Order name'))}<input name="order_name" maxlength="180" required></label></div><div id="sawa-order-machine-groups">${spareOrderMachineSection(1)}</div><div class="sawa-order-actions"><button type="button" class="detail-button" id="sawa-order-add-machine">${esc(t('Add machine'))}</button><span>${esc(t('Each image can be up to 4 MB.'))}</span><button type="submit" class="detail-button primary" id="sawa-order-save">${esc(t('Save order'))}</button></div><p class="form-error" id="sawa-order-error"></p></form>`;
+function spareOrderFormHtml(order = null) {
+  const machines = order?.machines?.length ? order.machines : [null];
+  return `<form id="sawa-order-form" class="panel sawa-order-form"><div class="sawa-order-title"><div><h2>${esc(order ? t('Edit order') : t('Sawa pump spare parts order'))}</h2><p>${esc(t('Enter one order name, then add each machine and its spare parts.'))}</p></div><button type="button" class="detail-button" id="sawa-order-cancel">${esc(t('Cancel'))}</button></div><div class="sawa-order-order-name"><label>${esc(t('Order name'))}<input name="order_name" maxlength="180" value="${esc(order?.order_name || '')}" required></label></div><div id="sawa-order-machine-groups">${machines.map((machine, index) => spareOrderMachineSection(index + 1, machine)).join('')}</div><div class="sawa-order-actions"><button type="button" class="detail-button" id="sawa-order-add-machine">${esc(t('Add machine'))}</button><span>${esc(t('Each image can be up to 4 MB.'))}</span><button type="submit" class="detail-button primary" id="sawa-order-save">${esc(t(order ? 'Save changes' : 'Save order'))}</button></div><p class="form-error" id="sawa-order-error"></p></form>`;
+}
+
+function formatSpareOrderTimestamp(value) {
+  if (!value) return '—';
+  const raw = String(value);
+  const date = new Date(/[zZ]|[+-]\d\d:\d\d$/.test(raw) ? raw : `${raw}Z`);
+  if (Number.isNaN(date.getTime())) return raw.replace('T', ' ').slice(0, 19);
+  return new Intl.DateTimeFormat(document.documentElement.lang === 'ar' ? 'ar-IQ' : 'en-GB', {
+    dateStyle: 'medium', timeStyle: 'short', timeZone: 'Asia/Baghdad',
+  }).format(date);
 }
 
 async function exportSparePartsOrderPdf(order) {
@@ -6432,12 +6450,13 @@ async function exportSparePartsOrderPdf(order) {
     const itemRows = (machine.items || []).map((item, itemIndex) => `<tr><td class="number">${itemIndex + 1}</td><td>${esc(item.description)}</td><td>${esc(item.position || '—')}</td><td>${esc(item.material_number || '—')}</td><td>${esc(item.barcode || '—')}</td><td class="number">${esc(item.quantity)}</td><td class="image-cell">${imageUrls.has(item.id) ? `<img src="${imageUrls.get(item.id)}" alt="">` : '—'}</td></tr>`).join('');
     return `<section class="machine-page"><div class="machine-heading"><div><span>${esc(t('Machine'))} ${machineIndex + 1}</span><h2>${esc(machine.machine || '—')}</h2></div><div class="serial"><small>${esc(t('Serial No.'))}</small><b>${esc(machine.serial_number || '—')}</b></div></div><h3>${esc(t('Spare parts'))}</h3><table><thead><tr><th>${esc(t('No.'))}</th><th>${esc(t('Description'))}</th><th>POS.</th><th>${esc(t('Material number'))}</th><th>${esc(t('Barcode'))}</th><th>${esc(t('Qty.'))}</th><th>${esc(t('Image'))}</th></tr></thead><tbody>${itemRows}</tbody></table></section>`;
   }).join('');
+  const historyPage = order.change_history?.length ? `<section class="machine-page"><h2>${esc(t('Order history'))}</h2><table><thead><tr><th>${esc(t('Event'))}</th><th>${esc(t('Date and time'))}</th><th>${esc(t('Engineer'))}</th></tr></thead><tbody>${order.change_history.map((change) => `<tr><td>${esc(t('Order updated'))}</td><td>${esc(formatSpareOrderTimestamp(change.changed_at))}</td><td>${esc(change.changed_by || '—')}</td></tr>`).join('')}</tbody></table></section>` : '';
   const rtl = document.documentElement.lang === 'ar';
   const logo = new URL('logo-rayan.png', location.href).href;
   printWindow.document.open();
   printWindow.document.write(`<!doctype html><html lang="${rtl ? 'ar' : 'en'}" dir="${rtl ? 'rtl' : 'ltr'}"><head><meta charset="utf-8"><title>${esc(order.order_name || order.order_id)}</title><style>
     @page{size:A4 portrait;margin:16mm}*{box-sizing:border-box}body{margin:0;color:#183325;font:11pt Arial,'IBM Plex Sans Arabic',sans-serif;-webkit-print-color-adjust:exact;print-color-adjust:exact}.cover{height:265mm;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;page-break-after:always;break-after:page;border:1px solid #d6e1d2;padding:20mm}.logo{width:190px;max-height:105px;object-fit:contain;margin-bottom:18mm}.company{font-weight:700;font-size:19pt;letter-spacing:.08em;color:#1e6d46}.department{margin-top:5px;color:#607064;font-size:11pt}.cover h1{max-width:100%;margin:24mm 0 18mm;color:#183325;font-size:27pt;font-weight:800;overflow-wrap:anywhere}.cover-meta{width:100%;max-width:150mm;display:grid;grid-template-columns:1fr 1fr;gap:10px}.cover-meta>div{border:1px solid #d7e2d3;background:#f6f9f3;padding:12px;text-align:start;display:grid;gap:6px}.cover-meta small{color:#68776a;font-size:9pt}.cover-meta b{color:#183325;font-size:11pt;overflow-wrap:anywhere}.order-no{margin-top:14mm;color:#667468;font-size:9pt}.machine-page{page-break-before:always;break-before:page}.machine-heading{display:flex;align-items:center;justify-content:space-between;gap:16px;margin-bottom:12px;padding:14px 16px;border:1px solid #bfd3bf;border-inline-start:5px solid #c8a72e;border-radius:7px;background:#f5f8f2}.machine-heading span{font-size:9pt;color:#59705d}.machine-heading h2{margin:5px 0 0;color:#183325;font-size:17pt;overflow-wrap:anywhere}.serial{min-width:42mm;display:grid;gap:5px;padding:9px;border:1px solid #dbe4d7;background:white}.serial small{font-size:8pt;color:#68776a}.serial b{overflow-wrap:anywhere}.machine-page>h3{margin:12px 0 7px;color:#1e6d46;font-size:12pt}table{width:100%;border-collapse:collapse;table-layout:fixed}thead{display:table-header-group}tr{break-inside:avoid;page-break-inside:avoid}th,td{border:1px solid #cad7c7;padding:8px 6px;text-align:start;vertical-align:top;overflow-wrap:anywhere;word-break:normal}th{background:#eaf1e6;color:#203b2a;font-size:8pt}td{font-size:9pt;line-height:1.35}tbody tr:nth-child(even){background:#f8faf6}th:nth-child(1){width:7%}th:nth-child(2){width:24%}th:nth-child(3){width:12%}th:nth-child(4){width:17%}th:nth-child(5){width:15%}th:nth-child(6){width:9%}th:nth-child(7){width:16%}.number{text-align:center;white-space:nowrap}.image-cell{text-align:center}.image-cell img{max-width:35mm;max-height:28mm;object-fit:contain}.machine-heading,.cover-meta>div{break-inside:avoid}@media print{.machine-page{margin:0}}
-  </style></head><body><section class="cover"><img class="logo" src="${logo}" alt="RAYAN"><div class="company">RAYAN</div><div class="department">${esc(t('Mechanical Maintenance Department'))}</div><h1>${esc(order.order_name || t('Sawa pump spare parts order'))}</h1><div class="cover-meta"><div><small>${esc(t('Order date'))}</small><b>${esc(fmtDate(String(order.created_at || '').slice(0, 10)))}</b></div><div><small>${esc(t('Prepared by engineer'))}</small><b>${esc(order.created_by || '—')}</b></div></div><div class="order-no">${esc(order.order_id)}</div></section>${machinePages}</body></html>`);
+  </style></head><body><section class="cover"><img class="logo" src="${logo}" alt="RAYAN"><div class="company">RAYAN</div><div class="department">${esc(t('Mechanical Maintenance Department'))}</div><h1>${esc(order.order_name || t('Sawa pump spare parts order'))}</h1><div class="cover-meta"><div><small>${esc(t('Original date'))}</small><b>${esc(formatSpareOrderTimestamp(order.created_at))}</b></div><div><small>${esc(t('Prepared by engineer'))}</small><b>${esc(order.created_by || '—')}</b></div></div><div class="order-no">${esc(order.order_id)}</div></section>${machinePages}${historyPage}</body></html>`);
   printWindow.document.close();
   const logoImage = printWindow.document.querySelector('.logo');
   if (logoImage && !logoImage.complete) await new Promise((resolve) => { logoImage.onload = resolve; logoImage.onerror = resolve; setTimeout(resolve, 1200); });
@@ -6449,6 +6468,7 @@ async function saveSparePartsOrder(event) {
   const form = event.currentTarget;
   const error = form.querySelector('#sawa-order-error');
   const save = form.querySelector('#sawa-order-save');
+  const editing = ui.mode === 'edit';
   error.textContent = '';
   const machines = [];
   try {
@@ -6466,19 +6486,20 @@ async function saveSparePartsOrder(event) {
         const file = row.querySelector('.sawa-image').files?.[0];
         if (![description, position, material, barcode, quantityText, file].some(Boolean)) continue;
         if (!description || !quantityText || !(Number(quantityText) > 0)) throw new Error(t('Enter a description and a quantity greater than zero for each item.'));
-        items.push({ sequence: items.length + 1, description, position: position || null, material_number: material || null, barcode: barcode || null, quantity: Number(quantityText), image_data: await fileDataUrl(file), image_filename: file?.name || null });
+        items.push({ item_id: row.dataset.itemId ? Number(row.dataset.itemId) : null, sequence: items.length + 1, description, position: position || null, material_number: material || null, barcode: barcode || null, quantity: Number(quantityText), image_data: await fileDataUrl(file), image_filename: file?.name || row.dataset.imageFilename || null });
       }
       if (!items.length) throw new Error(t('Add at least one spare part for each machine.'));
-      machines.push({ machine, serial_number, items });
+      machines.push({ machine_id: group.dataset.machineId ? Number(group.dataset.machineId) : null, machine, serial_number, items });
     }
     save.disabled = true;
-    const saved = await apiRequest('/spare-parts-orders', {
-      method: 'POST',
+    const orderId = ui.spareOrderId;
+    const saved = await apiRequest(editing ? `/spare-parts-orders/${encodeURIComponent(orderId)}` : '/spare-parts-orders', {
+      method: editing ? 'PUT' : 'POST',
       body: JSON.stringify({ order_name: form.elements.namedItem('order_name').value.trim(), machines }),
     });
     ui.spareOrderId = saved.order_id;
     ui.mode = 'view';
-    toast(`${t('Order saved')}: ${saved.order_id}`);
+    toast(`${t(editing ? 'Order updated' : 'Order saved')}: ${saved.order_id}`);
     await drawSparePartsOrders();
   } catch (exception) {
     error.textContent = t(exception.message || 'Could not save order.');
@@ -6501,12 +6522,14 @@ async function drawSparePartsOrders() {
   const list = `<aside class="panel sawa-order-list"><h2>${esc(t('Orders'))}</h2>${orders.length ? orders.map((order) => `<button type="button" class="sawa-order-choice${order.order_id === ui.spareOrderId && ui.mode !== 'create' ? ' active' : ''}" data-sawa-order="${esc(order.order_id)}"><b>${esc(order.order_name || order.order_id)}</b><span>${esc((order.machines || []).map((machine) => machine.machine).join(' · ') || order.machine || '—')}</span><small>${esc(order.order_id)} · ${esc(fmtDate(String(order.created_at || '').slice(0, 10)))}</small></button>`).join('') : `<p class="live-note">${esc(t('No spare parts orders yet.'))}</p>`}</aside>`;
   let detail = `<section class="panel sawa-order-empty"><p>${esc(t('Choose an order to view its details, or create a new order.'))}</p></section>`;
   if (ui.mode === 'create') detail = spareOrderFormHtml();
+  else if (ui.mode === 'edit' && current) detail = spareOrderFormHtml(current);
   else if (current) {
     const machineGroups = (current.machines || []).map((machine) => {
       const itemRows = machine.items.map((item, index) => `<tr><td>${index + 1}</td><td>${esc(item.description)}</td><td>${esc(item.position || '—')}</td><td>${esc(item.material_number || '—')}</td><td>${esc(item.barcode || '—')}</td><td>${esc(item.quantity)}</td><td>${item.image_available ? `<img class="sawa-order-image" data-order-image="${item.id}" alt="${esc(item.image_filename || t('Image'))}">` : '—'}</td></tr>`).join('');
       return `<section class="sawa-order-machine-view"><header><h3>${esc(t('Machine'))}: ${esc(machine.machine || '—')}</h3><span>${esc(t('Serial No.'))}: ${esc(machine.serial_number || '—')}</span></header><div class="sawa-order-table-wrap"><table class="data-table sawa-order-table"><thead><tr><th>${esc(t('No.'))}</th><th>${esc(t('Description'))}</th><th>POS.</th><th>${esc(t('Material number'))}</th><th>${esc(t('Barcode'))}</th><th>${esc(t('Qty.'))}</th><th>${esc(t('Image'))}</th></tr></thead><tbody>${itemRows}</tbody></table></div></section>`;
     }).join('');
-    detail = `<section class="panel sawa-order-details"><header><div><h2>${esc(current.order_name || t('Sawa pump spare parts order'))}</h2><p>${esc(current.order_id)} · ${esc(fmtDate(String(current.created_at || '').slice(0, 10)))} · ${esc(t('Created by'))}: ${esc(current.created_by)}</p></div><div class="sawa-order-detail-actions"><span class="status-pill">${esc(t(current.status))}</span><button type="button" class="detail-button primary" id="sawa-order-export-pdf">${esc(t('Export PDF'))}</button></div></header>${machineGroups}</section>`;
+    const historyRows = [{ changed_at: current.created_at, changed_by: current.created_by, action: t('Original creation') }, ...(current.change_history || []).map((change) => ({ changed_at: change.changed_at, changed_by: change.changed_by, action: t('Order updated') }))].map((entry) => `<tr><td>${esc(t(entry.action))}</td><td>${esc(formatSpareOrderTimestamp(entry.changed_at))}</td><td>${esc(entry.changed_by || '—')}</td></tr>`).join('');
+    detail = `<section class="panel sawa-order-details"><header><div><h2>${esc(current.order_name || t('Sawa pump spare parts order'))}</h2><p>${esc(current.order_id)} · ${esc(t('Original date'))}: ${esc(formatSpareOrderTimestamp(current.created_at))} · ${esc(t('Created by'))}: ${esc(current.created_by)}</p></div><div class="sawa-order-detail-actions"><span class="status-pill">${esc(t(current.status))}</span><button type="button" class="detail-button" id="sawa-order-edit">${esc(t('Edit order'))}</button><button type="button" class="detail-button primary" id="sawa-order-export-pdf">${esc(t('Export PDF'))}</button></div></header>${machineGroups}<section class="sawa-order-history"><h3>${esc(t('Order history'))}</h3><div class="sawa-order-table-wrap"><table class="data-table sawa-order-table"><thead><tr><th>${esc(t('Event'))}</th><th>${esc(t('Date and time'))}</th><th>${esc(t('Engineer'))}</th></tr></thead><tbody>${historyRows}</tbody></table></div></section></section>`;
   }
   document.getElementById('workspace').className = 'workspace sawa-orders-layout';
   document.getElementById('workspace').innerHTML = `${list}${detail}`;
@@ -6520,6 +6543,12 @@ async function drawSparePartsOrders() {
     document.getElementById('sawa-order-form')?.addEventListener('submit', saveSparePartsOrder);
     document.getElementById('sawa-order-cancel')?.addEventListener('click', () => { ui.mode = 'view'; drawSparePartsOrders(); });
   }
+  if (ui.mode === 'edit') {
+    bindSpareOrderRows();
+    document.getElementById('sawa-order-form')?.addEventListener('submit', saveSparePartsOrder);
+    document.getElementById('sawa-order-cancel')?.addEventListener('click', () => { ui.mode = 'view'; drawSparePartsOrders(); });
+  }
+  document.getElementById('sawa-order-edit')?.addEventListener('click', () => { ui.mode = 'edit'; drawSparePartsOrders(); });
   document.getElementById('sawa-order-export-pdf')?.addEventListener('click', () => {
     const order = orders.find((row) => row.order_id === ui.spareOrderId);
     if (order) exportSparePartsOrderPdf(order).catch(() => toast(t('Could not export this order.')));
