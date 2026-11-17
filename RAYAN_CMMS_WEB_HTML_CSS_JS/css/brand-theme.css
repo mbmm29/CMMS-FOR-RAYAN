@@ -554,6 +554,9 @@ html body .sawa-order-table{min-width:840px}
 html body .sawa-order-table th{background:#edf3e9;color:#243d2c;white-space:nowrap}
 html body .sawa-order-table td{vertical-align:middle}
 html body .sawa-order-table .sawa-order-edit-row input:not([type=file]){width:100%;min-width:72px;min-height:35px;padding:6px 7px;border:1px solid #d3dfcf;border-radius:6px;background:#fff;color:#203629}
+html body .sawa-order-table .sawa-barcode-status{display:block;min-height:12px;margin-top:3px;color:#647568;font-size:9px;line-height:1.25}
+html body .sawa-order-table .sawa-barcode-status.is-found{color:#227344}
+html body .sawa-order-table .sawa-barcode-status.is-missing,html body .sawa-order-table .sawa-barcode-status.is-error{color:#a3362d}
 html body .sawa-order-table .sawa-image{max-width:150px;font-size:11px}
 html body .sawa-order-table .sawa-remove-row{min-width:30px;min-height:30px;margin-inline-start:4px;padding:4px 8px}
 html body .sawa-order-seq{text-align:center;font-weight:700}

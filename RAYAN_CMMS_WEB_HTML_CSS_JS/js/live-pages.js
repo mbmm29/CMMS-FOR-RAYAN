@@ -6356,12 +6356,48 @@ async function drawSpareParts() {
 }
 
 let spareOrderImageUrls = [];
+let spareOrderPartCatalog = null;
 
 function spareOrderItemRow(sequence, item = null) {
   const id = item?.id ? ` data-item-id="${esc(item.id)}"` : '';
   const filename = item?.image_filename ? ` data-image-filename="${esc(item.image_filename)}"` : '';
   const image = item?.image_available ? `<img class="sawa-order-image" data-order-image="${esc(item.id)}" alt="${esc(item.image_filename || t('Image'))}"><small>${esc(item.image_filename || t('Image'))}</small>` : '';
-  return `<tr class="spare-order-edit-row"${id}${filename}><td class="spare-order-seq">${sequence}</td><td><input class="sawa-description" maxlength="250" value="${esc(item?.description || '')}" placeholder="${esc(t('Description'))}" required></td><td><input class="sawa-position" maxlength="80" value="${esc(item?.position || '')}" placeholder="POS."></td><td><input class="sawa-material" maxlength="100" value="${esc(item?.material_number || '')}" placeholder="${esc(t('Material number'))}"></td><td><input class="sawa-barcode" maxlength="120" value="${esc(item?.barcode || '')}" placeholder="${esc(t('Barcode'))}"></td><td><input class="sawa-quantity" type="number" min="0.001" step="any" inputmode="decimal" value="${esc(item?.quantity ?? '')}" required></td><td>${image}<input class="sawa-image" type="file" accept="image/png,image/jpeg,image/webp" aria-label="${esc(t('Image'))}"><button class="detail-button danger sawa-remove-row" type="button" aria-label="${esc(t('Remove row'))}">×</button></td></tr>`;
+  const partNo = item?.barcode || item?.material_number || '';
+  return `<tr class="spare-order-edit-row"${id}${filename}><td class="spare-order-seq">${sequence}</td><td><input class="sawa-description" maxlength="250" value="${esc(item?.description || '')}" placeholder="${esc(t('Description'))}"></td><td><input class="sawa-position" maxlength="80" value="${esc(item?.position || '')}" placeholder="POS."></td><td><input class="sawa-material" maxlength="100" value="${esc(item?.material_number || partNo)}" placeholder="${esc(t('Material number'))}"></td><td><input class="sawa-barcode" maxlength="120" value="${esc(item?.barcode || '')}" placeholder="${esc(t('Barcode (Part No.)'))}" title="${esc(t('Barcode is the Part No.'))}"><small class="sawa-barcode-status" aria-live="polite"></small></td><td><input class="sawa-quantity" type="number" min="0.001" step="any" inputmode="decimal" value="${esc(item?.quantity ?? '')}" required></td><td>${image}<input class="sawa-image" type="file" accept="image/png,image/jpeg,image/webp" aria-label="${esc(t('Image'))}"><button class="detail-button danger sawa-remove-row" type="button" aria-label="${esc(t('Remove row'))}">×</button></td></tr>`;
+}
+
+async function lookupSpareOrderBarcode(input) {
+  const barcode = input.value.trim();
+  const row = input.closest('.spare-order-edit-row');
+  if (!barcode || !row) return;
+  const description = row.querySelector('.sawa-description');
+  const status = row.querySelector('.sawa-barcode-status');
+  try {
+    status.textContent = t('Searching spare parts…');
+    if (!spareOrderPartCatalog) spareOrderPartCatalog = await apiRequest('/spare-parts/catalog');
+    if (input.value.trim() !== barcode) return;
+    const key = barcode.trim().toLocaleUpperCase();
+    const part = spareOrderPartCatalog.find((item) => String(item.part_number || '').trim().toLocaleUpperCase() === key);
+    if (part) {
+      status.className = 'sawa-barcode-status is-found';
+      const material = row.querySelector('.sawa-material');
+      material.value = barcode;
+      material.dataset.fromBarcode = 'true';
+      row.dataset.partNo = barcode;
+      if (description && (row.dataset.barcodeEdited === 'true' || description.dataset.fromBarcode === 'true' || !description.value.trim())) {
+        description.value = part.name || '';
+        description.dataset.fromBarcode = 'true';
+      }
+      status.textContent = part.name ? t('Part found') : t('Part found; enter its description.');
+    } else {
+      status.className = 'sawa-barcode-status is-missing';
+      status.textContent = t('Part number not found; enter the description manually.');
+    }
+    row.dataset.barcodeEdited = 'false';
+  } catch (_) {
+    status.className = 'sawa-barcode-status is-error';
+    status.textContent = t('Could not search spare parts.');
+  }
 }
 
 function spareOrderMachineSection(sequence, machine = null) {
@@ -6398,6 +6434,37 @@ function bindSpareOrderRows() {
     } else if (event.target.closest('.sawa-remove-machine') && groups.children.length > 1) {
       group.remove();
       renumberGroups();
+    }
+  });
+  groups.addEventListener('input', (event) => {
+    const target = event.target;
+    if (target.matches('.sawa-description')) {
+      delete target.dataset.fromBarcode;
+      return;
+    }
+    if (target.matches('.sawa-barcode')) {
+      const row = target.closest('.spare-order-edit-row');
+      const description = row.querySelector('.sawa-description');
+      const material = row.querySelector('.sawa-material');
+      const status = row.querySelector('.sawa-barcode-status');
+      row.dataset.barcodeEdited = 'true';
+      status.className = 'sawa-barcode-status';
+      status.textContent = '';
+      if (description.dataset.fromBarcode === 'true') {
+        description.value = '';
+        delete description.dataset.fromBarcode;
+      }
+      material.value = target.value.trim();
+      material.dataset.fromBarcode = 'true';
+    }
+  });
+  groups.addEventListener('focusout', (event) => {
+    if (event.target.matches('.sawa-barcode')) lookupSpareOrderBarcode(event.target);
+  });
+  groups.addEventListener('keydown', (event) => {
+    if (event.target.matches('.sawa-barcode') && event.key === 'Enter') {
+      event.preventDefault();
+      event.target.blur();
     }
   });
   renumberGroups();
@@ -6478,15 +6545,20 @@ async function saveSparePartsOrder(event) {
       if (!machine) throw new Error(t('Enter a machine name for each group.'));
       const items = [];
       for (const row of group.querySelectorAll('.spare-order-edit-row')) {
-        const description = row.querySelector('.sawa-description').value.trim();
+        const descriptionField = row.querySelector('.sawa-description');
+        const barcodeField = row.querySelector('.sawa-barcode');
+        if (barcodeField.value.trim() && (row.dataset.barcodeEdited === 'true' || !descriptionField.value.trim())) {
+          await lookupSpareOrderBarcode(barcodeField);
+        }
+        const description = descriptionField.value.trim();
         const position = row.querySelector('.sawa-position').value.trim();
         const material = row.querySelector('.sawa-material').value.trim();
-        const barcode = row.querySelector('.sawa-barcode').value.trim();
+        const barcode = barcodeField.value.trim();
         const quantityText = row.querySelector('.sawa-quantity').value.trim();
         const file = row.querySelector('.sawa-image').files?.[0];
         if (![description, position, material, barcode, quantityText, file].some(Boolean)) continue;
         if (!description || !quantityText || !(Number(quantityText) > 0)) throw new Error(t('Enter a description and a quantity greater than zero for each item.'));
-        items.push({ item_id: row.dataset.itemId ? Number(row.dataset.itemId) : null, sequence: items.length + 1, description, position: position || null, material_number: material || null, barcode: barcode || null, quantity: Number(quantityText), image_data: await fileDataUrl(file), image_filename: file?.name || row.dataset.imageFilename || null });
+        items.push({ item_id: row.dataset.itemId ? Number(row.dataset.itemId) : null, sequence: items.length + 1, description, position: position || null, material_number: barcode || material || null, barcode: barcode || null, quantity: Number(quantityText), image_data: await fileDataUrl(file), image_filename: file?.name || row.dataset.imageFilename || null });
       }
       if (!items.length) throw new Error(t('Add at least one spare part for each machine.'));
       machines.push({ machine_id: group.dataset.machineId ? Number(group.dataset.machineId) : null, machine, serial_number, items });
