@@ -5,6 +5,7 @@
 .daily-document-row>strong{min-width:0;color:#000;text-align:start;font-weight:800;white-space:normal;overflow-wrap:anywhere;word-break:normal}
 .report-head{grid-template-columns:300px minmax(0,1fr) 280px}
 .company-logo img{max-width:100%}
+.selected-report+.selected-report{break-before:page;page-break-before:always}
 @media print{
   .report-head{grid-template-columns:300px minmax(0,1fr) 280px;gap:8px}
   .daily-document-box{border:.3mm solid #2a5287;overflow:visible}

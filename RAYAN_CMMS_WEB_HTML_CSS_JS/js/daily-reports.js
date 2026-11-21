@@ -1,5 +1,5 @@
 document.addEventListener('DOMContentLoaded', async () => {
-  const state = { reports: [], lubeReports: [], filtered: [], page: 1, rows: 10, status: 'all', user: null, selected: null, formNo: 'DR', lubeFormNo: 'PMF 17-05 rev.a' };
+  const state = { reports: [], lubeReports: [], filtered: [], page: 1, rows: 10, status: 'all', user: null, selected: null, formNo: 'DR', lubeFormNo: 'PMF 17-05 rev.a', selectedIds: new Set() };
   let reviewPhotoUrls = [];
   const body = document.getElementById('reportsTableBody');
   const search = document.getElementById('globalSearch');
@@ -7,6 +7,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   const to = document.getElementById('dateTo');
   const technicianFilter = document.getElementById('technicianFilter');
   const tabs = [...document.querySelectorAll('.report-tab')];
+  const downloadSelected = document.getElementById('download-selected-reports');
 
   const escapeHtml = value => String(value ?? '').replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;').replaceAll('"', '&quot;').replaceAll("'", '&#039;');
   const formatDate = value => value ? new Date(`${String(value).slice(0, 10)}T00:00:00`).toLocaleDateString('en-GB') : '-';
@@ -181,7 +182,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     const start = (state.page - 1) * state.rows;
     const pageReports = state.filtered.slice(start, start + state.rows);
     body.innerHTML = pageReports.length ? pageReports.map(report => `<tr>
-      <td><input type="checkbox" class="report-checkbox" data-id="${escapeHtml(report.id)}"></td>
+      <td><input type="checkbox" class="report-checkbox" data-id="${escapeHtml(report.id)}"${report.kind === 'lubrication' || report.status !== 'Approved' ? ' disabled title="Only approved daily reports can be downloaded."' : ''}${state.selectedIds.has(report.id) ? ' checked' : ''}></td>
       <td><button class="report-link" data-view="${escapeHtml(report.id)}">${escapeHtml(report.id)}</button></td>
       <td>${formatDate(report.date)}</td>
       <td>${escapeHtml(report.shift || '-')}</td>
@@ -194,8 +195,22 @@ document.addEventListener('DOMContentLoaded', async () => {
       <td><button class="view-button" type="button" data-view="${escapeHtml(report.id)}" title="${escapeHtml(report.kind === 'lubrication' ? t('View') : 'Review report')}">${escapeHtml(report.kind === 'lubrication' ? t('View') : 'Review')}</button></td>
     </tr>`).join('') : '<tr><td colspan="11" class="loading-cell">No reports match this view.</td></tr>';
     body.querySelectorAll('[data-view]').forEach(button => button.addEventListener('click', () => openReview([...state.reports, ...state.lubeReports].find(report => report.id === button.dataset.view))));
-    document.getElementById('selectAll').checked = false;
+    const selectable = state.filtered.filter(report => report.kind !== 'lubrication' && report.status === 'Approved');
+    const selectAll = document.getElementById('selectAll');
+    selectAll.checked = selectable.length > 0 && selectable.every(report => state.selectedIds.has(report.id));
+    selectAll.disabled = selectable.length === 0;
+    updateDownloadSelection();
     renderPagination();
+  }
+
+  function updateDownloadSelection() {
+    if (!downloadSelected) return;
+    const selected = [...state.selectedIds].filter(id => state.reports.some(report => report.id === id && report.status === 'Approved'));
+    state.selectedIds = new Set(selected);
+    downloadSelected.hidden = selected.length === 0;
+    downloadSelected.innerHTML = `⇩ ${escapeHtml(t('Download selected reports'))} <span>(${selected.length})</span>`;
+    downloadSelected.title = `${t('Download selected reports')} (${selected.length})`;
+    downloadSelected.setAttribute('aria-label', downloadSelected.title);
   }
 
   function renderPagination() {
@@ -512,7 +527,28 @@ document.addEventListener('DOMContentLoaded', async () => {
       else from.focus();
     });
     document.getElementById('closeDetails').addEventListener('click', emptyDetails);
-    document.getElementById('selectAll').addEventListener('change', event => body.querySelectorAll('.report-checkbox').forEach(box => { box.checked = event.target.checked; }));
+    document.getElementById('selectAll').addEventListener('change', event => {
+      state.filtered.filter(report => report.kind !== 'lubrication' && report.status === 'Approved').forEach(report => {
+        if (event.target.checked) state.selectedIds.add(report.id);
+        else state.selectedIds.delete(report.id);
+      });
+      body.querySelectorAll('.report-checkbox:not(:disabled)').forEach(box => { box.checked = state.selectedIds.has(box.dataset.id); });
+      updateDownloadSelection();
+    });
+    body.addEventListener('change', event => {
+      if (!event.target.matches('.report-checkbox:not(:disabled)')) return;
+      if (event.target.checked) state.selectedIds.add(event.target.dataset.id);
+      else state.selectedIds.delete(event.target.dataset.id);
+      const current = [...body.querySelectorAll('.report-checkbox:not(:disabled)')];
+      document.getElementById('selectAll').checked = current.length > 0 && current.every(box => box.checked);
+      updateDownloadSelection();
+    });
+    downloadSelected.addEventListener('click', () => {
+      const ids = [...state.selectedIds].filter(id => state.reports.some(report => report.id === id && report.status === 'Approved'));
+      if (!ids.length) return;
+      const url = `daily-report-print.html?reports=${encodeURIComponent(ids.join(','))}&autoprint=1`;
+      window.open(url, '_blank', 'noopener');
+    });
   }
 
   function applyTechnicianInterface() {

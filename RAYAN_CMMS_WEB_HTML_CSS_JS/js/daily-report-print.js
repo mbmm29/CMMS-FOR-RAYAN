@@ -48,29 +48,40 @@ function activityPages(items) {
 }
 
 async function loadPrintReport() {
-  const reportId = new URLSearchParams(location.search).get('report');
-  if (!reportId) throw new Error('Report number is missing.');
+  const query = new URLSearchParams(location.search);
+  const reportIds = query.getAll('report').concat((query.get('reports') || '').split(',').filter(Boolean));
+  if (!reportIds.length) throw new Error('Report number is missing.');
 
-  const data = await apiRequest(`/daily-reports/${encodeURIComponent(reportId)}`);
-  const report = data.report;
-  if (report.status !== 'Approved') throw new Error('This report must be approved before it can be printed.');
-
-  const total = data.items.reduce((sum, item) => sum + (Number(item.downtime_h) || 0), 0);
-  const first = data.items[0] || {};
-  const pages = activityPages(data.items);
-  const technician = report.technician_name || report.technician_id;
   const plants = await apiRequest('/plants');
   const forms = await apiRequest('/form-numbers').catch(() => ({}));
   const dailyFormNo = forms.daily || 'DR';
-  const plantId = report.plant_id || first.plant_id || '';
-  const plantName = plants.find((plant) => plant.plant_id === plantId)?.name || plantId || '—';
   const paper = document.getElementById('print-paper');
-  paper.classList.toggle('single-sheet', pages.pageCount === 1);
-
-  const photoMarkup = await photoPages(report.report_id, data.photos || []);
-  paper.innerHTML = `<header class="report-head"><div class="company-logo"><img src="logo-rayan.png?v=2" alt="Rayan"></div><div class="report-title"><h1>DAILY MAINTENANCE REPORT</h1><h2>Mechanical Maintenance Department</h2></div><div class="daily-document-box"><div class="daily-document-row"><span>Form No.:</span><strong>${text(dailyFormNo)}</strong></div><div class="daily-document-row"><span>Approved by</span><strong>${text(String(report.approved_by || '').trim() || '—')}</strong></div></div></header><section class="report-info"><div class="info-column"><label>Technician's name:<input value="${text(technician)}" readonly></label><label>Shift:<input value="${text(report.shift)}" readonly></label></div><div class="info-column"><label>Plant:<input value="${text(plantName)}" readonly></label></div></section><section class="activity-section">${pages.markup}</section><section class="report-bottom"><table class="parts-table"><thead><tr><th colspan="5">SPARE PARTS USED</th></tr><tr><th>No.</th><th>Part Name / Description</th><th>Part No.</th><th>Qty</th><th>Remarks</th></tr></thead><tbody>${parts(first.spare_parts)}</tbody></table><section class="notes-box"><div class="notes-heading"><b>GENERAL NOTES</b><span>TOTAL DOWNTIME: <output>${total.toFixed(2)}</output> HRS</span></div><textarea readonly>${text(report.general_notes || '').replace(/<br>/g, '\n')}</textarea></section></section>`;
-  paper.insertAdjacentHTML('afterend', photoMarkup);
-  document.getElementById('print-message').textContent = `Approved report: ${report.report_id}`;
+  const rendered = [];
+  for (const reportId of reportIds) {
+    const data = await apiRequest(`/daily-reports/${encodeURIComponent(reportId)}`);
+    const report = data.report;
+    if (report.status !== 'Approved') throw new Error(`Report ${report.report_id} must be approved before export.`);
+    const items = data.items || [];
+    const total = items.reduce((sum, item) => sum + (Number(item.downtime_h) || 0), 0);
+    const first = items[0] || {};
+    const pages = activityPages(items);
+    const technician = report.technician_name || report.technician_id;
+    const plantId = report.plant_id || first.plant_id || '';
+    const plantName = plants.find((plant) => plant.plant_id === plantId)?.name || plantId || '—';
+    const photoMarkup = await photoPages(report.report_id, data.photos || []);
+    rendered.push(`<section class="selected-report"><header class="report-head"><div class="company-logo"><img src="logo-rayan.png?v=2" alt="Rayan"></div><div class="report-title"><h1>DAILY MAINTENANCE REPORT</h1><h2>Mechanical Maintenance Department</h2></div><div class="daily-document-box"><div class="daily-document-row"><span>Form No.:</span><strong>${text(dailyFormNo)}</strong></div><div class="daily-document-row"><span>Approved by</span><strong>${text(String(report.approved_by || '').trim() || '—')}</strong></div></div></header><section class="report-info"><div class="info-column"><label>Technician's name:<input value="${text(technician)}" readonly></label><label>Shift:<input value="${text(report.shift)}" readonly></label></div><div class="info-column"><label>Plant:<input value="${text(plantName)}" readonly></label><label>Report No.:<input value="${text(report.report_id)}" readonly></label></div></section><section class="activity-section">${pages.markup}</section><section class="report-bottom"><table class="parts-table"><thead><tr><th colspan="5">SPARE PARTS USED</th></tr><tr><th>No.</th><th>Part Name / Description</th><th>Part No.</th><th>Qty</th><th>Remarks</th></tr></thead><tbody>${parts(first.spare_parts)}</tbody></table><section class="notes-box"><div class="notes-heading"><b>GENERAL NOTES</b><span>TOTAL DOWNTIME: <output>${total.toFixed(2)}</output> HRS</span></div><textarea readonly>${text(report.general_notes || '').replace(/<br>/g, '\n')}</textarea></section></section>${photoMarkup}</section>`);
+  }
+  paper.classList.toggle('single-sheet', rendered.length === 1);
+  paper.innerHTML = rendered.join('');
+  document.getElementById('print-message').textContent = rendered.length === 1 ? `Approved report: ${reportIds[0]}` : `Approved reports: ${reportIds.length}`;
+  if (query.get('autoprint') === '1') {
+    await Promise.all([...paper.images].map(image => image.complete ? Promise.resolve() : new Promise(resolve => {
+      image.addEventListener('load', resolve, { once: true });
+      image.addEventListener('error', resolve, { once: true });
+      setTimeout(resolve, 2500);
+    })));
+    setTimeout(() => window.print(), 300);
+  }
 }
 
 async function photoPages(reportId, photos) {

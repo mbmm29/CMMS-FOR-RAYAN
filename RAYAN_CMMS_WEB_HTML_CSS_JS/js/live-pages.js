@@ -2850,13 +2850,44 @@ function openEquipmentDocumentTab(selected, initialTab = 'sop') {
   showTab(initialTab);
 }
 
+async function openEquipmentPublicQr(selected) {
+  const overlay = document.createElement('div');
+  overlay.className = 'equipment-document-overlay';
+  overlay.innerHTML = `<section class="equipment-document-page" role="dialog" aria-modal="true"><header class="equipment-document-header"><div><h2>${esc(t('Equipment QR code'))}</h2><p>${esc(selected.equipment_id)} — ${esc(selected.name)}</p></div><button type="button" aria-label="${esc(t('Close'))}">×</button></header><main class="equipment-document-content"><p>${esc(t('Scan this code to open the equipment manual, SOP, and maintenance log without signing in.'))}</p><div id="equipment-public-qr" class="equipment-public-qr">${esc(t('Preparing QR code…'))}</div></main><footer class="equipment-public-qr-actions"><button type="button" class="detail-button" data-qr-copy disabled>${esc(t('Copy link'))}</button><button type="button" class="detail-button primary" data-qr-print disabled>${esc(t('Print QR code'))}</button></footer></section>`;
+  const close = () => overlay.remove();
+  overlay.querySelector('header button').addEventListener('click', close);
+  overlay.addEventListener('click', (event) => { if (event.target === overlay) close(); });
+  document.body.appendChild(overlay);
+  try {
+    const result = await apiRequest(equipmentApiPath(selected, '/public-link'), { method: 'POST' });
+    const url = new URL(result.url, location.href).href;
+    const qr = overlay.querySelector('#equipment-public-qr');
+    qr.innerHTML = `<img alt="${esc(t('Equipment QR code'))}" src="data:image/svg+xml;base64,${btoa(result.qr_svg)}"><p>${esc(url)}</p>`;
+    const copy = overlay.querySelector('[data-qr-copy]');
+    const print = overlay.querySelector('[data-qr-print]');
+    copy.disabled = print.disabled = false;
+    copy.addEventListener('click', async () => {
+      await navigator.clipboard.writeText(url);
+      toast(t('Link copied.'));
+    });
+    print.addEventListener('click', () => {
+      const popup = window.open('', '_blank');
+      if (!popup) return toast(t('Allow pop-ups to print the QR code.'));
+      popup.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>${esc(selected.equipment_id)} QR</title><style>body{font:16px Arial,sans-serif;text-align:center;color:#203b2a;padding:30px}img{width:260px;height:260px}h1{font-size:24px}p{overflow-wrap:anywhere}</style></head><body><h1>${esc(selected.equipment_id)} — ${esc(selected.name)}</h1><img src="data:image/svg+xml;base64,${btoa(result.qr_svg)}"><p>${esc(url)}</p><script>window.onload=()=>window.print()<\/script></body></html>`);
+      popup.document.close();
+    });
+  } catch (error) {
+    overlay.querySelector('#equipment-public-qr').textContent = t(error.message || 'Could not create QR code.');
+  }
+}
+
 function equipmentDetail(selected) {
   const capacity = selected?.capacity == null ? '—' : `${selected.capacity}${selected.capacity_unit ? ` ${selected.capacity_unit}` : ''}`;
   const actions = selected?.equipment_id && canMaintain()
     ? `<div class="equipment-actions"><button type="button" class="detail-button primary" id="equipment-edit">${esc(t('Edit'))}</button><button type="button" class="detail-button danger" data-delete="/equipment" data-delete-id="${esc(selected.equipment_id)}" data-delete-query="${esc(equipmentScopeQuery(selected).replace(/^\?/, ''))}" data-delete-note="Delete this equipment? Its maintenance history and KPI charts will be removed.">${esc(t('Delete'))}</button></div>`
     : '';
   const documents = selected?.equipment_id
-    ? `<div class="equipment-doc-actions"><button type="button" class="detail-button primary" id="equipment-open-sop">${esc(t('Open SOP'))}</button><button type="button" class="detail-button" id="equipment-open-manual">${esc(t('Open manual'))}</button><button type="button" class="detail-button" id="equipment-open-spare-file">${esc(t('Spare parts'))}</button><button type="button" class="detail-button" id="equipment-open-annual-plan">${esc(t('Open annual plan'))}</button></div>`
+    ? `<div class="equipment-doc-actions"><button type="button" class="detail-button primary" id="equipment-open-sop">${esc(t('Open SOP'))}</button><button type="button" class="detail-button" id="equipment-open-manual">${esc(t('Open manual'))}</button><button type="button" class="detail-button" id="equipment-open-spare-file">${esc(t('Spare parts'))}</button><button type="button" class="detail-button" id="equipment-open-annual-plan">${esc(t('Open annual plan'))}</button>${canMaintain() ? `<button type="button" class="detail-button" id="equipment-open-qr">${esc(t('Equipment QR code'))}</button>` : ''}</div>`
     : '';
   return `<aside class="panel detail"><h2>${esc(t('Equipment Details'))}</h2><div class="detail-top"><div class="machine">⚙</div>${liveBadge(selected?.status || '—')}<h3>${esc(selected?.equipment_id || '—')}</h3><p>${esc(selected?.name || '')}</p></div>${actions}<div class="detail-list">${detailRows([
     ['Category', selected?.equipment_type], ['Location', placeOf(selected)], ['Section', sectionName(selected?.section_id) || '—'], ['Area', selected?.area],
@@ -3031,6 +3062,7 @@ function drawEquipment() {
     document.getElementById('equipment-open-manual')?.addEventListener('click', () => openEquipmentDocumentTab(selected, 'manual'));
     document.getElementById('equipment-open-spare-file')?.addEventListener('click', () => openEquipmentDocumentTab(selected, 'spare-parts'));
     document.getElementById('equipment-open-annual-plan')?.addEventListener('click', () => openEquipmentDocumentTab(selected, 'annual'));
+    document.getElementById('equipment-open-qr')?.addEventListener('click', () => openEquipmentPublicQr(selected));
   }
   bindFilters();
   bindRows();

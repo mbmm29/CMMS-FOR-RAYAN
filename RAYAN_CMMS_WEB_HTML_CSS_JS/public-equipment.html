@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="theme-color" content="#174d36"><title>RAYAN CMMS | Equipment record</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=IBM+Plex+Sans+Arabic:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/public-equipment.css?v=1">
+</head>
+<body>
+  <main class="public-shell">
+    <header class="public-brand"><img src="logo-rayan.png" alt="RAYAN"><div><strong>RAYAN CMMS</strong><span data-i18n="Equipment information">Equipment information</span></div></header>
+    <section id="equipment-summary" class="equipment-summary"><p data-i18n="Loading equipment information…">Loading equipment information…</p></section>
+    <nav id="equipment-tabs" class="equipment-tabs" role="tablist" hidden>
+      <button type="button" role="tab" data-tab="manual" data-i18n="Manual">Manual</button>
+      <button type="button" role="tab" data-tab="sop">SOP</button>
+      <button type="button" role="tab" data-tab="records" data-i18n="Maintenance log">Maintenance log</button>
+    </nav>
+    <section id="equipment-content" class="equipment-content" aria-live="polite"></section>
+    <footer data-i18n="RAYAN Mechanical Maintenance">RAYAN Mechanical Maintenance</footer>
+  </main>
+  <script src="js/i18n.js?v=123"></script><script src="js/public-equipment.js?v=2"></script>
+</body>
+</html>

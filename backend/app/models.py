@@ -68,6 +68,14 @@ class Equipment(Base):
     notes: Mapped[str|None]=mapped_column(Text,nullable=True)
     temp_limit_c: Mapped[float|None]=mapped_column(Float,nullable=True)
 
+class EquipmentPublicLink(Base):
+    __tablename__ = 'equipment_public_links'
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    equipment_row_id: Mapped[int] = mapped_column(Integer, ForeignKey('equipment.id', ondelete='CASCADE'), unique=True, index=True)
+    token: Mapped[str] = mapped_column(String(80), unique=True, index=True)
+    created_by: Mapped[str] = mapped_column(String(80))
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
 class Component(Base):
     __tablename__='components'
     id: Mapped[int]=mapped_column(Integer,primary_key=True)

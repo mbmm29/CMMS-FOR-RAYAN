@@ -14,7 +14,7 @@ import threading
 from pathlib import Path
 from urllib.parse import quote
 from xml.etree import ElementTree as ET
-from fastapi import FastAPI, Depends, HTTPException, File, Form, UploadFile, Query
+from fastapi import FastAPI, Depends, HTTPException, File, Form, UploadFile, Query, Request
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, Response
@@ -1013,6 +1013,166 @@ def list_equipment(line_id:str|None=None,db:Session=Depends(get_db),u=Depends(au
     q=db.query(Equipment)
     if line_id:q=q.filter(Equipment.line_id==line_id)
     return q.order_by(Equipment.equipment_id).all()
+
+
+@app.post('/equipment/{equipment_id}/public-link')
+def create_equipment_public_link(equipment_id: str, request: Request, plant_id: str | None = None,
+                                 line_id: str | None = None, db: Session = Depends(get_db), u=Depends(role(*ENGINEER))):
+    equipment = find_equipment(db, equipment_id, plant_id, line_id)
+    if not equipment:
+        raise HTTPException(404, 'Equipment not found')
+    link = db.query(EquipmentPublicLink).filter_by(equipment_row_id=equipment.id).first()
+    if not link:
+        link = EquipmentPublicLink(equipment_row_id=equipment.id, token=secrets.token_urlsafe(36), created_by=u.username)
+        db.add(link)
+        audit(db, u, 'CREATE', 'EquipmentPublicLink', equipment.equipment_id, new={'plant_id': equipment.plant_id, 'line_id': equipment.line_id})
+        db.commit()
+        db.refresh(link)
+    public_url = f'{request.base_url}public-equipment.html?token={quote(link.token)}'
+    try:
+        import qrcode
+        from qrcode.image.svg import SvgPathImage
+        qr = qrcode.QRCode(version=None, error_correction=qrcode.constants.ERROR_CORRECT_M, box_size=8, border=3)
+        qr.add_data(public_url)
+        qr.make(fit=True)
+        image = qr.make_image(image_factory=SvgPathImage)
+        stream = io.BytesIO()
+        image.save(stream)
+        qr_svg = stream.getvalue().decode('utf-8')
+    except ImportError:
+        raise HTTPException(503, 'QR code generation is unavailable.') from None
+    return {'url': public_url, 'qr_svg': qr_svg}
+
+
+@app.get('/public/equipment/{token}')
+def public_equipment_record(token: str, db: Session = Depends(get_db)):
+    link = db.query(EquipmentPublicLink).filter_by(token=token).first()
+    if not link:
+        raise HTTPException(404, 'This equipment link is invalid or has been removed.')
+    equipment = db.get(Equipment, link.equipment_row_id)
+    if not equipment:
+        raise HTTPException(404, 'Equipment not found')
+    plant = db.query(Plant).filter_by(plant_id=equipment.plant_id).first() if equipment.plant_id else None
+    line = db.query(PlantLine).filter_by(line_id=equipment.line_id).first() if equipment.line_id else None
+    section = db.query(LineSection).filter_by(section_id=equipment.section_id).first() if equipment.section_id else None
+
+    manual_files = []
+    category = (equipment.equipment_type or '').strip()
+    if category:
+        manual_files.extend({
+            'file_id': row.id, 'filename': row.filename, 'content_type': row.content_type,
+            'legacy': False, 'updated_at': row.updated_at.isoformat() if row.updated_at else None,
+        } for row in db.query(EquipmentCategoryDocumentFile).filter(
+            func.lower(EquipmentCategoryDocumentFile.category) == category.lower(),
+            EquipmentCategoryDocumentFile.document_type == 'manual',
+        ).order_by(EquipmentCategoryDocumentFile.updated_at.desc(), EquipmentCategoryDocumentFile.id.desc()).all())
+        manual_files.extend({
+            'file_id': None, 'filename': row.filename, 'content_type': row.content_type,
+            'legacy': True, 'updated_at': row.updated_at.isoformat() if row.updated_at else None,
+        } for row in db.query(EquipmentCategoryDocument).filter(
+            func.lower(EquipmentCategoryDocument.category) == category.lower(),
+            EquipmentCategoryDocument.document_type == 'manual',
+        ).all())
+
+    equipment_manual = db.query(SOPEquipmentManual).filter_by(equipment_id=equipment.equipment_id).first()
+    category_manual = db.query(SOPCategoryManual).filter(func.lower(SOPCategoryManual.category) == category.lower()).first() if category else None
+    sop_manual = None
+    if equipment_manual:
+        source = equipment_manual
+        sop_manual = {'title': source.title, 'filename': source.filename, 'revision': source.revision, 'status': source.status, 'document': source.document}
+    elif category_manual:
+        source = category_manual
+        sop_manual = {'title': source.title, 'filename': source.filename, 'revision': source.revision, 'status': source.status, 'document': source.document}
+    else:
+        legacy_manual = db.query(SOPManual).filter_by(equipment_id=equipment.equipment_id).first()
+        if not legacy_manual and category:
+            category_codes = [row.equipment_id for row in db.query(Equipment.equipment_id).filter(func.lower(Equipment.equipment_type) == category.lower()).all()]
+            if category_codes:
+                legacy_manual = db.query(SOPManual).filter(SOPManual.equipment_id.in_(category_codes)).first()
+        if legacy_manual:
+            sop_manual = {'title': legacy_manual.title, 'filename': legacy_manual.filename, 'document': legacy_manual.document}
+        else:
+            paragraphs = db.query(SOPParagraph).filter_by(equipment_id=equipment.equipment_id).order_by(SOPParagraph.position, SOPParagraph.id).all()
+            if paragraphs:
+                sop_manual = {'title': 'Standard operating procedure', 'document': json.dumps({'paragraphs': [row.body or '' for row in paragraphs]}, ensure_ascii=False)}
+
+    records = db.query(MachineRecord).filter_by(equipment_id=equipment.equipment_id).order_by(MachineRecord.record_date.desc(), MachineRecord.id.desc()).all()
+    duplicate_code = db.query(Equipment.id).filter_by(equipment_id=equipment.equipment_id).count() > 1
+    scoped_records = []
+    for row in records:
+        if row.daily_report_id:
+            report = db.get(DailyReport, row.daily_report_id)
+            if report and report.plant_id:
+                if report.plant_id != equipment.plant_id:
+                    continue
+                linked_item_query = db.query(DailyReportItem).filter_by(
+                    report_id=row.daily_report_id, equipment_id=equipment.equipment_id,
+                )
+                linked_item = linked_item_query.filter(DailyReportItem.line_id == equipment.line_id).first() if duplicate_code else linked_item_query.first()
+                if duplicate_code and (not linked_item or linked_item.line_id != equipment.line_id):
+                    continue
+                if linked_item and linked_item.line_id and linked_item.line_id != equipment.line_id:
+                    continue
+            elif duplicate_code:
+                linked_item = db.query(DailyReportItem).filter_by(report_id=row.daily_report_id, equipment_id=equipment.equipment_id).first()
+                if not linked_item or linked_item.plant_id != equipment.plant_id or (linked_item.line_id and linked_item.line_id != equipment.line_id):
+                    continue
+        elif row.wo_id:
+            order = db.query(WorkOrder).filter_by(work_order_id=row.wo_id).first()
+            if order:
+                if order.manual_plant_id and order.manual_plant_id != equipment.plant_id:
+                    continue
+                if order.manual_line_id and order.manual_line_id != equipment.line_id:
+                    continue
+                if duplicate_code and not order.manual_plant_id and not order.manual_line_id:
+                    continue
+        elif duplicate_code:
+            continue
+        scoped_records.append(row)
+    records = scoped_records
+    tech_ids = {row.technician_id for row in records if row.technician_id}
+    tech_names = {row.technician_id: row.name for row in db.query(Technician).filter(Technician.technician_id.in_(tech_ids)).all()} if tech_ids else {}
+    history = [{
+        'date': row.record_date.isoformat() if row.record_date else None,
+        'type': row.record_type,
+        'technician': row.team_technicians or tech_names.get(row.technician_id, row.technician_id) or '—',
+        'description': row.description,
+        'cause': row.cause,
+        'action': row.action,
+        'start_time': row.start_time.strftime('%H:%M') if row.start_time else None,
+        'end_time': row.end_time.strftime('%H:%M') if row.end_time else None,
+        'downtime_hours': row.downtime_h,
+        'spare_parts': row.spare_parts,
+        'work_order_id': row.wo_id,
+    } for row in records]
+    return {
+        'equipment': {
+            'equipment_id': equipment.equipment_id, 'name': equipment.name, 'category': category,
+            'plant': plant.name if plant else equipment.plant_id, 'line': line.name if line else equipment.line_id,
+            'line_number': line.line_number if line else None, 'section': section.name if section else None,
+            'manufacturer': equipment.manufacturer, 'model': equipment.model, 'serial_number': equipment.serial_number,
+            'status': equipment.status,
+        },
+        'manual_files': manual_files,
+        'sop': sop_manual,
+        'maintenance_records': history,
+    }
+
+
+@app.get('/public/equipment/{token}/manual')
+def public_equipment_manual(token: str, file_id: int | None = None, legacy: bool = False, db: Session = Depends(get_db)):
+    link = db.query(EquipmentPublicLink).filter_by(token=token).first()
+    equipment = db.get(Equipment, link.equipment_row_id) if link else None
+    if not equipment:
+        raise HTTPException(404, 'This equipment link is invalid or has been removed.')
+    row = find_equipment_category_document(db, (equipment.equipment_type or '').strip(), 'manual', file_id=file_id, legacy=legacy)
+    if not row:
+        raise HTTPException(404, 'No manual is published for this equipment.')
+    filename = row.filename or 'manual'
+    safe_name = re.sub(r'[^A-Za-z0-9._-]', '_', Path(filename).name)
+    encoded_name = quote(Path(filename).name, safe='')
+    return Response(content=bytes(row.data), media_type=row.content_type or 'application/octet-stream',
+                    headers={'Content-Disposition': f"inline; filename=\"{safe_name}\"; filename*=UTF-8''{encoded_name}"})
 
 EQUIPMENT_CATEGORY_FILE_TYPES = {
     'manual': {'pdf': 'application/pdf', 'xlsx': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',

@@ -332,6 +332,16 @@ html body .equipment-document-tabs button{min-width:140px;padding:12px 16px;bord
 html body .equipment-document-tabs button:hover{background:#fff4cc;color:#443914}
 html body .equipment-document-tabs button.active{border-bottom-color:#c5a72e;color:#3c351b;background:#fffaf0}
 html body .equipment-document-content{flex:1;min-height:0;overflow:auto;padding:20px;background:#f7f9f5}
+html body .equipment-public-qr{display:grid;justify-items:center;gap:12px;padding:22px;border:1px solid #d6dfd3;border-radius:12px;background:#fff;text-align:center;overflow-wrap:anywhere}
+html body .equipment-public-qr img{width:min(280px,70vw);height:auto;background:#fff}
+html body .equipment-public-qr-actions{display:flex;justify-content:flex-end;gap:10px;padding:14px 20px;border-top:1px solid #dce5db;background:#fff}
+html body .equipment-public-records{display:grid;gap:14px;max-width:1100px;margin:0 auto}
+html body .equipment-public-record{padding:16px;border:1px solid #d6dfd3;border-radius:10px;background:#fff}
+html body .equipment-public-record h3{margin:0 0 8px;color:#203b2a}
+html body .equipment-public-record p{margin:6px 0;line-height:1.55;color:#35483a;white-space:pre-wrap}
+html body .equipment-public-file-list{display:grid;gap:8px;max-width:850px;margin:0 auto}
+html body .equipment-public-file-list button{text-align:start}
+html body .equipment-public-viewer{width:100%;height:min(70vh,900px);border:1px solid #d6dfd3;border-radius:10px;background:#fff}
 html body .equipment-document-content>.sop-manual,html body .equipment-document-content #equipment-sop-box>.sop-manual{width:100%;max-width:1250px;margin:0 auto;padding:20px;border:1px solid #d6dfd3;border-radius:10px;background:#fff}
 html body .equipment-document-plan-controls{display:flex;align-items:end;flex-wrap:wrap;gap:10px;margin:0 auto 14px;max-width:1400px;padding:14px;border:1px solid #d6dfd3;border-radius:10px;background:#fff}
 html body .equipment-document-plan-controls label{display:grid;gap:5px;color:#344b3a;font-size:13px;font-weight:700}
