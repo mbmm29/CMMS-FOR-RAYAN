@@ -543,11 +543,81 @@ document.addEventListener('DOMContentLoaded', async () => {
       document.getElementById('selectAll').checked = current.length > 0 && current.every(box => box.checked);
       updateDownloadSelection();
     });
-    downloadSelected.addEventListener('click', () => {
+    downloadSelected.addEventListener('click', async () => {
       const ids = [...state.selectedIds].filter(id => state.reports.some(report => report.id === id && report.status === 'Approved'));
       if (!ids.length) return;
-      const url = `daily-report-print.html?reports=${encodeURIComponent(ids.join(','))}&autoprint=1`;
-      window.open(url, '_blank', 'noopener');
+      const originalLabel = downloadSelected.innerHTML;
+      downloadSelected.disabled = true;
+      let frame;
+      const safeName = value => String(value || '').normalize('NFKD').replace(/[^\p{L}\p{N}-]+/gu, '-').replace(/^-+|-+$/g, '');
+      const pause = ms => new Promise(resolve => setTimeout(resolve, ms));
+      try {
+        frame = document.createElement('iframe');
+        frame.setAttribute('aria-hidden', 'true');
+        frame.title = 'Preparing individual report PDFs';
+        frame.style.cssText = 'position:fixed;left:-2000px;top:0;width:1600px;height:1200px;border:0;pointer-events:none';
+        document.body.append(frame);
+        frame.src = `daily-report-print.html?reports=${encodeURIComponent(ids.join(','))}`;
+        downloadSelected.textContent = `Preparing 0 / ${ids.length} PDFs…`;
+        const started = Date.now();
+        while (Date.now() - started < 120000) {
+          const child = frame.contentDocument;
+          const reports = child?.querySelectorAll('.selected-report');
+          if (reports?.length === ids.length) break;
+          const message = child?.getElementById('print-message')?.textContent || '';
+          if (message && !message.toLowerCase().includes('loading') && !message.includes('Approved report')) throw new Error(message);
+          await pause(250);
+        }
+        const child = frame.contentWindow;
+        const reports = [...(frame.contentDocument?.querySelectorAll('.selected-report') || [])];
+        if (reports.length !== ids.length) throw new Error('The selected reports could not be prepared for export.');
+        if (typeof child.html2pdf !== 'function') throw new Error('PDF export library did not load. Check the internet connection and try again.');
+        await child.document.fonts?.ready;
+        await Promise.all([...child.document.images].map(image => image.complete ? Promise.resolve() : new Promise(resolve => {
+          image.addEventListener('load', resolve, { once: true });
+          image.addEventListener('error', resolve, { once: true });
+          setTimeout(resolve, 10000);
+        })));
+        const duplicates = new Map();
+        reports.forEach(section => {
+          const key = `${section.dataset.reportDate}-${section.dataset.reportShift}`;
+          duplicates.set(key, (duplicates.get(key) || 0) + 1);
+        });
+        for (let index = 0; index < reports.length; index += 1) {
+          const section = reports[index];
+          downloadSelected.textContent = `Exporting ${index + 1} / ${reports.length}…`;
+          const date = safeName(section.dataset.reportDate) || 'report';
+          const shift = safeName(section.dataset.reportShift) || 'shift';
+          let filename = `${date}-${shift}`;
+          if (duplicates.get(`${section.dataset.reportDate}-${section.dataset.reportShift}`) > 1) {
+            filename += `-${safeName(section.querySelector('.report-number')?.textContent.match(/DR-[A-Z0-9-]+/)?.[0] || ids[index])}`;
+          }
+          const blob = await child.html2pdf().set({
+            margin: [7, 7, 7, 7],
+            filename: `${filename}.pdf`,
+            image: { type: 'jpeg', quality: 0.96 },
+            html2canvas: { scale: 1.5, useCORS: true, logging: false, windowWidth: 1600, ignoreElements: element => element.classList?.contains('individual-export') },
+            jsPDF: { unit: 'mm', format: 'a3', orientation: 'landscape' },
+            pagebreak: { mode: ['css', 'legacy'] },
+          }).from(section).outputPdf('blob');
+          const objectUrl = URL.createObjectURL(blob);
+          const link = document.createElement('a');
+          link.href = objectUrl;
+          link.download = `${filename}.pdf`;
+          link.style.display = 'none';
+          document.body.append(link);
+          link.click();
+          link.remove();
+          setTimeout(() => URL.revokeObjectURL(objectUrl), 60000);
+          await pause(500);
+        }
+      } catch (error) {
+        window.alert(error?.message || 'PDF export failed.');
+      } finally {
+        frame?.remove();
+        downloadSelected.disabled = false;
+        downloadSelected.innerHTML = originalLabel;
+      }
     });
   }
 
