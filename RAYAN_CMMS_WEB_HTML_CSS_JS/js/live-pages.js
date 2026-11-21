@@ -4519,24 +4519,24 @@ function buildMaintenanceLogWorkbook(model) {
   heights[row] = 22;
   row += 1;
 
-  merge(row, 1, row, 7, model.equipmentTitle, 3);
-  merge(row, 8, row, lastCol, model.keyTitle, 3);
+  merge(row, 1, row, 5, model.equipmentTitle, 3);
+  merge(row, 6, row, lastCol, model.keyTitle, 3);
   heights[row] = 24;
   const factStart = row + 1;
   (model.facts || []).forEach((item, index) => {
     const factRow = factStart + index;
-    merge(factRow, 1, factRow, 2, item.label, labelStyle);
-    merge(factRow, 3, factRow, 7, item.value == null || item.value === '' ? '—' : item.value, valueStyle);
+    merge(factRow, 1, factRow, 3, item.label, labelStyle);
+    merge(factRow, 4, factRow, 5, item.value == null || item.value === '' ? '—' : item.value, valueStyle);
     heights[factRow] = Math.max(heights[factRow] || 0, 22);
   });
 
   const keyHeaderRow = factStart;
-  merge(keyHeaderRow, 8, keyHeaderRow, 10, model.typeHeading, 9);
+  merge(keyHeaderRow, 6, keyHeaderRow, 10, model.typeHeading, 9);
   place(keyHeaderRow, 11, model.symbolHeading, 9);
   heights[keyHeaderRow] = Math.max(heights[keyHeaderRow] || 0, 24);
   (model.key || []).forEach((item, index) => {
     const keyRow = keyHeaderRow + 1 + index;
-    merge(keyRow, 8, keyRow, 10, item.label, 8);
+    merge(keyRow, 6, keyRow, 10, item.label, 8);
     place(keyRow, 11, item.value, 10);
     heights[keyRow] = Math.max(heights[keyRow] || 0, 22);
   });
