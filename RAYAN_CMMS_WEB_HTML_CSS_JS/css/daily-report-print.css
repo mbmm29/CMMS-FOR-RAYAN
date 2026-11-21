@@ -2,6 +2,8 @@
 .report-paper{width:min(1500px,calc(100vw - 36px));margin:18px auto;padding:20px;background:#fff}
 .daily-paper{width:100%;margin:0 auto 24px;padding:18px;background:#fff;color:#102d60}
 .daily-paper.selected-report+.selected-report{break-before:page;page-break-before:always}
+.individual-export{display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:10px;padding:8px 10px;border:1px solid #c9d8ec;border-radius:6px;background:#f3f7fc;font-size:12px;font-weight:700}
+.individual-export button{border:0;border-radius:5px;padding:8px 13px;background:#267348;color:#fff;font:inherit;font-weight:800;cursor:pointer}
 .lube-head{display:grid;grid-template-columns:220px minmax(0,1fr) 280px;gap:12px;align-items:center;padding-bottom:10px;border-bottom:1px solid #2a5287}
 .lube-head>img{width:210px;max-height:70px;object-fit:contain;object-position:left center;background:transparent!important;mix-blend-mode:multiply}
 .lube-head h2{margin:0;text-align:center;font-size:24px;line-height:1.2}
@@ -42,6 +44,8 @@
 @media print{
   html,body{margin:0;padding:0;background:#fff;color:#102d60;font:8pt Arial,sans-serif}
   .no-print,.tool-bar{display:none!important}
+  body.print-only-selected .daily-paper:not(.print-target){display:none!important}
+  .individual-export{display:none!important}
   .report-paper{width:auto;max-width:none;margin:0;padding:0;box-shadow:none}
   .daily-paper{width:283mm;max-width:none;margin:0 auto;padding:0;break-inside:auto;page-break-inside:auto}
   .daily-paper.selected-report+.selected-report{break-before:page;page-break-before:always}

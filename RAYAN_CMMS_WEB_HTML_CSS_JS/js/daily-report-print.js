@@ -35,7 +35,7 @@ function reportMarkup(report, items, formNo, plantName, photos, plants, lines) {
   const activity = `<div class="sheet-scroll"><table class="lube-table"><thead><tr><th>Seq.</th><th>Machine</th><th>Maintenance Type</th><th>Repair Actions</th><th>Start Time</th><th>End Time</th><th>Downtime (hrs)</th></tr></thead><tbody id="daily-rows">${activityRows(items, plants, lines)}</tbody></table></div>`;
   const parts = `<section class="daily-parts"><h3>SPARE PARTS USED</h3><div class="sheet-scroll"><table class="lube-table"><thead><tr><th>No.</th><th>Part</th><th>Part No.</th><th>Qty</th></tr></thead><tbody>${reportParts(spareParts)}</tbody></table></div></section>`;
   const notes = `<label class="daily-notes"><span>GENERAL NOTES</span><div class="daily-note-box"><textarea readonly>${escapeHtml(report.general_notes || '')}</textarea><b class="daily-tdt">TDT: <span>${total.toFixed(2)} h</span></b></div></label>`;
-  return `<section class="daily-paper selected-report"><header class="lube-head"><img src="logo-rayan.png?v=4" alt="Rayan"><div><h2>DAILY MAINTENANCE REPORT</h2><p>${escapeHtml(report.status)}</p><small>Mechanical Maintenance Department</small></div><dl><div><dt>Form No.:</dt><dd>${escapeHtml(formNo)}</dd></div><div><dt>Approved by</dt><dd>${escapeHtml(String(report.approved_by || '').trim())}</dd></div></dl></header><div class="report-number">Report No.: ${escapeHtml(report.report_id)} <span>Plant: ${escapeHtml(plantName)}</span></div>${metadata}${activity}${parts}${notes}${photos}</section>`;
+  return `<section class="daily-paper selected-report" data-report-date="${escapeHtml(String(report.report_date || '').slice(0, 10))}" data-report-shift="${escapeHtml(report.shift || '')}"><div class="individual-export no-print"><span>PDF: ${escapeHtml(String(report.report_date || '').slice(0, 10))} · ${escapeHtml(report.shift || 'Shift')}</span><button type="button" data-report-print>Download this report</button></div><header class="lube-head"><img src="logo-rayan.png?v=4" alt="Rayan"><div><h2>DAILY MAINTENANCE REPORT</h2><p>${escapeHtml(report.status)}</p><small>Mechanical Maintenance Department</small></div><dl><div><dt>Form No.:</dt><dd>${escapeHtml(formNo)}</dd></div><div><dt>Approved by</dt><dd>${escapeHtml(String(report.approved_by || '').trim())}</dd></div></dl></header><div class="report-number">Report No.: ${escapeHtml(report.report_id)} <span>Plant: ${escapeHtml(plantName)}</span></div>${metadata}${activity}${parts}${notes}${photos}</section>`;
 }
 
 async function photoPages(reportId, photos) {
@@ -74,14 +74,38 @@ async function loadPrintReport() {
   }
   paper.classList.toggle('single-sheet', rendered.length === 1);
   paper.innerHTML = rendered.join('');
-  document.getElementById('print-message').textContent = rendered.length === 1 ? `Approved report: ${reportIds[0]}` : `Approved reports: ${reportIds.length}`;
-  if (query.get('autoprint') === '1') {
+  const printMessage = document.getElementById('print-message');
+  printMessage.textContent = rendered.length === 1
+    ? `Approved report: ${reportIds[0]}`
+    : `${reportIds.length} separate reports · use each report's Download button`;
+  const toolbarPrint = document.querySelector('.tool-bar button');
+  if (toolbarPrint) toolbarPrint.hidden = rendered.length > 1;
+  paper.querySelectorAll('[data-report-print]').forEach((button) => button.addEventListener('click', () => {
+    const section = button.closest('.selected-report');
+    if (!section) return;
+    const safePart = (value) => String(value || '').normalize('NFKD').replace(/[^\p{L}\p{N}-]+/gu, '-').replace(/^-+|-+$/g, '');
+    const filename = `${safePart(section.dataset.reportDate)}-${safePart(section.dataset.reportShift) || 'Shift'}`;
+    const originalTitle = document.title;
+    document.title = filename;
+    document.body.classList.add('print-only-selected');
+    section.classList.add('print-target');
+    const cleanup = () => {
+      document.body.classList.remove('print-only-selected');
+      section.classList.remove('print-target');
+      document.title = originalTitle;
+      window.removeEventListener('afterprint', cleanup);
+    };
+    window.addEventListener('afterprint', cleanup, { once: true });
+    window.print();
+    setTimeout(cleanup, 60000);
+  }));
+  if (query.get('autoprint') === '1' && rendered.length === 1) {
     await Promise.all([...paper.querySelectorAll('img')].map((image) => image.complete ? Promise.resolve() : new Promise((resolve) => {
       image.addEventListener('load', resolve, { once: true });
       image.addEventListener('error', resolve, { once: true });
       setTimeout(resolve, 2500);
     })));
-    setTimeout(() => window.print(), 300);
+    setTimeout(() => paper.querySelector('[data-report-print]')?.click(), 300);
   }
 }
 
