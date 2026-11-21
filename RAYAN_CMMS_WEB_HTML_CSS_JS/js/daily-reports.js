@@ -593,7 +593,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             filename += `-${safeName(section.querySelector('.report-number')?.textContent.match(/DR-[A-Z0-9-]+/)?.[0] || ids[index])}`;
           }
           const blob = await child.html2pdf().set({
-            margin: [7, 7, 7, 7],
+            margin: 7,
             filename: `${filename}.pdf`,
             image: { type: 'jpeg', quality: 0.96 },
             html2canvas: { scale: 1.5, useCORS: true, logging: false, windowWidth: 1600, ignoreElements: element => element.classList?.contains('individual-export') },
