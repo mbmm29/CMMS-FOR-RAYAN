@@ -573,5 +573,18 @@ html body .sawa-order-seq{text-align:center;font-weight:700}
 html body .sawa-order-actions{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-top:12px}
 html body .sawa-order-actions>span{margin-inline-end:auto;color:#627165;font-size:11px}
 html body .sawa-order-image{display:block;width:68px;height:54px;object-fit:contain;border:1px solid #d7e2d3;border-radius:6px;background:#fff}
+html body .machine-log-download-progress{position:fixed;z-index:2147483000;top:18px;left:50%;transform:translateX(-50%);width:min(440px,calc(100vw - 28px));padding:16px 18px;border:1px solid #cbdcc8;border-top:4px solid #c9a91a;border-radius:12px;background:#fff;color:#183a2a;box-shadow:0 12px 36px #183a2a2b;font-family:inherit}
+html body .machine-log-progress-heading{display:flex;align-items:center;gap:10px;font-size:14px}
+html body .machine-log-progress-spinner{width:18px;height:18px;flex:0 0 18px;border:2px solid #e7e0b9;border-top-color:#267348;border-radius:50%;animation:machine-log-spin .8s linear infinite}
+html body .machine-log-progress-counts{margin:12px 0 7px;font-size:13px;font-weight:800;color:#267348}
+html body .machine-log-progress-track{height:9px;overflow:hidden;border-radius:99px;background:#f2edda}
+html body .machine-log-progress-track span{display:block;width:0;height:100%;border-radius:inherit;background:linear-gradient(90deg,#267348,#c9a91a);transition:width .25s ease}
+html body .machine-log-progress-current{display:block;min-height:16px;margin-top:8px;color:#536658;font-size:11px;overflow-wrap:anywhere}
+html body .machine-log-download-progress.is-complete .machine-log-progress-spinner{display:none}
+html body .machine-log-download-progress.is-complete .machine-log-progress-heading strong{color:#267348}
+html body .machine-log-download-progress.is-error{border-top-color:#b33e36}
+html body .machine-log-download-progress.is-error .machine-log-progress-spinner{display:none}
+html body .machine-log-download-progress.is-error .machine-log-progress-heading strong{color:#b33e36}
+@keyframes machine-log-spin{to{transform:rotate(360deg)}}
 @media(max-width:850px){html body .sawa-orders-layout{grid-template-columns:1fr}html body .sawa-order-list{order:0}html body .sawa-order-details,html body .sawa-order-form,html body .sawa-order-empty{order:1}}
 @media(max-width:560px){html body .sawa-order-pump-info,html body .sawa-order-machine-fields{grid-template-columns:1fr}html body .sawa-order-actions>*{flex:1 1 100%;width:100%}html body .sawa-order-title,html body .sawa-order-machine-group>header,html body .sawa-order-machine-view>header{align-items:stretch;flex-direction:column}}

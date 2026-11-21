@@ -4657,10 +4657,37 @@ async function downloadAllMachineLogs() {
   const previousLabel = button?.textContent || t('Download all files');
   let stage;
   let printStyles;
+  let progressPanel;
+  let progressTitle;
+  let progressCounts;
+  let progressFill;
+  let progressCurrent;
+  const updateProgress = (downloaded, current = '') => {
+    if (!progressPanel) return;
+    const remaining = Math.max(0, equipmentItems.length - downloaded);
+    progressCounts.textContent = `${downloaded} downloaded · ${remaining} remaining`;
+    progressFill.style.width = `${Math.round((downloaded / equipmentItems.length) * 100)}%`;
+    progressPanel.setAttribute('aria-valuenow', String(downloaded));
+    progressCurrent.textContent = current || (remaining ? 'Preparing the next equipment log…' : 'All maintenance logs are ready.');
+  };
   button && (button.disabled = true);
   try {
     printStyles = installPdfPrintStyles();
-    document.body.classList.add('log-printing');
+    progressPanel = document.createElement('section');
+    progressPanel.className = 'machine-log-download-progress';
+    progressPanel.setAttribute('role', 'status');
+    progressPanel.setAttribute('aria-live', 'polite');
+    progressPanel.setAttribute('aria-valuemin', '0');
+    progressPanel.setAttribute('aria-valuemax', String(equipmentItems.length));
+    progressPanel.innerHTML = '<div class="machine-log-progress-heading"><span class="machine-log-progress-spinner" aria-hidden="true"></span><strong>Downloading maintenance logs</strong></div><div class="machine-log-progress-counts"></div><div class="machine-log-progress-track"><span></span></div><small class="machine-log-progress-current"></small>';
+    [progressCounts, progressFill, progressCurrent] = [
+      progressPanel.querySelector('.machine-log-progress-counts'),
+      progressPanel.querySelector('.machine-log-progress-track span'),
+      progressPanel.querySelector('.machine-log-progress-current'),
+    ];
+    progressTitle = progressPanel.querySelector('.machine-log-progress-heading strong');
+    document.body.append(progressPanel);
+    updateProgress(0);
     stage = document.createElement('div');
     stage.id = 'machine-log-export-stage';
     stage.style.cssText = 'position:fixed;left:0;top:0;width:1200px;z-index:-1;pointer-events:none;background:#fff';
@@ -4680,14 +4707,30 @@ async function downloadAllMachineLogs() {
         value.textContent = field.type === 'date' && /^\d{4}-\d{2}-\d{2}$/.test(raw) ? (fmtDate(raw) || '—') : (raw || '—');
         field.replaceWith(value);
       });
-      if (!form) continue;
+      if (!form) throw new Error(`Could not prepare the maintenance log for ${equipment.equipment_id}.`);
       if (button) button.textContent = `${t('Download all files')} (${index + 1}/${equipmentItems.length})`;
-      await downloadStyledPdf(form, `maintenance-log-${equipment.equipment_id}`, { format: 'a4', orientation: 'landscape', margin: 7 });
+      updateProgress(index, `Downloading ${equipment.equipment_id} — ${equipment.name || 'Equipment'}…`);
+      document.body.classList.add('log-printing');
+      try {
+        await downloadStyledPdf(form, `maintenance-log-${equipment.equipment_id}`, { format: 'a4', orientation: 'landscape', margin: 7 });
+      } finally {
+        document.body.classList.remove('log-printing');
+      }
       stage.innerHTML = '';
+      updateProgress(index + 1, index + 1 === equipmentItems.length ? '' : `Downloaded ${equipment.equipment_id}.`);
       await new Promise((resolve) => setTimeout(resolve, 450));
     }
+    progressPanel.classList.add('is-complete');
+    progressTitle.textContent = 'Download complete';
     toast(`${equipmentItems.length} ${t('maintenance logs downloaded')}`);
+    setTimeout(() => progressPanel?.remove(), 5000);
   } catch (error) {
+    if (progressPanel) {
+      progressPanel.classList.add('is-error');
+      progressTitle.textContent = 'Download stopped';
+      progressCurrent.textContent = error.message || 'Could not download all maintenance logs.';
+      setTimeout(() => progressPanel?.remove(), 8000);
+    }
     toast(t(error.message || 'Could not download all maintenance logs.'));
   } finally {
     stage?.remove();
