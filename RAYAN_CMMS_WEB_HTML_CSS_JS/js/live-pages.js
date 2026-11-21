@@ -4494,56 +4494,55 @@ function buildMaintenanceLogWorkbook(model) {
     if (row !== rowTo || column !== columnTo) merges.push(`${columnLetters(column)}${row}:${columnLetters(columnTo)}${rowTo}`);
   };
   const lastCol = 11;
-  const columnWidths = [7, 14, 15, 30, 36, 18, 28, 16, 11, 14, 22];
+  // Keep the full maintenance table close to the page's compact proportions.
+  const columnWidths = [5, 11, 11, 17, 18, 13, 16, 12, 8, 10, 13];
   let row = 1;
   const heights = {};
 
-  // Header block matching the on-screen maintenance log form.
-  merge(row, 1, row, lastCol, model.title, 1);
-  heights[row] = 28;
-  row += 1;
-  merge(row, 1, row, lastCol, model.department, 2);
-  heights[row] = 22;
-  row += 1;
-
+  // Mirror the page layout: logo/title/form details across the top.
   const meta = model.meta || [];
-  meta.forEach((item) => {
-    merge(row, 1, row, 3, item.label, labelStyle);
-    merge(row, 4, row, lastCol, item.value == null || item.value === '' ? '—' : item.value, valueStyle);
-    heights[row] = 20;
-    row += 1;
+  merge(1, 4, 1, 7, model.title, 1);
+  merge(2, 4, 2, 7, model.department, 2);
+  meta.slice(0, 4).forEach((item, index) => {
+    const metaRow = index + 1;
+    merge(metaRow, 8, metaRow, 9, item.label, labelStyle);
+    merge(metaRow, 10, metaRow, lastCol, item.value == null || item.value === '' ? '—' : item.value, valueStyle);
+    heights[metaRow] = Math.max(heights[metaRow] || 0, 22);
   });
+  heights[1] = Math.max(heights[1] || 0, 30);
+  heights[2] = Math.max(heights[2] || 0, 24);
+  heights[3] = Math.max(heights[3] || 0, 22);
+  heights[4] = Math.max(heights[4] || 0, 22);
 
+  row = 5;
   merge(row, 1, row, lastCol, model.approved, 3);
   heights[row] = 22;
   row += 1;
 
-  merge(row, 1, row, lastCol, model.equipmentTitle, 4);
-  heights[row] = 22;
-  row += 1;
-  (model.facts || []).forEach((item) => {
-    merge(row, 1, row, 3, item.label, labelStyle);
-    merge(row, 4, row, lastCol, item.value == null || item.value === '' ? '—' : item.value, valueStyle);
-    heights[row] = 20;
-    row += 1;
+  merge(row, 1, row, 7, model.equipmentTitle, 3);
+  merge(row, 8, row, lastCol, model.keyTitle, 3);
+  heights[row] = 24;
+  const factStart = row + 1;
+  (model.facts || []).forEach((item, index) => {
+    const factRow = factStart + index;
+    merge(factRow, 1, factRow, 2, item.label, labelStyle);
+    merge(factRow, 3, factRow, 7, item.value == null || item.value === '' ? '—' : item.value, valueStyle);
+    heights[factRow] = Math.max(heights[factRow] || 0, 22);
   });
 
-  merge(row, 1, row, lastCol, model.keyTitle, 4);
-  heights[row] = 22;
-  row += 1;
-  merge(row, 1, row, 8, model.typeHeading, 9);
-  merge(row, 9, row, lastCol, model.symbolHeading, 9);
-  heights[row] = 20;
-  row += 1;
-  (model.key || []).forEach((item) => {
-    merge(row, 1, row, 8, item.label, 8);
-    merge(row, 9, row, lastCol, item.value, 10);
-    heights[row] = 20;
-    row += 1;
+  const keyHeaderRow = factStart;
+  merge(keyHeaderRow, 8, keyHeaderRow, 10, model.typeHeading, 9);
+  place(keyHeaderRow, 11, model.symbolHeading, 9);
+  heights[keyHeaderRow] = Math.max(heights[keyHeaderRow] || 0, 24);
+  (model.key || []).forEach((item, index) => {
+    const keyRow = keyHeaderRow + 1 + index;
+    merge(keyRow, 8, keyRow, 10, item.label, 8);
+    place(keyRow, 11, item.value, 10);
+    heights[keyRow] = Math.max(heights[keyRow] || 0, 22);
   });
 
-  row += 1;
-  merge(row, 1, row, lastCol, model.tableTitle, 4);
+  row = Math.max(factStart + (model.facts || []).length, keyHeaderRow + 1 + (model.key || []).length) + 1;
+  merge(row, 1, row, lastCol, model.tableTitle, 3);
   heights[row] = 24;
   row += 1;
 
@@ -4589,7 +4588,7 @@ function buildMaintenanceLogWorkbook(model) {
 <worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">
 <sheetPr><pageSetUpPr fitToPage="1"/></sheetPr>
 <dimension ref="A1:K${lastRow}"/>
-<sheetViews><sheetView showGridLines="0" rightToLeft="${rtl ? 1 : 0}" workbookViewId="0"/></sheetViews>
+<sheetViews><sheetView showGridLines="0" rightToLeft="${rtl ? 1 : 0}" workbookViewId="0" zoomScale="85"/></sheetViews>
 <sheetFormatPr defaultRowHeight="18"/>
 <cols>
 ${columnWidths.map((width, index) => `<col min="${index + 1}" max="${index + 1}" width="${width}" customWidth="1"/>`).join('')}
@@ -4597,7 +4596,7 @@ ${columnWidths.map((width, index) => `<col min="${index + 1}" max="${index + 1}"
 <sheetData>${sheetRows}</sheetData>
 ${mergeXml}
 <pageMargins left="0.4" right="0.4" top="0.4" bottom="0.4" header="0.2" footer="0.2"/>
-<pageSetup orientation="landscape" paperSize="9" fitToWidth="2" fitToHeight="0"/>
+<pageSetup orientation="landscape" paperSize="9" fitToWidth="1" fitToHeight="0"/>
 ${drawing}
 </worksheet>`;
   return packWorkbook(sheet, model.sheetName, model.logo, 2);
