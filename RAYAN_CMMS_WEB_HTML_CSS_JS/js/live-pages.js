@@ -4494,6 +4494,7 @@ function buildMaintenanceLogWorkbook(model) {
     if (row !== rowTo || column !== columnTo) merges.push(`${columnLetters(column)}${row}:${columnLetters(columnTo)}${rowTo}`);
   };
   const lastCol = 11;
+  const columnWidths = [7, 14, 15, 30, 36, 18, 28, 16, 11, 14, 22];
   let row = 1;
   const heights = {};
 
@@ -4554,13 +4555,24 @@ function buildMaintenanceLogWorkbook(model) {
   const dataStart = row;
   (model.lines || []).forEach((line, index) => {
     const current = dataStart + index;
-    heights[current] = 28;
+    // Give wrapped text enough room so long reasons, repair actions, parts,
+    // and technician teams remain readable instead of being clipped.
+    let visualLines = 1;
     line.forEach((value, column) => {
       const numeric = column === 0 || column === 8 || column === 9;
       const number = numeric ? excelNumber(value) : null;
       const textColumn = column === 3 || column === 4 || column === 6 || column === 10;
+      if (textColumn) {
+        const capacity = Math.max(8, Math.floor(columnWidths[column] * 1.08));
+        const wrappedLines = String(value ?? '—').split(/\r?\n/).reduce((total, part) => {
+          const length = [...part].length;
+          return total + Math.max(1, Math.ceil(length / capacity));
+        }, 0);
+        visualLines = Math.max(visualLines, wrappedLines);
+      }
       place(current, column + 1, number == null ? value : number, number == null ? (textColumn ? textStyle : 10) : 16);
     });
+    heights[current] = Math.min(120, Math.max(30, visualLines * 15 + 10));
   });
   if (!(model.lines || []).length) {
     heights[dataStart] = 24;
@@ -4580,22 +4592,12 @@ function buildMaintenanceLogWorkbook(model) {
 <sheetViews><sheetView showGridLines="0" rightToLeft="${rtl ? 1 : 0}" workbookViewId="0"/></sheetViews>
 <sheetFormatPr defaultRowHeight="18"/>
 <cols>
-<col min="1" max="1" width="8" customWidth="1"/>
-<col min="2" max="2" width="14" customWidth="1"/>
-<col min="3" max="3" width="14" customWidth="1"/>
-<col min="4" max="4" width="22" customWidth="1"/>
-<col min="5" max="5" width="28" customWidth="1"/>
-<col min="6" max="6" width="16" customWidth="1"/>
-<col min="7" max="7" width="20" customWidth="1"/>
-<col min="8" max="8" width="14" customWidth="1"/>
-<col min="9" max="9" width="12" customWidth="1"/>
-<col min="10" max="10" width="12" customWidth="1"/>
-<col min="11" max="11" width="18" customWidth="1"/>
+${columnWidths.map((width, index) => `<col min="${index + 1}" max="${index + 1}" width="${width}" customWidth="1"/>`).join('')}
 </cols>
 <sheetData>${sheetRows}</sheetData>
 ${mergeXml}
 <pageMargins left="0.4" right="0.4" top="0.4" bottom="0.4" header="0.2" footer="0.2"/>
-<pageSetup orientation="landscape" paperSize="9" fitToWidth="1" fitToHeight="0"/>
+<pageSetup orientation="landscape" paperSize="9" fitToWidth="2" fitToHeight="0"/>
 ${drawing}
 </worksheet>`;
   return packWorkbook(sheet, model.sheetName, model.logo, 2);
