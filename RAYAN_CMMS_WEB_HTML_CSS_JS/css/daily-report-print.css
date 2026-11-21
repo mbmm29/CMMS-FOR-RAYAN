@@ -1,15 +1,69 @@
-.daily-document-box{width:100%;min-width:0;border:1px solid #2a5287;color:#102d60;direction:ltr;align-self:center}
-.daily-document-row{display:grid;grid-template-columns:max-content minmax(0,1fr);align-items:start;gap:8px;min-height:38px;padding:8px;border-bottom:1px solid #2a5287;font-size:12px;line-height:1.25;font-weight:700}
-.daily-document-row:last-child{border-bottom:0}
-.daily-document-row>span{white-space:nowrap;color:#102d60}
-.daily-document-row>strong{min-width:0;color:#000;text-align:start;font-weight:800;white-space:normal;overflow-wrap:anywhere;word-break:normal}
-.report-head{grid-template-columns:300px minmax(0,1fr) 280px}
-.company-logo img{max-width:100%}
-.selected-report+.selected-report{break-before:page;page-break-before:always}
+.tool-bar{position:sticky;top:0;z-index:5}
+.report-paper{width:min(1500px,calc(100vw - 36px));margin:18px auto;padding:20px;background:#fff}
+.daily-paper{width:100%;margin:0 auto 24px;padding:18px;background:#fff;color:#102d60}
+.daily-paper.selected-report+.selected-report{break-before:page;page-break-before:always}
+.lube-head{display:grid;grid-template-columns:220px minmax(0,1fr) 280px;gap:12px;align-items:center;padding-bottom:10px;border-bottom:1px solid #2a5287}
+.lube-head>img{width:210px;max-height:70px;object-fit:contain;object-position:left center;background:transparent!important;mix-blend-mode:multiply}
+.lube-head h2{margin:0;text-align:center;font-size:24px;line-height:1.2}
+.lube-head p,.lube-head small{display:block;margin:5px 0 0;text-align:center}
+.lube-head dl{margin:0;border:1px solid #2a5287}
+.lube-head dl div{display:grid;grid-template-columns:max-content minmax(0,1fr);gap:8px;align-items:start;padding:8px;border-bottom:1px solid #2a5287;font-size:12px}
+.lube-head dl div:last-child{border:0}
+.lube-head dt{white-space:nowrap;font-weight:700}
+.lube-head dd{min-width:0;margin:0;color:#000;font-weight:800;overflow-wrap:anywhere}
+.report-number{display:flex;justify-content:space-between;margin-top:8px;font-size:11px;font-weight:700}
+.lube-meta{grid-template-columns:repeat(3,minmax(0,1fr));gap:8px 18px;margin:9px 0}
+.lube-meta label{grid-template-columns:max-content minmax(0,1fr);gap:8px}
+.lube-meta input{height:25px}
+.sheet-scroll{overflow:visible;max-height:none}
+.lube-table{width:100%;border-collapse:collapse;table-layout:fixed}
+.lube-table th,.lube-table td{border:1px solid #2a5287;padding:4px 5px;font-size:10px;vertical-align:top;overflow-wrap:anywhere}
+.lube-table th{height:30px;background:#e7f0ff;text-align:center;vertical-align:middle}
+.daily-paper .lube-table:has(#daily-rows) th:nth-child(1){width:5%}
+.daily-paper .lube-table:has(#daily-rows) th:nth-child(2){width:23%}
+.daily-paper .lube-table:has(#daily-rows) th:nth-child(3){width:13%}
+.daily-paper .lube-table:has(#daily-rows) th:nth-child(4){width:31%}
+.daily-paper .lube-table:has(#daily-rows) th:nth-child(5),.daily-paper .lube-table:has(#daily-rows) th:nth-child(6){width:9%}
+.daily-paper .lube-table:has(#daily-rows) th:nth-child(7){width:10%}
+.daily-paper .lube-table input{width:100%;height:auto;min-height:18px;border:0;background:transparent;padding:0;color:#102d60;font:inherit}
+.lube-machine{display:grid;grid-template-columns:1fr 1fr;gap:2px}
+.lube-machine input:first-child,.lube-machine input:nth-child(2),.lube-machine span,.lube-machine input:last-child{grid-column:1/-1}
+.lube-machine span{font-size:9px;color:#31517f}
+.daily-work{display:grid;gap:2px}
+.daily-parts,.daily-notes{display:block;margin-top:9px}
+.daily-parts h3,.daily-notes>span{display:block;margin:0 0 5px;font-size:11px;font-weight:800}
+.daily-notes textarea{width:100%;height:42px;min-height:42px;border:1px solid #2a5287;padding:5px 7px 17px;resize:none;font:10px Arial,sans-serif;white-space:pre-wrap}
+.daily-note-box{position:relative}
+.daily-tdt{position:absolute;left:8px;bottom:3px;font-size:9px;font-weight:800}
+.report-photo-page{display:flex;align-items:center;justify-content:center;width:min(100%,297mm);aspect-ratio:297/420;margin:18px auto;background:#fff;overflow:hidden}
+.report-photo-page.landscape{width:min(100%,420mm);aspect-ratio:420/297}
+.report-photo-page img{width:100%;height:100%;object-fit:contain;display:block}
+@page{size:A3 landscape;margin:7mm}
 @media print{
-  .report-head{grid-template-columns:300px minmax(0,1fr) 280px;gap:8px}
-  .daily-document-box{border:.3mm solid #2a5287;overflow:visible}
-  .daily-document-row{grid-template-columns:max-content minmax(0,1fr);gap:2mm;min-height:8mm;height:auto;padding:1.5mm 2mm;border-bottom:.3mm solid #2a5287;font-size:8pt;line-height:1.2;box-sizing:border-box}
-  .daily-document-row>span{white-space:nowrap}
-  .daily-document-row>strong{display:block;min-width:0;color:#000!important;-webkit-text-fill-color:#000!important;white-space:normal!important;overflow:visible!important;overflow-wrap:anywhere!important;word-break:normal!important}
+  html,body{margin:0;padding:0;background:#fff;color:#102d60;font:8pt Arial,sans-serif}
+  .no-print,.tool-bar{display:none!important}
+  .report-paper{width:auto;max-width:none;margin:0;padding:0;box-shadow:none}
+  .daily-paper{width:283mm;max-width:none;margin:0 auto;padding:0;break-inside:auto;page-break-inside:auto}
+  .daily-paper.selected-report+.selected-report{break-before:page;page-break-before:always}
+  .lube-head{grid-template-columns:42mm minmax(0,1fr) 55mm;gap:3mm;padding-bottom:2mm}
+  .lube-head>img{width:40mm;max-width:40mm;max-height:14mm}
+  .lube-head h2{font-size:11pt}
+  .lube-head p{margin:0.5mm 0 0;font-size:8pt;font-weight:800}
+  .lube-head small{margin-top:.3mm;font-size:7pt}
+  .lube-head dl div{min-height:8mm;padding:1.5mm 2mm;font-size:8pt}
+  .report-number{margin-top:1.5mm;font-size:8pt}
+  .lube-meta{gap:1mm 4mm;margin:2mm 0 1.5mm}
+  .lube-meta label{grid-template-columns:max-content minmax(0,1fr);font-size:8pt}
+  .lube-meta input{height:5mm;font:8pt Arial,sans-serif}
+  .lube-table th,.lube-table td{padding:.6mm;font-size:7pt;overflow-wrap:anywhere}
+  .lube-table th{height:6mm}
+  .lube-table input{min-height:3.6mm;font:7pt Arial,sans-serif}
+  .daily-parts,.daily-notes{margin-top:1.5mm}
+  .daily-parts h3,.daily-notes>span{margin-bottom:.8mm;font-size:8pt}
+  .daily-notes textarea{height:12mm;min-height:12mm;padding:1mm 1.5mm 4mm;font:7.5pt Arial,sans-serif}
+  .daily-tdt{left:1.5mm;bottom:1mm;font-size:7pt}
+  .report-photo-page{width:300mm;height:450mm;aspect-ratio:auto;margin:0!important;padding:0!important;break-before:page;page-break-before:always;break-inside:avoid;page-break-inside:avoid;overflow:hidden}
+  .report-photo-page.landscape{width:450mm;height:300mm}
+  .report-photo-page img{width:300mm;height:450mm;max-width:none}
+  .report-photo-page.landscape img{width:450mm;height:300mm}
 }
