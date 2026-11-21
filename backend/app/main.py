@@ -1728,6 +1728,7 @@ def spare_parts_order_payload(order: SparePartsOrder, user_names=None, change_hi
         'serial_number': ', '.join(machine['serial_number'] for machine in machines if machine['serial_number']),
         'status': order.status,
         'created_by': (user_names or {}).get(order.created_by, order.created_by),
+        'last_modified_by': (change_history or [])[-1]['changed_by'] if change_history else (user_names or {}).get(order.created_by, order.created_by),
         'created_at': order.created_at,
         'change_history': change_history or [],
         'machines': machines,
