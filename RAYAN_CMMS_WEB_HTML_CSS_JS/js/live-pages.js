@@ -551,7 +551,7 @@ function setHeader(page) {
     action.textContent = t('+ Add Equipment');
   } else {
     action.hidden = false;
-    action.textContent = t(page === 'machine-records' ? 'Export PDF' : spec.action);
+    action.textContent = t(page === 'machine-records' ? 'Export Excel' : spec.action);
   }
   if (downloadAllLogs) {
     downloadAllLogs.hidden = page !== 'machine-records' || isTechnician();
@@ -4601,43 +4601,87 @@ ${drawing}
   return packWorkbook(sheet, model.sheetName, model.logo, 2);
 }
 
+async function loadMaintenanceLogLogo() {
+  try {
+    const response = await fetch('logo-rayan.png?v=3');
+    return response.ok ? new Uint8Array(await response.arrayBuffer()) : null;
+  } catch (_) {
+    return null;
+  }
+}
+
+function maintenanceLogWorkbook(equipment, rows, logo) {
+  const form = ui.equipmentId === equipment.equipment_id ? document.getElementById('machine-log') : null;
+  const commissioningDate = form?.querySelector('[name="commissioning_date"]')?.value || equipment.commissioning_date || '';
+  const manufacturer = form?.querySelector('[name="manufacturer"]')?.value || equipment.manufacturer || '';
+  const lines = rows.map((record, index) => {
+    const kind = maintenanceKind(record);
+    const parts = kind === 'Oil change' ? oilChangeParts(record) : { ...logParts(record.spare_parts), work: record.action || record.description || '—' };
+    const reason = kind === 'Oil change' ? t('Oil change') : (record.cause || '—');
+    const team = [technicianName(record.technician_id), record.team_technicians].filter(Boolean).join(', ') || '—';
+    return [
+      index + 1,
+      fmtDate(record.record_date) || '—',
+      logCode(kind),
+      reason,
+      parts.work,
+      workOrderNumber(record) || '—',
+      parts.names,
+      parts.numbers,
+      parts.quantity,
+      record.downtime_h == null || record.downtime_h === '' ? '—' : Number(record.downtime_h),
+      team,
+    ];
+  });
+  return buildMaintenanceLogWorkbook({
+    rtl: document.documentElement.dir === 'rtl',
+    sheetName: excelSheetName(`${equipment.equipment_id} Maintenance`),
+    title: t('Equipment maintenance log'),
+    department: t('Mechanical Maintenance Department'),
+    meta: [
+      { label: t('Form No.:'), value: formNo('equipment_log') || '—' },
+      { label: t('Document no.'), value: equipment.equipment_id },
+      { label: t('Revision no.'), value: '00' },
+      { label: t('Issue date'), value: fmtDate(rows[0]?.record_date) || '—' },
+    ],
+    approved: `${t('Approved according to')}: ${t('Mechanical Maintenance Department')}`,
+    equipmentTitle: t('Equipment data'),
+    facts: [
+      { label: t('Log machine name'), value: equipment.name || '—' },
+      { label: t('Machine number'), value: equipment.equipment_id || '—' },
+      { label: t('Location / section'), value: machinePlace(equipment) },
+      { label: t('Commissioning date'), value: fmtDate(commissioningDate) || '—' },
+      { label: t('Manufacturer'), value: manufacturer || '—' },
+    ],
+    keyTitle: t('Maintenance type key'),
+    typeHeading: t('Maintenance type'),
+    symbolHeading: t('Symbol'),
+    key: [
+      { label: t('Preventive'), value: 'PM' }, { label: t('Corrective'), value: 'CM' },
+      { label: t('Emergency'), value: 'EM' }, { label: t('Routine'), value: 'RT' },
+      { label: t('Inspection'), value: 'IN' }, { label: t('Oil change'), value: 'OC' },
+      { label: t('Lubrication'), value: 'LU' },
+    ],
+    tableTitle: t('Maintenance work and details'),
+    headings: [t('No.'), t('Maintenance date'), t('Maintenance type'), t('Reason for maintenance'), t('Work performed'), t('Work order no.'), t('Parts used'), t('Part No.'), t('Quantity'), t('Downtime time'), t('Technician name')],
+    lines,
+    empty: t('No log lines for this machine yet.'),
+    logo,
+  });
+}
+
 async function exportRecords() {
   const chosen = ui.equipmentId;
   const equipment = (store.equipment || []).find((item) => item.equipment_id === chosen) || null;
-  const form = document.getElementById('machine-log');
-  if (!equipment || !form) {
+  if (!equipment) {
     toast(t('Select a machine to open its maintenance log.'));
     return;
   }
-
-  const frozen = [];
-  form.querySelectorAll('input, textarea').forEach((field) => {
-    if (field.type === 'hidden' || field.type === 'checkbox' || field.type === 'radio') return;
-    const block = document.createElement('div');
-    block.className = 'log-print-value';
-    const raw = field.value || '';
-    block.textContent = field.type === 'date' && /^\d{4}-\d{2}-\d{2}$/.test(raw) ? (fmtDate(raw) || '—') : (raw || '—');
-    frozen.push({ field, block });
-    field.replaceWith(block);
-  });
-
-  let printStyles;
-  const motorPanel = document.getElementById('equipment-log-motor');
-  try {
-    printStyles = installPdfPrintStyles();
-    document.body.classList.add('log-printing');
-    motorPanel?.classList.add('no-print');
-    await downloadStyledPdf(form, `maintenance-log-${equipment.equipment_id}`, { format: 'a4', orientation: 'landscape', margin: 7 });
-  } catch (exception) {
-    toast(t(exception.message || 'Could not export the maintenance log.'));
-  } finally {
-    frozen.forEach(({ field, block }) => {
-      if (block.isConnected) block.replaceWith(field);
-    });
-    document.body.classList.remove('log-printing');
-    motorPanel?.classList.remove('no-print');
-    printStyles?.remove();
-  }
+  const rows = dedupeLogRows(scoped(store.records || []).filter((row) => row.equipment_id === chosen && isLogEntry(row)))
+    .filter((row) => ui.tab === 'All' || maintenanceKind(row) === ui.tab)
+    .sort((a, b) => String(a.record_date || '').localeCompare(String(b.record_date || '')) || Number(a.id) - Number(b.id));
+  const blob = maintenanceLogWorkbook(equipment, rows, await loadMaintenanceLogLogo());
+  downloadBlob(blob, `maintenance-log-${String(equipment.equipment_id).replace(/[^A-Za-z0-9_-]/g, '-')}.xlsx`);
 }
 
 async function downloadAllMachineLogs() {
@@ -4655,8 +4699,7 @@ async function downloadAllMachineLogs() {
   }
 
   const previousLabel = button?.textContent || t('Download all files');
-  let stage;
-  let printStyles;
+  let logo;
   let progressPanel;
   let progressTitle;
   let progressCounts;
@@ -4672,7 +4715,6 @@ async function downloadAllMachineLogs() {
   };
   button && (button.disabled = true);
   try {
-    printStyles = installPdfPrintStyles();
     progressPanel = document.createElement('section');
     progressPanel.className = 'machine-log-download-progress';
     progressPanel.setAttribute('role', 'status');
@@ -4688,35 +4730,15 @@ async function downloadAllMachineLogs() {
     progressTitle = progressPanel.querySelector('.machine-log-progress-heading strong');
     document.body.append(progressPanel);
     updateProgress(0);
-    stage = document.createElement('div');
-    stage.id = 'machine-log-export-stage';
-    stage.style.cssText = 'position:fixed;left:0;top:0;width:1200px;z-index:-1;pointer-events:none;background:#fff';
-    document.body.append(stage);
+    logo = await loadMaintenanceLogLogo();
     for (let index = 0; index < equipmentItems.length; index += 1) {
       const equipment = equipmentItems[index];
       const rows = dedupeLogRows(groups.get(equipment.equipment_id))
         .sort((a, b) => String(a.record_date || '').localeCompare(String(b.record_date || '')) || Number(a.id) - Number(b.id));
-      stage.innerHTML = machineLogPaper(equipment, rows);
-      const form = stage.querySelector('.machine-log');
-      form?.removeAttribute('id');
-      form?.querySelectorAll('input, textarea').forEach((field) => {
-        if (['hidden', 'checkbox', 'radio'].includes(field.type)) return;
-        const value = document.createElement('div');
-        value.className = 'log-print-value';
-        const raw = field.value || '';
-        value.textContent = field.type === 'date' && /^\d{4}-\d{2}-\d{2}$/.test(raw) ? (fmtDate(raw) || '—') : (raw || '—');
-        field.replaceWith(value);
-      });
-      if (!form) throw new Error(`Could not prepare the maintenance log for ${equipment.equipment_id}.`);
       if (button) button.textContent = `${t('Download all files')} (${index + 1}/${equipmentItems.length})`;
       updateProgress(index, `Downloading ${equipment.equipment_id} — ${equipment.name || 'Equipment'}…`);
-      document.body.classList.add('log-printing');
-      try {
-        await downloadStyledPdf(form, `maintenance-log-${equipment.equipment_id}`, { format: 'a4', orientation: 'landscape', margin: 7 });
-      } finally {
-        document.body.classList.remove('log-printing');
-      }
-      stage.innerHTML = '';
+      const blob = maintenanceLogWorkbook(equipment, rows, logo);
+      downloadBlob(blob, `maintenance-log-${String(equipment.equipment_id).replace(/[^A-Za-z0-9_-]/g, '-')}.xlsx`);
       updateProgress(index + 1, index + 1 === equipmentItems.length ? '' : `Downloaded ${equipment.equipment_id}.`);
       await new Promise((resolve) => setTimeout(resolve, 450));
     }
@@ -4733,9 +4755,6 @@ async function downloadAllMachineLogs() {
     }
     toast(t(error.message || 'Could not download all maintenance logs.'));
   } finally {
-    stage?.remove();
-    document.body.classList.remove('log-printing');
-    printStyles?.remove();
     if (button) {
       button.disabled = false;
       button.textContent = previousLabel;
