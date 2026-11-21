@@ -515,6 +515,17 @@ function setHeader(page) {
     : spec.sub;
   document.getElementById('page-subtitle').textContent = t(subtitle);
   const action = document.getElementById('primary-action');
+  let downloadAllLogs = document.getElementById('download-all-machine-logs');
+  if (!downloadAllLogs && action?.parentElement) {
+    downloadAllLogs = document.createElement('button');
+    downloadAllLogs.id = 'download-all-machine-logs';
+    downloadAllLogs.type = 'button';
+    downloadAllLogs.className = 'primary';
+    downloadAllLogs.dataset.i18n = 'Download all files';
+    downloadAllLogs.textContent = t('Download all files');
+    downloadAllLogs.addEventListener('click', downloadAllMachineLogs);
+    action.insertAdjacentElement('afterend', downloadAllLogs);
+  }
   const draft = document.getElementById('draft-action');
   const importFile = document.getElementById('import-file-action');
   if (draft) {
@@ -541,6 +552,11 @@ function setHeader(page) {
   } else {
     action.hidden = false;
     action.textContent = t(page === 'machine-records' ? 'Export PDF' : spec.action);
+  }
+  if (downloadAllLogs) {
+    downloadAllLogs.hidden = page !== 'machine-records' || isTechnician();
+    downloadAllLogs.disabled = false;
+    downloadAllLogs.textContent = t('Download all files');
   }
   document.querySelectorAll('.engineer-only').forEach((link) => {
     link.hidden = !canMaintain() && !(link.dataset.page === 'equipment' && isTechnician());
@@ -4621,6 +4637,66 @@ async function exportRecords() {
     document.body.classList.remove('log-printing');
     motorPanel?.classList.remove('no-print');
     printStyles?.remove();
+  }
+}
+
+async function downloadAllMachineLogs() {
+  const button = document.getElementById('download-all-machine-logs');
+  const groups = new Map();
+  for (const row of store.records || []) {
+    if (!row.equipment_id || !isLogEntry(row)) continue;
+    if (!groups.has(row.equipment_id)) groups.set(row.equipment_id, []);
+    groups.get(row.equipment_id).push(row);
+  }
+  const equipmentItems = (store.equipment || []).filter((item) => groups.has(item.equipment_id));
+  if (!equipmentItems.length) {
+    toast(t('No maintenance records are available to download.'));
+    return;
+  }
+
+  const previousLabel = button?.textContent || t('Download all files');
+  let stage;
+  let printStyles;
+  button && (button.disabled = true);
+  try {
+    printStyles = installPdfPrintStyles();
+    document.body.classList.add('log-printing');
+    stage = document.createElement('div');
+    stage.id = 'machine-log-export-stage';
+    stage.style.cssText = 'position:fixed;left:0;top:0;width:1200px;z-index:-1;pointer-events:none;background:#fff';
+    document.body.append(stage);
+    for (let index = 0; index < equipmentItems.length; index += 1) {
+      const equipment = equipmentItems[index];
+      const rows = dedupeLogRows(groups.get(equipment.equipment_id))
+        .sort((a, b) => String(a.record_date || '').localeCompare(String(b.record_date || '')) || Number(a.id) - Number(b.id));
+      stage.innerHTML = machineLogPaper(equipment, rows);
+      const form = stage.querySelector('.machine-log');
+      form?.removeAttribute('id');
+      form?.querySelectorAll('input, textarea').forEach((field) => {
+        if (['hidden', 'checkbox', 'radio'].includes(field.type)) return;
+        const value = document.createElement('div');
+        value.className = 'log-print-value';
+        const raw = field.value || '';
+        value.textContent = field.type === 'date' && /^\d{4}-\d{2}-\d{2}$/.test(raw) ? (fmtDate(raw) || '—') : (raw || '—');
+        field.replaceWith(value);
+      });
+      if (!form) continue;
+      if (button) button.textContent = `${t('Download all files')} (${index + 1}/${equipmentItems.length})`;
+      await downloadStyledPdf(form, `maintenance-log-${equipment.equipment_id}`, { format: 'a4', orientation: 'landscape', margin: 7 });
+      stage.innerHTML = '';
+      await new Promise((resolve) => setTimeout(resolve, 450));
+    }
+    toast(`${equipmentItems.length} ${t('maintenance logs downloaded')}`);
+  } catch (error) {
+    toast(t(error.message || 'Could not download all maintenance logs.'));
+  } finally {
+    stage?.remove();
+    document.body.classList.remove('log-printing');
+    printStyles?.remove();
+    if (button) {
+      button.disabled = false;
+      button.textContent = previousLabel;
+    }
   }
 }
 
