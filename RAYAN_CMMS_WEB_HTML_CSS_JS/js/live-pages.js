@@ -3800,7 +3800,47 @@ function orderForPdf(order) {
   };
 }
 
-function exportJobOrderPdf(order) {
+function installPdfPrintStyles() {
+  const existing = document.getElementById('pdf-export-print-rules');
+  if (existing) return existing;
+  const theme = [...document.styleSheets].find((sheet) => sheet.href?.includes('/css/theme.css'));
+  if (!theme) throw new Error('The document print layout is not available.');
+  const printRules = [...theme.cssRules].find((rule) => rule.type === CSSRule.MEDIA_RULE && /print/.test(rule.conditionText));
+  if (!printRules) throw new Error('The document print layout is not available.');
+  const style = document.createElement('style');
+  style.id = 'pdf-export-print-rules';
+  style.textContent = [...printRules.cssRules].map((rule) => rule.cssText).join('\n');
+  document.head.append(style);
+  return style;
+}
+
+async function downloadStyledPdf(element, filename, { format = 'a3', orientation = 'landscape', margin = 7 } = {}) {
+  if (typeof html2pdf !== 'function') throw new Error('PDF export library did not load. Refresh and try again.');
+  await document.fonts?.ready;
+  await Promise.all([...element.querySelectorAll('img')].map((image) => image.complete ? Promise.resolve() : new Promise((resolve) => {
+    image.addEventListener('load', resolve, { once: true });
+    image.addEventListener('error', resolve, { once: true });
+    setTimeout(resolve, 10000);
+  })));
+  const blob = await html2pdf().set({
+    margin,
+    image: { type: 'jpeg', quality: 0.96 },
+    html2canvas: { scale: 1.5, useCORS: true, logging: false, backgroundColor: '#ffffff' },
+    jsPDF: { unit: 'mm', format, orientation },
+    pagebreak: { mode: ['css', 'legacy'] },
+  }).from(element).outputPdf('blob');
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = `${String(filename || 'export').replace(/[\\/:*?"<>|]+/g, '-')}.pdf`;
+  link.hidden = true;
+  document.body.append(link);
+  link.click();
+  link.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 60000);
+}
+
+async function exportJobOrderPdf(order) {
   if (!order?.work_order_id) return;
   let root = document.getElementById('job-pdf');
   if (!root) {
@@ -3821,17 +3861,18 @@ function exportJobOrderPdf(order) {
     block.textContent = text;
     field.replaceWith(block);
   });
-  const previousTitle = document.title;
-  document.title = `job-order-${order.work_order_number || 'pending-acceptance'}`;
-  document.body.classList.add('job-printing');
-  const cleanup = () => {
+  let printStyles;
+  try {
+    printStyles = installPdfPrintStyles();
+    document.body.classList.add('job-printing');
+    await downloadStyledPdf(root, `work-order-${order.work_order_number || order.work_order_id}`, { format: 'a3', orientation: 'portrait', margin: 12 });
+  } catch (error) {
+    toast(t(error.message || 'Could not export the work order.'));
+  } finally {
     document.body.classList.remove('job-printing');
     root.innerHTML = '';
-    document.title = previousTitle;
-    window.removeEventListener('afterprint', cleanup);
-  };
-  window.addEventListener('afterprint', cleanup);
-  window.print();
+    printStyles?.remove();
+  }
 }
 
 function approvalDateField(order) {
@@ -4544,7 +4585,7 @@ ${drawing}
   return packWorkbook(sheet, model.sheetName, model.logo, 2);
 }
 
-function exportRecords() {
+async function exportRecords() {
   const chosen = ui.equipmentId;
   const equipment = (store.equipment || []).find((item) => item.equipment_id === chosen) || null;
   const form = document.getElementById('machine-log');
@@ -4553,7 +4594,6 @@ function exportRecords() {
     return;
   }
 
-  // Print the on-screen log paper as PDF so layout matches the website exactly.
   const frozen = [];
   form.querySelectorAll('input, textarea').forEach((field) => {
     if (field.type === 'hidden' || field.type === 'checkbox' || field.type === 'radio') return;
@@ -4565,29 +4605,23 @@ function exportRecords() {
     field.replaceWith(block);
   });
 
-  const previousTitle = document.title;
-  document.title = `maintenance-log-${equipment.equipment_id}`;
-  document.body.classList.add('log-printing');
-  document.getElementById('equipment-log-motor')?.classList.add('no-print');
-
-  const restore = () => {
+  let printStyles;
+  const motorPanel = document.getElementById('equipment-log-motor');
+  try {
+    printStyles = installPdfPrintStyles();
+    document.body.classList.add('log-printing');
+    motorPanel?.classList.add('no-print');
+    await downloadStyledPdf(form, `maintenance-log-${equipment.equipment_id}`, { format: 'a4', orientation: 'landscape', margin: 7 });
+  } catch (exception) {
+    toast(t(exception.message || 'Could not export the maintenance log.'));
+  } finally {
     frozen.forEach(({ field, block }) => {
       if (block.isConnected) block.replaceWith(field);
     });
     document.body.classList.remove('log-printing');
-    document.getElementById('equipment-log-motor')?.classList.remove('no-print');
-    document.title = previousTitle;
-    window.removeEventListener('afterprint', restore);
-  };
-  window.addEventListener('afterprint', restore);
-  window.setTimeout(() => {
-    try {
-      window.print();
-    } catch (exception) {
-      restore();
-      toast(t(exception.message) || t('Could not export the maintenance log.'));
-    }
-  }, 50);
+    motorPanel?.classList.remove('no-print');
+    printStyles?.remove();
+  }
 }
 
 function buildAnnualPlanWorkbook(model) {
