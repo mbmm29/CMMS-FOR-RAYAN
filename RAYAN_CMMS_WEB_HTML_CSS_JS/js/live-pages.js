@@ -526,6 +526,17 @@ function setHeader(page) {
     downloadAllLogs.addEventListener('click', downloadAllMachineLogs);
     action.insertAdjacentElement('afterend', downloadAllLogs);
   }
+  let downloadAllOrders = document.getElementById('download-all-work-orders');
+  if (!downloadAllOrders && action?.parentElement) {
+    downloadAllOrders = document.createElement('button');
+    downloadAllOrders.id = 'download-all-work-orders';
+    downloadAllOrders.type = 'button';
+    downloadAllOrders.className = 'primary';
+    downloadAllOrders.dataset.i18n = 'Download all files';
+    downloadAllOrders.textContent = t('Download all files');
+    downloadAllOrders.addEventListener('click', downloadAllWorkOrders);
+    action.insertAdjacentElement('afterend', downloadAllOrders);
+  }
   const draft = document.getElementById('draft-action');
   const importFile = document.getElementById('import-file-action');
   if (draft) {
@@ -557,6 +568,11 @@ function setHeader(page) {
     downloadAllLogs.hidden = page !== 'machine-records' || isTechnician();
     downloadAllLogs.disabled = false;
     downloadAllLogs.textContent = t('Download all files');
+  }
+  if (downloadAllOrders) {
+    downloadAllOrders.hidden = page !== 'work-orders' || (!canMaintain() && !isTechnician());
+    downloadAllOrders.disabled = false;
+    downloadAllOrders.textContent = t('Download all files');
   }
   document.querySelectorAll('.engineer-only').forEach((link) => {
     link.hidden = !canMaintain() && !(link.dataset.page === 'equipment' && isTechnician());
@@ -3857,7 +3873,7 @@ async function downloadStyledPdf(element, filename, { format = 'a3', orientation
 }
 
 async function exportJobOrderPdf(order) {
-  if (!order?.work_order_id) return;
+  if (!order?.work_order_id) return false;
   let root = document.getElementById('job-pdf');
   if (!root) {
     root = document.createElement('div');
@@ -3878,10 +3894,12 @@ async function exportJobOrderPdf(order) {
     field.replaceWith(block);
   });
   let printStyles;
+  let exported = false;
   try {
     printStyles = installPdfPrintStyles();
     document.body.classList.add('job-printing');
     await downloadStyledPdf(root, `work-order-${order.work_order_number || order.work_order_id}`, { format: 'a3', orientation: 'portrait', margin: 12 });
+    exported = true;
   } catch (error) {
     toast(t(error.message || 'Could not export the work order.'));
   } finally {
@@ -3889,6 +3907,7 @@ async function exportJobOrderPdf(order) {
     root.innerHTML = '';
     printStyles?.remove();
   }
+  return exported;
 }
 
 function approvalDateField(order) {
@@ -4755,6 +4774,79 @@ async function downloadAllMachineLogs() {
       setTimeout(() => progressPanel?.remove(), 8000);
     }
     toast(t(error.message || 'Could not download all maintenance logs.'));
+  } finally {
+    if (button) {
+      button.disabled = false;
+      button.textContent = previousLabel;
+    }
+  }
+}
+
+async function downloadAllWorkOrders() {
+  const button = document.getElementById('download-all-work-orders');
+  const technicianId = getSavedUser()?.technician_id;
+  const orders = scopedWorkOrders(store?.orders || []).filter((order) =>
+    order.work_order_id && (!isTechnician() || (technicianId && assigneeIds(order).includes(technicianId)))
+  );
+  if (!orders.length) {
+    toast(t('No work orders are available to download.'));
+    return;
+  }
+
+  const previousLabel = button?.textContent || t('Download all files');
+  let progressPanel;
+  let progressTitle;
+  let progressCounts;
+  let progressFill;
+  let progressCurrent;
+  const updateProgress = (downloaded, current = '') => {
+    if (!progressPanel) return;
+    const remaining = Math.max(0, orders.length - downloaded);
+    progressCounts.textContent = `${downloaded} ${t('downloaded')} · ${remaining} ${t('remaining')}`;
+    progressFill.style.width = `${Math.round((downloaded / orders.length) * 100)}%`;
+    progressPanel.setAttribute('aria-valuenow', String(downloaded));
+    progressCurrent.textContent = current || (remaining ? t('Preparing the next work order…') : t('All work orders are ready.'));
+  };
+
+  if (button) button.disabled = true;
+  try {
+    progressPanel = document.createElement('section');
+    progressPanel.className = 'machine-log-download-progress';
+    progressPanel.setAttribute('role', 'status');
+    progressPanel.setAttribute('aria-live', 'polite');
+    progressPanel.setAttribute('aria-valuemin', '0');
+    progressPanel.setAttribute('aria-valuemax', String(orders.length));
+    progressPanel.innerHTML = `<div class="machine-log-progress-heading"><span class="machine-log-progress-spinner" aria-hidden="true"></span><strong>${esc(t('Downloading work orders'))}</strong></div><div class="machine-log-progress-counts"></div><div class="machine-log-progress-track"><span></span></div><small class="machine-log-progress-current"></small>`;
+    progressCounts = progressPanel.querySelector('.machine-log-progress-counts');
+    progressFill = progressPanel.querySelector('.machine-log-progress-track span');
+    progressCurrent = progressPanel.querySelector('.machine-log-progress-current');
+    progressTitle = progressPanel.querySelector('.machine-log-progress-heading strong');
+    document.body.append(progressPanel);
+    updateProgress(0);
+
+    for (let index = 0; index < orders.length; index += 1) {
+      const order = orders[index];
+      const number = workOrderNumberText(order) || order.work_order_id;
+      if (button) button.textContent = `${t('Download all files')} (${index + 1}/${orders.length})`;
+      updateProgress(index, `${t('Downloading work order')} ${number}…`);
+      const exported = await exportJobOrderPdf(order);
+      if (!exported) throw new Error(`${t('Could not export work order')} ${number}.`);
+      updateProgress(index + 1, index + 1 === orders.length ? '' : `${t('Downloaded work order')} ${number}.`);
+      await new Promise((resolve) => setTimeout(resolve, 500));
+    }
+
+    progressPanel.classList.add('is-complete');
+    progressTitle.textContent = t('Download complete');
+    toast(`${orders.length} ${t('work orders downloaded')}`);
+    setTimeout(() => progressPanel?.remove(), 5000);
+  } catch (error) {
+    if (progressPanel) {
+      progressPanel.classList.add('is-error');
+      progressTitle.textContent = t('Download stopped');
+      progressCurrent.textContent = error.message || t('Could not download all work orders.');
+      setTimeout(() => progressPanel?.remove(), 8000);
+    }
+    toast(t(error.message || 'Could not download all work orders.'));
   } finally {
     if (button) {
       button.disabled = false;
