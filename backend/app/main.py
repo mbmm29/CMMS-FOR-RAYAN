@@ -1017,8 +1017,14 @@ def list_equipment(line_id:str|None=None,db:Session=Depends(get_db),u=Depends(au
 
 @app.post('/equipment/{equipment_id}/public-link')
 def create_equipment_public_link(equipment_id: str, request: Request, plant_id: str | None = None,
-                                 line_id: str | None = None, db: Session = Depends(get_db), u=Depends(role(*ENGINEER))):
-    equipment = find_equipment(db, equipment_id, plant_id, line_id)
+                                 line_id: str | None = None, equipment_row_id: int | None = None,
+                                 db: Session = Depends(get_db), u=Depends(role(*ENGINEER))):
+    if equipment_row_id is not None:
+        equipment = db.get(Equipment, equipment_row_id)
+        if equipment and equipment.equipment_id.strip().lower() != equipment_id.strip().lower():
+            equipment = None
+    else:
+        equipment = find_equipment(db, equipment_id, plant_id, line_id)
     if not equipment:
         raise HTTPException(404, 'Equipment not found')
     link = db.query(EquipmentPublicLink).filter_by(equipment_row_id=equipment.id).first()

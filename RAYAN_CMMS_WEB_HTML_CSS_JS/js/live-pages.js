@@ -107,6 +107,17 @@ function equipmentApiPath(item, suffix = '') {
   return `/equipment/${encodeURIComponent(code)}${suffix}${equipmentScopeQuery(item)}`;
 }
 
+function equipmentPublicLinkApiPath(item) {
+  const params = new URLSearchParams();
+  if (item?.id != null) params.set('equipment_row_id', String(item.id));
+  else {
+    const query = new URLSearchParams(equipmentScopeQuery(item).replace(/^\?/, ''));
+    query.forEach((value, key) => params.set(key, value));
+  }
+  const query = params.toString();
+  return `${equipmentApiPath(item, '/public-link').split('?')[0]}${query ? `?${query}` : ''}`;
+}
+
 function matchEquipment(text) {
   const raw = String(text || '').trim().toLowerCase();
   if (!raw || !store?.equipment) return null;
@@ -2907,7 +2918,7 @@ async function openEquipmentPublicQr(selected) {
   overlay.addEventListener('click', (event) => { if (event.target === overlay) close(); });
   document.body.appendChild(overlay);
   try {
-    const result = await apiRequest(equipmentApiPath(selected, '/public-link'), { method: 'POST' });
+    const result = await apiRequest(equipmentPublicLinkApiPath(selected), { method: 'POST' });
     const url = new URL(result.url, location.href).href;
     const qr = overlay.querySelector('#equipment-public-qr');
     qr.innerHTML = `<img alt="${esc(t('Equipment QR code'))}" src="data:image/svg+xml;base64,${btoa(result.qr_svg)}"><p>${esc(url)}</p>`;
@@ -2991,7 +3002,7 @@ async function printAllEquipmentQrLabels() {
     for (let index = 0; index < equipmentItems.length; index += 10) {
       const batch = equipmentItems.slice(index, index + 10);
       const results = await Promise.all(batch.map(async (item) => {
-        const result = await apiRequest(equipmentApiPath(item, '/public-link'), { method: 'POST' });
+        const result = await apiRequest(equipmentPublicLinkApiPath(item), { method: 'POST' });
         return { item, qrSvg: result.qr_svg };
       }));
       labeledItems.push(...results);
