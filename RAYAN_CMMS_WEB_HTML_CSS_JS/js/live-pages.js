@@ -539,6 +539,17 @@ function setHeader(page) {
   }
   const draft = document.getElementById('draft-action');
   const importFile = document.getElementById('import-file-action');
+  let printEquipmentQr = document.getElementById('print-all-equipment-qr');
+  if (!printEquipmentQr && importFile?.parentElement) {
+    printEquipmentQr = document.createElement('button');
+    printEquipmentQr.id = 'print-all-equipment-qr';
+    printEquipmentQr.type = 'button';
+    printEquipmentQr.className = 'primary ghost';
+    printEquipmentQr.dataset.i18n = 'Print all equipment barcodes';
+    printEquipmentQr.textContent = t('Print all equipment barcodes');
+    printEquipmentQr.addEventListener('click', printAllEquipmentQrLabels);
+    importFile.insertAdjacentElement('afterend', printEquipmentQr);
+  }
   if (draft) {
     draft.hidden = !(page === 'daily-reports' && isTechnician());
     draft.textContent = t('Save draft');
@@ -546,6 +557,11 @@ function setHeader(page) {
   if (importFile) {
     importFile.hidden = !((page === 'spare-parts' || page === 'equipment') && canMaintain());
     importFile.textContent = t('Import file');
+  }
+  if (printEquipmentQr) {
+    printEquipmentQr.hidden = page !== 'equipment' || !canMaintain();
+    printEquipmentQr.disabled = false;
+    printEquipmentQr.textContent = t('Print all equipment barcodes');
   }
   if (page === 'daily-reports' && isTechnician()) {
     action.hidden = false;
@@ -2910,6 +2926,115 @@ async function openEquipmentPublicQr(selected) {
     });
   } catch (error) {
     overlay.querySelector('#equipment-public-qr').textContent = t(error.message || 'Could not create QR code.');
+  }
+}
+
+function equipmentQrLabel(item, qrSvg) {
+  const code = item.equipment_id || '—';
+  const category = item.equipment_type || item.category || '—';
+  const location = placeOf(item);
+  const direction = currentLang() === 'ar' ? 'rtl' : 'ltr';
+  return `<article class="equipment-qr-label" dir="${direction}"><div class="equipment-qr-info"><strong class="equipment-qr-heading">${esc(t('Equipment identification'))}</strong><div><span>${esc(t('Equipment No.'))}</span><b>${esc(code)}</b></div><div><span>${esc(t('Equipment Name'))}</span><b>${esc(item.name || '—')}</b></div><div><span>${esc(t('Category'))}</span><b>${esc(category)}</b></div><div><span>${esc(t('Location'))}</span><b>${esc(location)}</b></div></div><img class="equipment-qr-image" alt="${esc(t('Equipment QR code'))} ${esc(code)}" src="data:image/svg+xml;base64,${btoa(qrSvg)}"></article>`;
+}
+
+async function printAllEquipmentQrLabels() {
+  const button = document.getElementById('print-all-equipment-qr');
+  const equipmentItems = [...(store?.equipment || [])].sort((a, b) =>
+    String(placeOf(a)).localeCompare(String(placeOf(b))) || String(a.equipment_id).localeCompare(String(b.equipment_id), undefined, { numeric: true })
+  );
+  if (!equipmentItems.length) {
+    toast(t('No equipment is available to print.'));
+    return;
+  }
+
+  // Open the print window directly from the button gesture so the browser does not block it.
+  const popup = window.open('', '_blank');
+  if (!popup) {
+    toast(t('Allow pop-ups to print the QR code.'));
+    return;
+  }
+  popup.document.open();
+  popup.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>${esc(t('Equipment QR labels'))}</title></head><body>${esc(t('Preparing equipment QR labels'))}</body></html>`);
+  popup.document.close();
+
+  let progressPanel;
+  let progressTitle;
+  let progressCounts;
+  let progressFill;
+  let progressCurrent;
+  const updateProgress = (prepared, current = '') => {
+    if (!progressPanel) return;
+    const remaining = Math.max(0, equipmentItems.length - prepared);
+    progressCounts.textContent = `${prepared} ${t('prepared')} · ${remaining} ${t('remaining')}`;
+    progressFill.style.width = `${Math.round((prepared / equipmentItems.length) * 100)}%`;
+    progressPanel.setAttribute('aria-valuenow', String(prepared));
+    progressCurrent.textContent = current || (remaining ? t('Preparing the next QR labels…') : t('All equipment QR labels are ready.'));
+  };
+
+  if (button) button.disabled = true;
+  try {
+    progressPanel = document.createElement('section');
+    progressPanel.className = 'machine-log-download-progress';
+    progressPanel.setAttribute('role', 'status');
+    progressPanel.setAttribute('aria-live', 'polite');
+    progressPanel.setAttribute('aria-valuemin', '0');
+    progressPanel.setAttribute('aria-valuemax', String(equipmentItems.length));
+    progressPanel.innerHTML = `<div class="machine-log-progress-heading"><span class="machine-log-progress-spinner" aria-hidden="true"></span><strong>${esc(t('Preparing equipment QR labels'))}</strong></div><div class="machine-log-progress-counts"></div><div class="machine-log-progress-track"><span></span></div><small class="machine-log-progress-current"></small>`;
+    progressCounts = progressPanel.querySelector('.machine-log-progress-counts');
+    progressFill = progressPanel.querySelector('.machine-log-progress-track span');
+    progressCurrent = progressPanel.querySelector('.machine-log-progress-current');
+    progressTitle = progressPanel.querySelector('.machine-log-progress-heading strong');
+    document.body.append(progressPanel);
+    updateProgress(0);
+
+    const labeledItems = [];
+    for (let index = 0; index < equipmentItems.length; index += 10) {
+      const batch = equipmentItems.slice(index, index + 10);
+      const results = await Promise.all(batch.map(async (item) => {
+        const result = await apiRequest(equipmentApiPath(item, '/public-link'), { method: 'POST' });
+        return { item, qrSvg: result.qr_svg };
+      }));
+      labeledItems.push(...results);
+      updateProgress(labeledItems.length, `${t('Prepared')} ${labeledItems.length} / ${equipmentItems.length}`);
+    }
+
+    const sheets = [];
+    for (let index = 0; index < labeledItems.length; index += 8) {
+      const labels = labeledItems.slice(index, index + 8).map(({ item, qrSvg }) => equipmentQrLabel(item, qrSvg)).join('');
+      sheets.push(`<section class="equipment-qr-sheet">${labels}</section>`);
+    }
+    popup.document.open();
+    const fontFamily = currentLang() === 'ar' ? 'IBM Plex Sans Arabic, Tahoma, Arial, sans-serif' : 'Plus Jakarta Sans, Arial, sans-serif';
+    popup.document.write(`<!doctype html><html lang="${currentLang()}" dir="${currentLang() === 'ar' ? 'rtl' : 'ltr'}"><head><meta charset="utf-8"><title>${esc(t('Equipment QR labels'))}</title><link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet"><link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@400;500;600;700&display=swap" rel="stylesheet"><style>
+      @page{size:A4 portrait;margin:0}*{box-sizing:border-box}html,body{margin:0;padding:0;background:#fff;color:#173b2a;font-family:${fontFamily};-webkit-print-color-adjust:exact;print-color-adjust:exact}
+      .equipment-qr-sheet{width:210mm;height:297mm;padding:6mm;display:grid;grid-template-columns:repeat(2,99mm);grid-template-rows:repeat(4,71.25mm);page-break-after:always;break-after:page;overflow:hidden}
+      .equipment-qr-sheet:last-child{page-break-after:auto;break-after:auto}.equipment-qr-label{min-width:0;min-height:0;border:1px dashed #9aa79e;padding:5mm;display:flex;align-items:center;justify-content:space-between;gap:3mm;overflow:hidden;direction:ltr}
+      .equipment-qr-info{min-width:0;flex:1;display:grid;align-content:center;gap:2.4mm}.equipment-qr-heading{color:#236d47;font-size:9pt;letter-spacing:.4px;border-bottom:1px solid #d1ac25;padding-bottom:2mm;margin-bottom:.5mm}
+      .equipment-qr-info div{display:grid;gap:.5mm;min-width:0}.equipment-qr-info span{font-size:7.5pt;color:#5f6f63}.equipment-qr-info b{font-size:10pt;line-height:1.2;overflow-wrap:anywhere;color:#172f22}
+      .equipment-qr-image{width:34mm;height:34mm;object-fit:contain;flex:0 0 34mm;background:#fff}
+      @media screen{body{background:#e8ece9}.equipment-qr-sheet{margin:12px auto;background:#fff;box-shadow:0 2px 12px #0002}}
+      @media print{.equipment-qr-sheet{margin:0;box-shadow:none}}
+    </style></head><body>${sheets.join('')}</body></html>`);
+    popup.document.close();
+    await popup.document.fonts.ready;
+    await Promise.all([...popup.document.images].map((image) => image.decode()));
+    progressPanel.classList.add('is-complete');
+    progressTitle.textContent = t('Ready to print');
+    progressCurrent.textContent = `${equipmentItems.length} ${t('equipment QR labels ready')}`;
+    setTimeout(() => progressPanel?.remove(), 5000);
+    popup.focus();
+    setTimeout(() => popup.print(), 250);
+  } catch (error) {
+    popup.close();
+    if (progressPanel) {
+      progressPanel.classList.add('is-error');
+      progressTitle.textContent = t('Preparation stopped');
+      progressCurrent.textContent = error.message || t('Could not prepare equipment QR labels.');
+      setTimeout(() => progressPanel?.remove(), 8000);
+    }
+    toast(t(error.message || 'Could not prepare equipment QR labels.'));
+  } finally {
+    if (button) button.disabled = false;
   }
 }
 
