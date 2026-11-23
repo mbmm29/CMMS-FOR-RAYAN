@@ -595,8 +595,8 @@ document.addEventListener('DOMContentLoaded', async () => {
           const blob = await child.html2pdf().set({
             margin: 7,
             filename: `${filename}.pdf`,
-            image: { type: 'jpeg', quality: 0.96 },
-            html2canvas: { scale: 1.5, useCORS: true, logging: false, windowWidth: 1600, ignoreElements: element => element.classList?.contains('individual-export') },
+            image: { type: 'png', quality: 1 },
+            html2canvas: { scale: 3.2, useCORS: true, logging: false, windowWidth: 1600, backgroundColor: '#ffffff', ignoreElements: element => element.classList?.contains('individual-export') },
             jsPDF: { unit: 'mm', format: 'a3', orientation: 'landscape' },
             pagebreak: { mode: ['css', 'legacy'] },
           }).from(section).outputPdf('blob');
