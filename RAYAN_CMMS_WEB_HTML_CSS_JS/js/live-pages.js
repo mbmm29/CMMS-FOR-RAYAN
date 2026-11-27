@@ -2676,7 +2676,7 @@ async function exportEquipmentAnnualPlan(selected, year) {
     marks: String(item.weeks || '').split(',').map((part) => part.trim()).filter(Boolean),
   }));
   let logo = null;
-  try { const response = await fetch('logo-rayan.png?v=3'); if (response.ok) logo = new Uint8Array(await response.arrayBuffer()); } catch (_) {}
+  try { const response = await fetch('logo-rayan.png?v=3'); if (response.ok) logo = new Uint8Array(await response.arrayBuffer()); } catch (_) { }
   const plant = store.plants.find((row) => row.plant_id === selected.plant_id);
   const blob = buildAnnualPlanWorkbook({
     rtl: document.documentElement.dir === 'rtl', sheetName: excelSheetName(t('Annual preventive maintenance plan')),
@@ -4366,23 +4366,25 @@ function bindForm(selectedEquipment = null) {
           if (knownMachine && data.plant_id !== knownMachine.plant_id) throw new Error(t('The machine does not belong to the selected plant'));
           if (knownMachine && data.line_id && knownMachine.line_id && data.line_id !== knownMachine.line_id) throw new Error(t('The machine does not belong to the selected line'));
           if (knownMachine && data.section_id && knownMachine.section_id && data.section_id !== knownMachine.section_id) throw new Error(t('The machine does not belong to the selected section'));
-          await apiRequest('/work-orders', { method: 'POST', body: JSON.stringify({
-            work_order_type: data.work_order_type,
-            equipment_id: knownMachine ? knownMachine.equipment_id : null,
-            manual_equipment_code: knownMachine ? null : String(data.machine_name || '').trim(),
-            manual_equipment_name: knownMachine ? null : data.machine_name,
-            manual_plant_id: knownMachine ? null : data.plant_id,
-            manual_line_id: knownMachine ? null : data.line_id,
-            priority: 'Medium',
-            status: 'Open',
-            problem_description: data.problem_description,
-            corrective_action: data.corrective_action,
-            verification: data.verification,
-            parts_used: partsUsed,
-            crew_type: data.crew_type,
-            planned_date: data.planned_date,
-            assigned_technician_ids: technicians,
-          }) });
+          await apiRequest('/work-orders', {
+            method: 'POST', body: JSON.stringify({
+              work_order_type: data.work_order_type,
+              equipment_id: knownMachine ? knownMachine.equipment_id : null,
+              manual_equipment_code: knownMachine ? null : String(data.machine_name || '').trim(),
+              manual_equipment_name: knownMachine ? null : data.machine_name,
+              manual_plant_id: knownMachine ? null : data.plant_id,
+              manual_line_id: knownMachine ? null : data.line_id,
+              priority: 'Medium',
+              status: 'Open',
+              problem_description: data.problem_description,
+              corrective_action: data.corrective_action,
+              verification: data.verification,
+              parts_used: partsUsed,
+              crew_type: data.crew_type,
+              planned_date: data.planned_date,
+              assigned_technician_ids: technicians,
+            })
+          });
         }
       } else if (ui.page === 'pm-schedule') {
         data.frequency_value = 1;
@@ -4581,7 +4583,8 @@ function packWorkbook(sheet, sheetName, logo, logoRows = 4) {
     ? logo
     : null;
   const files = [
-    { name: '[Content_Types].xml', data: encoder.encode(`<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+    {
+      name: '[Content_Types].xml', data: encoder.encode(`<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">
 <Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>
 <Default Extension="xml" ContentType="application/xml"/>
@@ -4590,30 +4593,40 @@ function packWorkbook(sheet, sheetName, logo, logoRows = 4) {
 <Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>
 <Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/>
 ${pngLogo ? '<Override PartName="/xl/drawings/drawing1.xml" ContentType="application/vnd.openxmlformats-officedocument.drawing+xml"/>' : ''}
-</Types>`) },
-    { name: '_rels/.rels', data: encoder.encode(`<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+</Types>`)
+    },
+    {
+      name: '_rels/.rels', data: encoder.encode(`<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
 <Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/>
-</Relationships>`) },
-    { name: 'xl/workbook.xml', data: encoder.encode(`<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+</Relationships>`)
+    },
+    {
+      name: 'xl/workbook.xml', data: encoder.encode(`<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">
 <sheets><sheet name="${xmlText(safeName)}" sheetId="1" r:id="rId1"/></sheets>
-</workbook>`) },
-    { name: 'xl/_rels/workbook.xml.rels', data: encoder.encode(`<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+</workbook>`)
+    },
+    {
+      name: 'xl/_rels/workbook.xml.rels', data: encoder.encode(`<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
 <Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/>
 <Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/>
-</Relationships>`) },
+</Relationships>`)
+    },
     { name: 'xl/styles.xml', data: encoder.encode(workbookStyles()) },
     { name: 'xl/worksheets/sheet1.xml', data: encoder.encode(pngLogo ? sheet : String(sheet).replace(/<drawing\b[^>]*\/>/g, '')) },
   ];
   if (pngLogo) {
     files.push(
-      { name: 'xl/worksheets/_rels/sheet1.xml.rels', data: encoder.encode(`<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+      {
+        name: 'xl/worksheets/_rels/sheet1.xml.rels', data: encoder.encode(`<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
 <Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/drawing" Target="../drawings/drawing1.xml"/>
-</Relationships>`) },
-      { name: 'xl/drawings/drawing1.xml', data: encoder.encode(`<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+</Relationships>`)
+      },
+      {
+        name: 'xl/drawings/drawing1.xml', data: encoder.encode(`<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <xdr:wsDr xmlns:xdr="http://schemas.openxmlformats.org/drawingml/2006/spreadsheetDrawing" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">
 <xdr:twoCellAnchor editAs="oneCell">
 <xdr:from><xdr:col>0</xdr:col><xdr:colOff>80000</xdr:colOff><xdr:row>0</xdr:row><xdr:rowOff>40000</xdr:rowOff></xdr:from>
@@ -4625,11 +4638,14 @@ ${pngLogo ? '<Override PartName="/xl/drawings/drawing1.xml" ContentType="applica
 </xdr:pic>
 <xdr:clientData/>
 </xdr:twoCellAnchor>
-</xdr:wsDr>`) },
-      { name: 'xl/drawings/_rels/drawing1.xml.rels', data: encoder.encode(`<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+</xdr:wsDr>`)
+      },
+      {
+        name: 'xl/drawings/_rels/drawing1.xml.rels', data: encoder.encode(`<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
 <Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="../media/logo.png"/>
-</Relationships>`) },
+</Relationships>`)
+      },
       { name: 'xl/media/logo.png', data: pngLogo },
     );
   }
@@ -5445,56 +5461,6 @@ function dailyPartsFromForm() {
   }));
 }
 
-function reportSentAt(row) {
-  const raw = row?.submitted_at;
-  if (!raw) return null;
-  const text = String(raw);
-  const stamp = new Date(/Z|[+-]\d\d:?\d\d$/.test(text) ? text : `${text}Z`).getTime();
-  return Number.isNaN(stamp) ? null : stamp;
-}
-
-const REPORT_GAP_MS = 10 * 60 * 60 * 1000;
-let sendWatchTimer = 0;
-
-function remainText(ms) {
-  const total = Math.max(0, Math.ceil(ms / 1000));
-  const hours = Math.floor(total / 3600);
-  const minutes = Math.floor((total % 3600) / 60);
-  const seconds = total % 60;
-  return [hours, minutes, seconds].map((part) => String(part).padStart(2, '0')).join(':');
-}
-
-function startSendWatch(opens) {
-  window.clearInterval(sendWatchTimer);
-  const tick = () => {
-    const node = document.getElementById('send-watch-time');
-    if (!node) {
-      window.clearInterval(sendWatchTimer);
-      return;
-    }
-    const left = opens - Date.now();
-    if (left <= 0) {
-      window.clearInterval(sendWatchTimer);
-      if (ui.page === 'daily-reports') drawDailyReport();
-      return;
-    }
-    node.textContent = remainText(left);
-  };
-  tick();
-  sendWatchTimer = window.setInterval(tick, 1000);
-}
-
-function dailySendLock(rows) {
-  const sent = rows
-    .map((row) => ({ row, at: reportSentAt(row) }))
-    .filter((item) => item.at && ['Submitted', 'Approved'].includes(item.row.status))
-    .sort((a, b) => b.at - a.at)[0];
-  if (!sent) return null;
-  const opens = sent.at + REPORT_GAP_MS;
-  if (Date.now() >= opens) return null;
-  return { reportId: sent.row.report_id, status: sent.row.status, opens };
-}
-
 function openReportDate() {
   return isoDate(new Date());
 }
@@ -6040,11 +6006,6 @@ async function saveDailyReport(submit) {
   clearReportAlert();
   const reportId = form.dataset.reportId || '';
   const status = form.dataset.status || 'Draft';
-  const sendLock = isTechnician() ? dailySendLock(dailyCache) : null;
-  if (submit && sendLock && reportId !== sendLock.reportId) {
-    showReportAlert('A new report can be sent 10 hours after the last one.');
-    return;
-  }
   if (reportId && status !== 'Draft' && status !== 'Returned') {
     showReportAlert('This report can no longer be edited.');
     return;
@@ -6074,13 +6035,6 @@ async function saveDailyReport(submit) {
     else toast(t('Draft saved.'));
     await drawDailyReport();
   } catch (exception) {
-    const existing = String(exception.message || '').match(/Daily Report already exists for this technician\/date: (\S+)/);
-    if (existing && !reportId) {
-      ui.dailyId = existing[1];
-      toast(t('A report already exists for this date.'));
-      await drawDailyReport();
-      return;
-    }
     showReportAlert(exception.message);
   }
 }
@@ -6101,12 +6055,7 @@ async function drawDailyReport() {
     row.submitted_at = row.submitted_at || source.submitted_at || '';
   }));
   const today = isoDate(new Date());
-  const ownDailyReports = isTechnician()
-    ? dailyCache.filter((row) => row.technician_id === getSavedUser()?.technician_id)
-    : dailyCache;
-  const windowLock = isTechnician() ? dailySendLock(ownDailyReports) : null;
   window.clearTimeout(dailyOpenTimer);
-  window.clearInterval(sendWatchTimer);
   let detail = null;
   if (ui.dailyId && ui.dailyId !== 'new') {
     detail = await apiRequest(`/daily-reports/${encodeURIComponent(ui.dailyId)}`);
@@ -6118,7 +6067,6 @@ async function drawDailyReport() {
   const technicianId = getSavedUser()?.technician_id;
   const ownReport = Boolean(report && (!isTechnician() || (report.technician_code || report.technician_id) === technicianId));
   const readOnlyReport = Boolean(report && isTechnician() && !ownReport);
-  const activeWindowLock = ui.dailyReportDetail ? null : windowLock;
   const items = detail?.items?.length ? detail.items.slice() : [];
   const parts = dailyPartsFromText(items.find((item) => item.spare_parts)?.spare_parts || '');
   while (items.length < 10) items.push({});
@@ -6136,7 +6084,7 @@ async function drawDailyReport() {
   const sendButton = document.getElementById('primary-action');
   if (draftButton) draftButton.hidden = locked || returned;
   if (sendButton) {
-    sendButton.hidden = locked || returned || Boolean(activeWindowLock);
+    sendButton.hidden = locked || returned;
     if (!sendButton.hidden) sendButton.textContent = t('Send report');
   }
   const reportDate = String(report?.report_date || openReportDate(dailyCache)).slice(0, 10);
@@ -6158,7 +6106,7 @@ async function drawDailyReport() {
   const list = dailyListHtml(visibleReports(), report?.report_id || '', techName);
   const workspace = document.getElementById('workspace');
   workspace.className = `workspace lube-board${isTechnician() && ui.dailyReportDetail ? ' daily-report-detail-view' : ''}`;
-  workspace.innerHTML = `<aside class="panel lube-list"><div class="lube-list-head"><b>${esc(t(isTechnician() ? 'Technician reports' : 'Reports'))}</b><button type="button" class="detail-button" id="daily-new">${esc(t('New report'))}</button></div><label class="daily-filter"><span>${esc(t('Date'))}</span><input id="daily-filter" type="date" value="${esc(ui.dailyFilter || '')}"></label>${rejectedFieldHtml(dailyCache, report?.report_id || '')}<div id="daily-report-list">${list}</div></aside><form id="daily-form" class="lube-paper daily-paper" data-report-id="${esc(report?.report_id || '')}" data-status="${esc(report?.status || 'Draft')}">${isTechnician() && ui.dailyReportDetail ? `<div class="daily-read-toolbar no-print"><button type="button" class="detail-button" id="daily-report-back">← ${esc(t('Back to reports'))}</button><span>${esc(report?.technician_name || techName)} · ${esc(fmtDate(reportDate))}</span></div>` : ''}${isTechnician() && locked ? `<p class="daily-read-only-note no-print">${esc(t('Read-only report submitted by a technician.'))}</p>` : ''}${activeWindowLock ? `<div class="send-watch no-print" id="send-watch"><span>${esc(t('Time left before the next report'))}</span><b id="send-watch-time">00:00:00</b></div>` : ''}<div id="daily-alert" class="report-alert no-print" hidden role="alert"></div><header class="lube-head"><img src="logo-rayan.png?v=4" alt="Rayan"><div><h2>${esc(t('DAILY MAINTENANCE REPORT'))}</h2><p>${esc(t(report?.status || 'Draft report'))}</p><small>${esc(t('Mechanical Maintenance Department'))}</small></div><dl><div><dt>${esc(t('Form No.:'))}</dt><dd class="form-no">${esc(formNo('daily'))}</dd></div><div><dt>${esc(t('Approved by'))}</dt><dd class="approved-name">${esc(String(report?.approved_by || '').trim() || '—')}</dd></div></dl></header><div class="lube-meta"><label><span>${esc(t('Shift'))}</span><select id="daily-shift">${dailyShiftOptions(report?.shift, reportShiftTimes)}</select></label><label><span>${esc(t("Technician's name"))}</span><input id="daily-tech" value="${esc(techName)}" readonly></label><label><span>${esc(t('Date'))}</span><input id="daily-date" type="date" value="${esc(reportDate)}" required></label></div><div class="sheet-scroll"><table class="lube-table"><thead><tr><th>${esc(t('Seq.'))}</th><th>${esc(t('Machine'))}</th><th>${esc(t('Maintenance Type'))}</th><th>${esc(t('Repair Actions'))}</th><th>${esc(t('Start Time'))}</th><th>${esc(t('End Time'))}</th><th>${esc(t('Downtime (hrs)'))}</th></tr></thead><tbody id="daily-rows">${items.map(dailyRow).join('')}</tbody></table></div><section class="daily-parts"><div class="lube-list-head"><h3>${esc(t('SPARE PARTS USED'))}</h3><button type="button" class="no-print" id="daily-add-part">${esc(t('Add part'))}</button></div><div class="sheet-scroll"><table class="lube-table"><thead><tr><th>${esc(t('No.'))}</th><th>${esc(t('Part'))}</th><th>${esc(t('Part No.'))}</th><th>${esc(t('Qty'))}</th></tr></thead><tbody id="daily-parts">${parts.map(dailyPartRow).join('')}</tbody></table></div></section><label class="daily-notes"><span>${esc(t('GENERAL NOTES'))}</span><div class="daily-note-box"><textarea id="daily-notes">${esc(report?.general_notes || '')}</textarea><b class="daily-tdt">${esc(t('TDT'))}: <span id="daily-total">0.00 ${esc(t('h'))}</span></b></div></label><section class="daily-photos no-print"><div class="lube-list-head"><h3>${esc(t('Photos'))}</h3><button type="button" id="daily-add-photo">${esc(t('Add photo'))}</button></div><p class="photo-hint">${esc(t('Each photo prints on a full A3 page.'))}</p><div class="photo-strip" id="daily-photo-strip"></div><input id="daily-photo-file" type="file" accept="image/*" multiple hidden></section><div class="lube-actions no-print"><button type="button" id="daily-add">${esc(t('Add row'))}</button>${returned && !activeWindowLock ? `<button type="button" id="daily-resend">${esc(t('Resend the report'))}</button>` : ''}<button type="button" id="daily-print">${esc(t('Print'))}</button></div></form><div id="daily-photo-print"></div>`;
+  workspace.innerHTML = `<aside class="panel lube-list"><div class="lube-list-head"><b>${esc(t(isTechnician() ? 'Technician reports' : 'Reports'))}</b><button type="button" class="detail-button" id="daily-new">${esc(t('New report'))}</button></div><label class="daily-filter"><span>${esc(t('Date'))}</span><input id="daily-filter" type="date" value="${esc(ui.dailyFilter || '')}"></label>${rejectedFieldHtml(dailyCache, report?.report_id || '')}<div id="daily-report-list">${list}</div></aside><form id="daily-form" class="lube-paper daily-paper" data-report-id="${esc(report?.report_id || '')}" data-status="${esc(report?.status || 'Draft')}">${isTechnician() && ui.dailyReportDetail ? `<div class="daily-read-toolbar no-print"><button type="button" class="detail-button" id="daily-report-back">← ${esc(t('Back to reports'))}</button><span>${esc(report?.technician_name || techName)} · ${esc(fmtDate(reportDate))}</span></div>` : ''}${isTechnician() && locked ? `<p class="daily-read-only-note no-print">${esc(t('Read-only report submitted by a technician.'))}</p>` : ''}<div id="daily-alert" class="report-alert no-print" hidden role="alert"></div><header class="lube-head"><img src="logo-rayan.png?v=4" alt="Rayan"><div><h2>${esc(t('DAILY MAINTENANCE REPORT'))}</h2><p>${esc(t(report?.status || 'Draft report'))}</p><small>${esc(t('Mechanical Maintenance Department'))}</small></div><dl><div><dt>${esc(t('Form No.:'))}</dt><dd class="form-no">${esc(formNo('daily'))}</dd></div><div><dt>${esc(t('Approved by'))}</dt><dd class="approved-name">${esc(String(report?.approved_by || '').trim() || '—')}</dd></div></dl></header><div class="lube-meta"><label><span>${esc(t('Shift'))}</span><select id="daily-shift">${dailyShiftOptions(report?.shift, reportShiftTimes)}</select></label><label><span>${esc(t("Technician's name"))}</span><input id="daily-tech" value="${esc(techName)}" readonly></label><label><span>${esc(t('Date'))}</span><input id="daily-date" type="date" value="${esc(reportDate)}" required></label></div><div class="sheet-scroll"><table class="lube-table"><thead><tr><th>${esc(t('Seq.'))}</th><th>${esc(t('Machine'))}</th><th>${esc(t('Maintenance Type'))}</th><th>${esc(t('Repair Actions'))}</th><th>${esc(t('Start Time'))}</th><th>${esc(t('End Time'))}</th><th>${esc(t('Downtime (hrs)'))}</th></tr></thead><tbody id="daily-rows">${items.map(dailyRow).join('')}</tbody></table></div><section class="daily-parts"><div class="lube-list-head"><h3>${esc(t('SPARE PARTS USED'))}</h3><button type="button" class="no-print" id="daily-add-part">${esc(t('Add part'))}</button></div><div class="sheet-scroll"><table class="lube-table"><thead><tr><th>${esc(t('No.'))}</th><th>${esc(t('Part'))}</th><th>${esc(t('Part No.'))}</th><th>${esc(t('Qty'))}</th></tr></thead><tbody id="daily-parts">${parts.map(dailyPartRow).join('')}</tbody></table></div></section><label class="daily-notes"><span>${esc(t('GENERAL NOTES'))}</span><div class="daily-note-box"><textarea id="daily-notes">${esc(report?.general_notes || '')}</textarea><b class="daily-tdt">${esc(t('TDT'))}: <span id="daily-total">0.00 ${esc(t('h'))}</span></b></div></label><section class="daily-photos no-print"><div class="lube-list-head"><h3>${esc(t('Photos'))}</h3><button type="button" id="daily-add-photo">${esc(t('Add photo'))}</button></div><p class="photo-hint">${esc(t('Each photo prints on a full A3 page.'))}</p><div class="photo-strip" id="daily-photo-strip"></div><input id="daily-photo-file" type="file" accept="image/*" multiple hidden></section><div class="lube-actions no-print"><button type="button" id="daily-add">${esc(t('Add row'))}</button>${returned ? `<button type="button" id="daily-resend">${esc(t('Resend the report'))}</button>` : ''}<button type="button" id="daily-print">${esc(t('Print'))}</button></div></form><div id="daily-photo-print"></div>`;
   const dailyHeaderDl = workspace.querySelector('#daily-form .lube-head dl');
   if (dailyHeaderDl) {
     const headerBox = document.createElement('div');
@@ -6168,7 +6116,6 @@ async function drawDailyReport() {
   }
   workspace.querySelector('#daily-print')?.insertAdjacentHTML('beforebegin', `<button type="button" class="no-print" id="daily-export">${esc(t('Export PDF'))}</button>`);
   workspace.insertAdjacentHTML('beforeend', spareDataLists());
-  if (activeWindowLock) startSendWatch(activeWindowLock.opens);
   dailyPhotosEditable = !locked;
   startDailyPhotos(report?.report_id || '', detail?.photos || []);
   if (locked) {
@@ -6199,7 +6146,7 @@ async function drawDailyReport() {
   });
   refreshDailyTotal();
   document.getElementById('daily-date')?.addEventListener('change', (event) => {
-    const found = dailyCache.find((row) => String(row.report_date).slice(0, 10) === event.target.value && row.status === 'Draft');
+    const found = ui.dailyId === 'new' ? null : dailyCache.find((row) => String(row.report_date).slice(0, 10) === event.target.value && row.status === 'Draft');
     if (found && found.report_id !== document.getElementById('daily-form')?.dataset.reportId) {
       ui.dailyId = found.report_id;
       drawDailyReport();
@@ -7389,7 +7336,7 @@ function showLivePhoneNotice(title, body, workOrderId = '', pmDispatchId = '') {
       return;
     }
     new Notification(title, options);
-  } catch (_) {}
+  } catch (_) { }
 }
 
 function announceLiveWorkOrders(orders, previousMark) {

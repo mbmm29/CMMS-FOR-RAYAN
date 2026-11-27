@@ -5755,29 +5755,6 @@ def create_report(
     if not data.items:
         raise HTTPException(400, 'Daily Report must contain at least one equipment item')
 
-    # A draft for this date is continued. The next send waits 10 hours.
-    draft = db.query(DailyReport).filter(
-        DailyReport.report_date == data.report_date,
-        DailyReport.technician_id == technician_id,
-        DailyReport.status == 'Draft',
-    ).first()
-    if draft:
-        raise HTTPException(
-            409,
-            f'Daily Report already exists for this technician/date: {draft.report_id}'
-        )
-    if not is_technician_account(u):
-        existing = db.query(DailyReport).filter(
-            DailyReport.report_date == data.report_date,
-            DailyReport.technician_id == technician_id,
-            DailyReport.status != 'Returned',
-        ).first()
-        if existing:
-            raise HTTPException(
-                409,
-                f'Daily Report already exists for this technician/date: {existing.report_id}'
-            )
-
     rid = next_year_report_id(db, DailyReport, DailyReport.report_id, 'DR', data.report_date.year)
 
     try:
@@ -6086,24 +6063,6 @@ def update_report(
         report_save_failed(exc)
 
 
-def assert_daily_send_window(db: Session, technician_id: str, report_id: str | None = None):
-    """A technician sends one report, then waits 10 hours for the next one."""
-    latest = db.query(DailyReport).filter(
-        DailyReport.technician_id == technician_id,
-        DailyReport.submitted_at.isnot(None),
-        DailyReport.status.in_(['Submitted', 'Approved']),
-    ).order_by(DailyReport.submitted_at.desc()).first()
-    if not latest or not latest.submitted_at:
-        return
-    if report_id and latest.report_id == report_id:
-        return
-    if datetime.utcnow() < latest.submitted_at + timedelta(hours=10):
-        raise HTTPException(
-            409,
-            'A new report can be sent 10 hours after the last one.',
-        )
-
-
 @app.post('/daily-reports/{report_id}/submit')
 def submit_report(
     report_id: str,
@@ -6125,9 +6084,6 @@ def submit_report(
             409,
             f'Report cannot be submitted from status {r.status}'
         )
-
-    if is_technician_account(u):
-        assert_daily_send_window(db, r.technician_id, r.report_id)
 
     items = db.query(DailyReportItem).filter_by(report_id=r.id).all()
     if not items:
